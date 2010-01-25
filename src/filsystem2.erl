@@ -205,8 +205,9 @@ test() ->
     stop().
 
 
-%TODO: Kolla så filen finns innan borttagning!
-
+%% Checks that the file exists before removing. Returns an error if the file
+%% does not exist, instead of doing Something Nasty.
+%% Use this function instead of calling recursive_remove directly.
 recursive_remove_check(Files,FS) ->
     case recursive_lookup(Files,FS) of
         {ok,_} -> {ok, recursive_remove(Files,FS)};
@@ -214,10 +215,14 @@ recursive_remove_check(Files,FS) ->
     end.
 
 recursive_remove([File|[]],FS) ->
+    erase_inode(File), % Erase the inode
     dict:erase(File,FS);
 
 recursive_remove([File|Files],FS) ->
+    % Move down the file structure to the file to be removed.
     dict:update(File, fun(Dict) -> recursive_remove(Files, Dict) end, FS).
+
+
 
 new_FS([Name|Names]) ->
     ?DEB2("<new_FS fs=~p>~n",[Name]),
