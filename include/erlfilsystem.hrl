@@ -42,7 +42,7 @@
 %%         physical file or is a "filization" of some other concept.
 %% ----------------------------------------------------
 
--record(abstract_file,{file_data=#file_data,meta_info=#meta_info}).
+-record(abstract_file,{file_data=#file_data{},meta_info=#meta_info{}}).
 
 %% ----------------------------------------------------
 %% data type: file system, a representation of a file system

@@ -1,6 +1,6 @@
 -module(filsystem).
 -behaviour(gen_server).
--include("../include/filsystem.hrl").
+-include("../include/filsystem2.hrl").
 
 %-export(start_link/0, start_link/1).
 -export([start/0, start/1]).
@@ -42,6 +42,9 @@ start_link("")->
 
 start_link(#state{fs=_} = State) ->
     gen_server:start_link({local,me},?MODULE,State,[]);
+
+new_fs() -> 
+    #state{fs=
 
 %start_link(FS) ->
 %    gen_server:start_link({local,me},?MODULE,#state{fs=FS},[]).
@@ -214,12 +217,19 @@ recursive_remove_check(Files,FS) ->
         E -> E
     end.
 
-recursive_remove([File|[]],FS) ->
-    erase_inode(File), % Erase the inode
+
+
+recursive_remove([File|[]],FS) -> 
+    % We have now reached the file to be removed.
+    % This time, we return a new dict with the file erased.
+    % Also, we erase the inode number.
+    erase_inode(File), % Erase the inode of the file
     dict:erase(File,FS);
 
 recursive_remove([File|Files],FS) ->
-    % Move down the file structure to the file to be removed.
+    % We have not yet reached the final file.
+    % Move down the file structure until we reach the file to be removed.
+    % Update all dicts on the way, recursively.
     dict:update(File, fun(Dict) -> recursive_remove(Files, Dict) end, FS).
 
 
