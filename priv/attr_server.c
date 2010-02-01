@@ -19,10 +19,9 @@ int list_file_print_error(const char* path, char* buffer, int length, int option
 int get_file_print_error(const char* path, const char* attr, char* val, int* length, int options){
     if( attr_get(path,attr,val,length,options) == -1 ){
         switch(errno){
-            case ENOATTR: printf("The attribute in unreachable or does not exist.\n"); break;
-            case ERANGE: printf("The buffer size is too small\n");
-                         break;
-            case ENOTSUP: printf("Extended arguments disabled or not supported on fs! (Or file missing)\n"); break;
+            case ENOATTR: printf("{error,enoattr}.\n");/*The attribute in unreachable or does not exist.\n");*/ break;
+            case ERANGE: printf("{error,erange}.\n");/*The buffer size is too small\n");*/ break;
+            case ENOTSUP: printf("{error,enotsup}.\n");/*Extended arguments disabled or not supported on fs! (Or file missing)\n");*/ break;
             default: printf("{error,undef}.\n");
         }
         return -1;
@@ -55,14 +54,13 @@ int remove_file_print_error(const char* path, const char* attr, int options){
     }
 }
 
-main(){
-    char path[1024],attr[256],val[256],command[1289]="attr -g ",output[1024]; /* Should be enough for anyone! */
-    FILE* fifo;
+int main(){
+    char path[1024],attr[256],val[256],command[1289]="attr -g "; /* Should be enough for anyone! */
     for(;;){
-        printf("Input: ");
+        printf("> ");
         scanf("%s",command);
-        if(strcmp("exit",command)){
-            if(!strcmp("get",command)){
+        if(strcmp("e",command)){
+            if(!strcmp("g",command)){
                 int length=255;
                 scanf("%s %s",path,attr);
                 if(!get_file_print_error(path,attr,val,&length,0)){
@@ -70,25 +68,25 @@ main(){
                     printf("{ok,{\"%s\",\"%s\"}}.\n",attr,val);
                 }
 
-            } else if(!strcmp("set",command)){
+            } else if(!strcmp("s",command)){
                 scanf("%s %s %s",path,attr,val);
                 if(!set_file_print_error(path,attr,val,strlen(val),0)){
                     printf("{ok,{\"%s\",\"%s\"}}.\n", attr, val);
                 }
 
-            } else if(!strcmp("touch",command)){
+            } else if(!strcmp("t",command)){
                 scanf("%s %s",path,attr);
                 if(!set_file_print_error(path,attr,"",0,0)){
                     printf("{ok,{\"%s\",\"%s\"}}.\n", attr, "");
                 }
 
-            } else if(!strcmp("rm",command)){
+            } else if(!strcmp("r",command)){
                 scanf("%s %s",path,attr);
                 if(!remove_file_print_error(path,attr,0)){
                     printf("ok.\n");
                 }
 
-            } else if(!strcmp("append",command)){
+            } else if(!strcmp("a",command)){
                 scanf("%s %s %s",path,attr,val);
                 char prev[256];
                 int length=256;
@@ -100,7 +98,7 @@ main(){
                     }
                 }
 
-            } else if(!strcmp("list",command)){
+            } else if(!strcmp("l",command)){
                 int length=2048;
                 char buffer[length];
                 attrlist_cursor_t cursor;
@@ -114,17 +112,16 @@ main(){
                         printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
                         printf(i-1?",":"");
                     }
-                    printf("].\n");
+                    printf("]}.\n");
 
                 }
 
-            } else if(!strcmp("show",command)){
+            } else if(!strcmp("L",command)){
                 int length=2048;
                 char buffer[length];
                 attrlist_cursor_t cursor;
                 scanf("%s",path);
                 if( !list_file_print_error(path,buffer,length,0,&cursor)){
-                    attrlist_ent_t *ent_t;
                     __int32_t i;
                     attrlist_t *list = (attrlist_t*) buffer;
                     __int32_t count = list->al_count;
