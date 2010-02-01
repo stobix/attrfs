@@ -1,6 +1,7 @@
 -module(filsystem).
 -behaviour(gen_server).
 -include("../include/filsystem2.hrl").
+-include("../include/debug.hrl").
 
 %-export(start_link/0, start_link/1).
 -export([start/0, start/1]).
@@ -43,8 +44,8 @@ start_link("")->
 start_link(#state{fs=_} = State) ->
     gen_server:start_link({local,me},?MODULE,State,[]);
 
-new_fs() -> 
-    #state{fs=
+%new_fs() -> 
+%    #state{fs=
 
 %start_link(FS) ->
 %    gen_server:start_link({local,me},?MODULE,#state{fs=FS},[]).
@@ -245,7 +246,7 @@ new_file(FileName) ->
     ?DEB2("<new_file file=~p>~n",[FileName]),
     FileDict = dict:new(),
     %TODO: Set correct file attributes and such...
-    {ok, Inode} = get_or_create_inode_number_for(FileName,Path)
+    {ok, Inode} = get_or_create_inode_number_for(FileName,Path),
     Attrs= [
         {name, FileName},
         {type, regular}, 
