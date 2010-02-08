@@ -8,7 +8,7 @@
 int list_file_print_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
     if( attr_list(path,buffer,length,options,cursor) == -1){
         switch(errno){
-            default: printf("{error,undef}.\n");
+            default: printf("{error,some_error}.\n");
         }
         return -1;
     } else {
@@ -22,7 +22,7 @@ int get_file_print_error(const char* path, const char* attr, char* val, int* len
             case ENOATTR: printf("{error,enoattr}.\n");/*The attribute in unreachable or does not exist.\n");*/ break;
             case ERANGE: printf("{error,erange}.\n");/*The buffer size is too small\n");*/ break;
             case ENOTSUP: printf("{error,enotsup}.\n");/*Extended arguments disabled or not supported on fs! (Or file missing)\n");*/ break;
-            default: printf("{error,undef}.\n");
+            default: printf("{error,some_error}.\n");
         }
         return -1;
     } else {
@@ -34,7 +34,7 @@ int set_file_print_error(const char* path,const char* attr, const char *val,int 
     if (attr_set(path,attr,val,length,options) == -1){
         switch(errno){
             case E2BIG: printf("{error,too big}.\n"); break;
-            default: printf("{error,undef}.\n"); break;
+            default: printf("{error,some_error}.\n"); break;
         }
         return -1;
     } else {
@@ -45,8 +45,8 @@ int set_file_print_error(const char* path,const char* attr, const char *val,int 
 int remove_file_print_error(const char* path, const char* attr, int options){
     if(attr_remove(path,attr,options) == -1){
         switch(errno){
-            case ENOATTR: printf("{error, not an argument}.\n"); break;
-            default: printf("{error,undef}.\n"); break;
+            case ENOATTR: printf("{error, enoattr}.\n"); break;
+            default: printf("{error,some_error}.\n"); break;
         }
         return -1;
     } else {
@@ -148,6 +148,7 @@ int main(){
             printf("{exit,ok}.\n");
             return 0;
         }
+        fflush(NULL);
 
     }
 
