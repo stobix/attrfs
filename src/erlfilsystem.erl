@@ -72,7 +72,7 @@ init(State) ->
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     io:format("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
-    % So, if I've gotten this right, I've got an inode to look up rights for, a context in Ctx which tells me who wanted to know their rights to the file, a mask, which does SOMETHING - aybe this is what is used on file systems who has no rights normally? - a Continuation, which is a magical item which somehow is used to make asyncronuous calls - more on this when I find a documentation for the record - and finally the state, which, afaik, I will NOT be changing by checking access to files.
+    % So, if I've gotten this right, I've got an inode to look up rights for, a context in Ctx which tells me who wanted to know their rights to the file, a mask, which does SOMETHING - maybe this is what is used on file systems who has no rights normally? - a Continuation, which is a magical item which somehow is used to make asyncronuous calls - more on this when I find a documentation for the record - and finally the state, which, afaik, I will NOT be changing by checking access to files.
     % First, lets try to just create an "access denied" version of this thing.
     {#fuse_reply_err{err=ebadr},State}. % like this?
 
