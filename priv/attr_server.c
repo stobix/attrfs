@@ -38,6 +38,13 @@ int print_string(const char* string){
     }
 }
 
+void print_list_header(char elems){
+    printf("%c%c%c%c%c",108,0,0,0,elems);
+}
+
+void print_list_end(){
+    printf("%c",106);
+}
 void print_end(){
     printf(".");
     fflush(NULL);
@@ -186,12 +193,20 @@ int main(){
                     //attrlist_ent_t *ent_t;
                     __int32_t i,
                               count = ((attrlist_t*)buffer)->al_count;
-                    printf("{ok,[");
+
+                    print_init();
+                    print_tuple_header(2);
+                    print_atom("ok");
+                    //printf("{ok,[");
+                    print_list_header(count);
                     for(i=count;i;i--) {
-                        printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
-                        printf(i-1?",":"");
+                    //    printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
+                        print_string(ATTR_ENTRY(buffer,i-1)->a_name);
+                    //    printf(i-1?",":"");
                     }
-                    printf("]}.");
+                    //printf("]}.");
+                    print_list_end();
+                    print_end();
 
                 }
 
