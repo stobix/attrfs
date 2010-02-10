@@ -3,8 +3,12 @@
 all src/*erl: 
 	cd src &&\
 	erlc *.erl
+
+#priv priv/attr_server.c priv/attr_server:
+priv: 
 	cd priv &&\
 	gcc attr_server.c -Wall -lattr -o attr_server
+
 
 filsystem_app src/filsystem_app.erl:
 	cd src && \

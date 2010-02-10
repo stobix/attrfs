@@ -7,6 +7,16 @@
 
 /**********************/
 
+/*
+ * These are the different codes for the ext_binary standard I've been implementing:
+                   100 0 # = atom
+                   104 0 = {}
+                   106 # = {...}
+                   106 = [] = "" (End of list/empty list)
+                   107 0 # ... = "..."
+                   108 0 0 0 # ... 106 =[...]
+                   131=start
+                   */
 int print_init(){
     return printf("%c",131);
 }
@@ -55,15 +65,6 @@ void print_end(){
     printf(".");
     fflush(NULL);
 }
-
-void print_atom_tuple_response(const char* a, const char* b){
-            print_init();
-            print_tuple_header(2);
-            print_atom(a);
-            print_atom(b);
-            print_end();
-}
-
 void print_string_tuple(const char* a, const char* b){
             print_tuple_header(2);
             print_string(a);
@@ -71,11 +72,14 @@ void print_string_tuple(const char* a, const char* b){
 }
 
 
-void print_error(const char* err){ /* change this to print_error_response or something with a more consistent nomenclature */
-    print_atom_tuple_response("error",err);
-}
 
-void print_ok_string_tuple(const char* str, const char * Str){ /* also this function needs a better name */
+
+/**********************
+ * The report functions return a full fledged response to the erlang server.
+ * Do NOT use as part of a response.
+ *********************/
+
+void report_ok_string_tuple(const char* str, const char * Str){ 
     print_init();
     print_tuple_header(2);
     print_atom("ok");
@@ -85,13 +89,25 @@ void print_ok_string_tuple(const char* str, const char * Str){ /* also this func
     print_end();
 }
 
+void report_atom_tuple(const char* a, const char* b){
+    print_init();
+    print_tuple_header(2);
+    print_atom(a);
+    print_atom(b);
+    print_end();
+}
+
+void report_error(const char* err){ 
+    report_atom_tuple("error",err);
+}
+
 
 /**********************/
 
-int list_file_print_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
+int list_file_report_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
     if( attr_list(path,buffer,length,options,cursor) == -1){
         switch(errno){
-            default: print_error("list_error");
+            default: report_error("list_error");
         }
         return -1;
     } else {
@@ -99,17 +115,17 @@ int list_file_print_error(const char* path, char* buffer, int length, int option
     }
 }
 
-int get_file_print_error(const char* path, const char* attr, char* val, int* length, int options){
+int get_file_report_error(const char* path, const char* attr, char* val, int* length, int options){
     if( attr_get(path,attr,val,length,options) == -1 ){
         switch(errno){
             case ENOATTR: 
-                print_error("enoattr");/*The attribute in unreachable or does not exist.");*/ break;
+                report_error("enoattr");/*The attribute in unreachable or does not exist.");*/ break;
             case ERANGE: 
-                print_error("erange");/*The buffer size is too small");*/ break;
+                report_error("erange");/*The buffer size is too small");*/ break;
             case ENOTSUP: 
-                print_error("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)");*/ break;
+                report_error("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)");*/ break;
             default: 
-                print_error("unknown_get_error");
+                report_error("unknown_get_error");
         }
         return -1;
     } else {
@@ -117,11 +133,11 @@ int get_file_print_error(const char* path, const char* attr, char* val, int* len
     }
 }
 
-int set_file_print_error(const char* path,const char* attr, const char *val,int length,int options){
+int set_file_report_error(const char* path,const char* attr, const char *val,int length,int options){
     if (attr_set(path,attr,val,length,options) == -1){
         switch(errno){
-            case E2BIG: print_error("too_big"); break;
-            default: print_error("unknown_set_error"); break;
+            case E2BIG: report_error("too_big"); break;
+            default: report_error("unknown_set_error"); break;
         }
         return -1;
     } else {
@@ -129,11 +145,11 @@ int set_file_print_error(const char* path,const char* attr, const char *val,int 
     }
 }
 
-int remove_file_print_error(const char* path, const char* attr, int options){
+int remove_file_report_error(const char* path, const char* attr, int options){
     if(attr_remove(path,attr,options) == -1){
         switch(errno){
-            case ENOATTR: print_error("enoattr"); break;
-            default: print_error("unparsed_remove_error"); break;
+            case ENOATTR: report_error("enoattr"); break;
+            default: report_error("unparsed_remove_error"); break;
         }
         return -1;
     } else {
@@ -149,34 +165,27 @@ int main(){
             if(!strcmp("g",command)){
                 int length=255;
                 scanf("%s %s",path,attr);
-                if(!get_file_print_error(path,attr,val,&length,0)){
+                if(!get_file_report_error(path,attr,val,&length,0)){
                     val[length]=0;
-                    print_ok_string_tuple(attr,val);
+                    report_ok_string_tuple(attr,val);
                 }
 
             } else if(!strcmp("s",command)){
                 scanf("%s %s %s",path,attr,val);
-                if(!set_file_print_error(path,attr,val,strlen(val),0)){
-                    print_ok_string_tuple(attr,val);
+                if(!set_file_report_error(path,attr,val,strlen(val),0)){
+                    report_ok_string_tuple(attr,val);
                 }
 
             } else if(!strcmp("t",command)){
                 scanf("%s %s",path,attr);
-                if(!set_file_print_error(path,attr,"",0,0)){
-                    print_ok_string_tuple(attr,"");
+                if(!set_file_report_error(path,attr,"",0,0)){
+                    report_ok_string_tuple(attr,"");
                 }
 
-                //                   100 0 # = atom
-                //                   104 0 ={}
-                //                   104 # = {...}
-                //                   106 = [] = ""
-                //                   107 0 # ... = "..."
-                //                   108 0 0 0 # ... 106 =[...]
-                //                   131=start
-                
+
             } else if(!strcmp("r",command)){
                 scanf("%s %s",path,attr);
-                if(!remove_file_print_error(path,attr,0)){
+                if(!remove_file_report_error(path,attr,0)){
                     print_init();
                     print_atom("ok");
                     print_end();
@@ -186,11 +195,11 @@ int main(){
                 scanf("%s %s %s",path,attr,val);
                 char prev[256];
                 int length=256;
-                if( !get_file_print_error(path,attr,prev,&length,0) ) {
+                if( !get_file_report_error(path,attr,prev,&length,0) ) {
                     prev[length]=0;
                     strcat(prev,val);
-                    if ( !set_file_print_error(path,attr,prev,strlen(prev),0)){
-                        print_ok_string_tuple(attr,prev);
+                    if ( !set_file_report_error(path,attr,prev,strlen(prev),0)){
+                        report_ok_string_tuple(attr,prev);
                     }
                 }
 
@@ -199,8 +208,7 @@ int main(){
                 char buffer[length];
                 attrlist_cursor_t cursor;
                 scanf("%s",path);
-                if (!list_file_print_error(path,buffer,length,0,&cursor)){
-                    //attrlist_ent_t *ent_t;
+                if (!list_file_report_error(path,buffer,length,0,&cursor)){
                     __int32_t i,
                               count = ((attrlist_t*)buffer)->al_count;
 
@@ -210,9 +218,9 @@ int main(){
                     //printf("{ok,[");
                     print_list_header(count);
                     for(i=count;i;i--) {
-                    //    printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
+                        //    printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
                         print_string(ATTR_ENTRY(buffer,i-1)->a_name);
-                    //    printf(i-1?",":"");
+                        //    printf(i-1?",":"");
                     }
                     //printf("]}.");
                     print_list_end();
@@ -225,7 +233,7 @@ int main(){
                 char buffer[length];
                 attrlist_cursor_t cursor;
                 scanf("%s",path);
-                if( !list_file_print_error(path,buffer,length,0,&cursor)){
+                if( !list_file_report_error(path,buffer,length,0,&cursor)){
                     __int32_t i;
                     attrlist_t *list = (attrlist_t*) buffer;
                     __int32_t count = list->al_count;
@@ -238,7 +246,7 @@ int main(){
                     for(i=count;i;i--){
                         attrlist_ent_t* ent = ATTR_ENTRY(buffer,i-1);
                         length=256; //ent->a_valuelen;
-                        if( !get_file_print_error(path,ent->a_name,val,&length,0)) {
+                        if( !get_file_report_error(path,ent->a_name,val,&length,0)) {
                             val[length]=0;
                             print_string_tuple(ent->a_name,val);
                         }
@@ -249,11 +257,11 @@ int main(){
                 }
 
             } else {
-                print_error("invalid_command");
+                report_error("invalid_command");
                 scanf("%*[^\n]");
             }
         } else {
-            print_atom_tuple_response("exit","ok");
+            report_atom_tuple("exit","ok");
             return 0;
         }
         fflush(NULL);
