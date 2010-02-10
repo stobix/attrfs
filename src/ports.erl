@@ -9,6 +9,7 @@
     ]).
 
 -export([get/1]).
+-export([get_split/2]).
 -export([flatten/1]).
 -export([consult/1]).
 -export([parse/1]).
@@ -27,9 +28,16 @@ init(ProgName) ->
     Porten = open_port({spawn_executable,ProgName},[stream,use_stdio]),
     {ok,#state{port=Porten}}.
 
+handle_call({split_command,{Cmd,Args}},_from,State=#state{port=Port}) ->
+    port_command(Port,Cmd),
+    port_command(Port," "),
+    port_command(Port,Args),
+    case port_response(Port) of 
+        {ok, Val} -> {reply,flatten(Val),State};
+        {timeout, _T} -> {stop, port_timeout, State}
+    end;
 
-
-handle_call({command,CmdString},_from, State=#state{port=Port}) -> % Latorz: {command, Cmd, Args} / {cmd, [Args]}
+handle_call({command,CmdString},_from, State=#state{port=Port}) -> 
     port_command(Port,CmdString),
     case port_response(Port) of 
         {ok, Val} -> {reply,flatten(Val),State};
@@ -72,6 +80,7 @@ terminate({port_terminated, _Reason}, _State) ->
     ok;
 
 terminate(_Reason, #state{port = Port} = _State) ->
+    io:format("closing port"),
     port_close(Port).
 
                    
@@ -86,6 +95,10 @@ is_dot_terminated([_A|As]) ->
 
 get(ArgString) ->
     gen_server:call(?MODULE, {command, unchomp(ArgString)}).
+
+get_split(Cmd,Args) ->
+    gen_server:call(?MODULE, {split_command, {Cmd,unchomp(Args)}}).
+
 
 consult(ArgString) ->
     parse(?MODULE:get(ArgString)).

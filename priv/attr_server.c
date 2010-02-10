@@ -157,9 +157,12 @@ int remove_file_report_error(const char* path, const char* attr, int options){
     }
 }
 
+
 int main(){
     char path[1024],attr[256],val[256],command[1289]="attr -g "; /* Should be enough for anyone! */
+    FILE* debug = fopen("debug","a+");
     for(;;){
+        fprintf(debug,"scanning for cmd\n");
         scanf("%s",command);
         if(strcmp("e",command)){
             if(!strcmp("g",command)){
@@ -171,12 +174,14 @@ int main(){
                 }
 
             } else if(!strcmp("s",command)){
+        fprintf(debug,"scanning for s\n");
                 scanf("%s %s %s",path,attr,val);
                 if(!set_file_report_error(path,attr,val,strlen(val),0)){
                     report_ok_string_tuple(attr,val);
                 }
 
             } else if(!strcmp("t",command)){
+        fprintf(debug,"scanning for t\n");
                 scanf("%s %s",path,attr);
                 if(!set_file_report_error(path,attr,"",0,0)){
                     report_ok_string_tuple(attr,"");
@@ -184,6 +189,7 @@ int main(){
 
 
             } else if(!strcmp("r",command)){
+        fprintf(debug,"scanning for r\n");
                 scanf("%s %s",path,attr);
                 if(!remove_file_report_error(path,attr,0)){
                     print_init();
@@ -192,6 +198,7 @@ int main(){
                 }
 
             } else if(!strcmp("a",command)){
+        fprintf(debug,"scanning for a\n");
                 scanf("%s %s %s",path,attr,val);
                 char prev[256];
                 int length=256;
@@ -204,6 +211,7 @@ int main(){
                 }
 
             } else if(!strcmp("l",command)){
+        fprintf(debug,"scanning for l\n");
                 int length=2048;
                 char buffer[length];
                 attrlist_cursor_t cursor;
@@ -215,20 +223,17 @@ int main(){
                     print_init();
                     print_tuple_header(2);
                     print_atom("ok");
-                    //printf("{ok,[");
                     print_list_header(count);
                     for(i=count;i;i--) {
-                        //    printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
                         print_string(ATTR_ENTRY(buffer,i-1)->a_name);
-                        //    printf(i-1?",":"");
                     }
-                    //printf("]}.");
                     print_list_end();
                     print_end();
 
                 }
 
             } else if(!strcmp("L",command)){
+        fprintf(debug,"scanning for L\n");
                 int length=2048;
                 char buffer[length];
                 attrlist_cursor_t cursor;
@@ -257,15 +262,24 @@ int main(){
                 }
 
             } else {
+        fprintf(debug,"got erroneous command \"%.5s\", exiting\n",command);
+                report_atom_tuple("exit","err");
                 report_error("invalid_command");
                 scanf("%*[^\n]");
+                fclose(debug);
+                return -1;
             }
         } else {
+        fprintf(debug,"got e, exiting\n");
             report_atom_tuple("exit","ok");
+            fclose(debug);
             return 0;
         }
         fflush(NULL);
 
     }
+    fprintf(debug,"got out of the for loop, exiting\n");
+    fclose(debug);
+    return -2;
 
 }
