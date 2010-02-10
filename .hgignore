@@ -1,0 +1,7 @@
+syntax:glob
+
+#.hgignore
+*beam
+*swp
+
+#syntax:regexp
