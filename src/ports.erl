@@ -9,7 +9,10 @@
     ]).
 
 -export([get/1]).
+-export([flatten/1]).
+-export([consult/1]).
 -export([parse/1]).
+
 
 
 -record(state,{port}).
@@ -21,7 +24,7 @@ init(ProgName) ->
 %    register(porten,self()),
     process_flag(trap_exit,true),
     io:format("Opening port...\n"),
-    Porten = open_port({spawn_executable,ProgName},[{line,500},use_stdio]),
+    Porten = open_port({spawn_executable,ProgName},[stream,use_stdio]),
     {ok,#state{port=Porten}}.
 
 
@@ -29,36 +32,35 @@ init(ProgName) ->
 handle_call({command,CmdString},_from, State=#state{port=Port}) -> % Latorz: {command, Cmd, Args} / {cmd, [Args]}
     port_command(Port,CmdString),
     case port_response(Port) of 
-        {ok, Val} -> {reply,parse(Val),State};%{reply, Val, State};
+        {ok, Val} -> {reply,flatten(Val),State};
         {timeout, _T} -> {stop, port_timeout, State}
-    end.
+    end;
 
+handle_call({parse_command,CmdString},_from,State) ->
+    {reply,parse(gen_server:call(?MODULE, {command, unchomp(CmdString)})),State}.
         
-parse([[]]) ->
+flatten([]) ->
     [];
 
-parse([[]|B]) ->
-    parse([B]);
-
-parse([[A|As]|B]) ->
-    A++parse([As|B]).
+flatten([A|As]) ->
+    A++flatten(As).
 
 
 port_response(Port) ->
-    port_response(Port,[],[]).
+    port_response(Port,[]).
 
 -define(TIMEOUT,10000).
 
-port_response(Port,Repl,Line) ->
+port_response(Port,Reply) ->
     receive
-        {Port, {data, {eol, String}}} ->
-            FinLine = lists:reverse([String|Line]),
-            case is_dot_terminated(String) of
-                true -> {ok, lists:reverse([FinLine|Repl])};
-                false -> port_response(Port,[FinLine|Repl],[])
-            end;
-        {Port, {data, {noeol, String}}} ->
-            port_response(Port,Repl,[String|Line])
+        {Port, {data, List}} ->
+            case is_dot_terminated(List) of
+                true ->
+                    {ok, lists:reverse([List|Reply])};
+                false ->
+                    port_response(Port,[List|Reply])
+            end
+                    
         after ?TIMEOUT ->
             {timeout, ?TIMEOUT}
     end.
@@ -85,6 +87,12 @@ is_dot_terminated([_A|As]) ->
 get(ArgString) ->
     gen_server:call(?MODULE, {command, unchomp(ArgString)}).
 
+consult(ArgString) ->
+    parse(?MODULE:get(ArgString)).
+
+
+parse(List) ->
+    binary_to_term(list_to_binary(List)).
 
 %% unchomp does the opposite of the chomp perl function; if the string is not newline terminated, chomp appends a \n to the end of the string.
 unchomp(String) ->

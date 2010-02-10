@@ -5,10 +5,55 @@
 #include<attr/attributes.h>
 #include<errno.h>
 
+
+int print_init(){
+    return printf("%c",131);
+}
+
+int print_atom(const char* atom){
+    int len=strlen(atom);
+    int i=0;
+    printf("%c%c%c",100,0,len);
+    for(;i<len;i++){
+        printf("%c",atom[i]);
+    }
+    return len;
+}
+
+int print_tuple_header(int elems){
+    return printf("%c%c",104,elems);
+}
+
+int print_string(const char* string){
+    int len=strlen(string);
+    if(len){
+        int i=0;
+        for(;i<len;i++){
+            printf("%c",string[i]);
+        }
+        return len;
+    } else {
+        return printf("%c",106);
+    }
+}
+
+void print_end(){
+    printf(".");
+    fflush(NULL);
+}
+
+void print_atom_tuple(const char* a, const char* b){
+            print_init();
+            print_tuple_header(2);
+            print_atom(a);
+            print_atom(b);
+            print_end();
+}
+
 int list_file_print_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
     if( attr_list(path,buffer,length,options,cursor) == -1){
         switch(errno){
-            default: printf("{error,some_error}.\n");
+            default: print_atom_tuple("error","list_error");
         }
         return -1;
     } else {
@@ -18,12 +63,20 @@ int list_file_print_error(const char* path, char* buffer, int length, int option
 
 int get_file_print_error(const char* path, const char* attr, char* val, int* length, int options){
     if( attr_get(path,attr,val,length,options) == -1 ){
+        print_init();
+        print_tuple_header(2);
+        print_atom("error");
         switch(errno){
-            case ENOATTR: printf("{error,enoattr}.\n");/*The attribute in unreachable or does not exist.\n");*/ break;
-            case ERANGE: printf("{error,erange}.\n");/*The buffer size is too small\n");*/ break;
-            case ENOTSUP: printf("{error,enotsup}.\n");/*Extended arguments disabled or not supported on fs! (Or file missing)\n");*/ break;
-            default: printf("{error,some_error}.\n");
+            case ENOATTR: 
+                          print_atom("enoattr");/*The attribute in unreachable or does not exist.\n");*/ break;
+            case ERANGE: 
+                         print_atom("erange");/*The buffer size is too small\n");*/ break;
+            case ENOTSUP: 
+                          print_atom("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)\n");*/ break;
+            default: 
+                     print_atom("unknown_get_error");
         }
+        print_end();
         return -1;
     } else {
         return 0;
@@ -33,8 +86,8 @@ int get_file_print_error(const char* path, const char* attr, char* val, int* len
 int set_file_print_error(const char* path,const char* attr, const char *val,int length,int options){
     if (attr_set(path,attr,val,length,options) == -1){
         switch(errno){
-            case E2BIG: printf("{error,too big}.\n"); break;
-            default: printf("{error,some_error}.\n"); break;
+            case E2BIG: print_atom_tuple("error","too_big"); break;
+            default: print_atom_tuple("error","unknown_set_error"); break;
         }
         return -1;
     } else {
@@ -45,8 +98,8 @@ int set_file_print_error(const char* path,const char* attr, const char *val,int 
 int remove_file_print_error(const char* path, const char* attr, int options){
     if(attr_remove(path,attr,options) == -1){
         switch(errno){
-            case ENOATTR: printf("{error, enoattr}.\n"); break;
-            default: printf("{error,some_error}.\n"); break;
+            case ENOATTR: print_atom_tuple("error","enoattr"); break;
+            default: print_atom_tuple("error","some_error"); break;
         }
         return -1;
     } else {
@@ -173,8 +226,6 @@ int remove_file_print_error(const char* path, const char* attr, int options){
 int main(){
     char path[1024],attr[256],val[256],command[1289]="attr -g "; /* Should be enough for anyone! */
     for(;;){
-        /* printf("> "); /* Not a good idea to have this when communicating
-         * with erlang*/
         scanf("%s",command);
         if(strcmp("e",command)){
             if(!strcmp("g",command)){
@@ -182,7 +233,14 @@ int main(){
                 scanf("%s %s",path,attr);
                 if(!get_file_print_error(path,attr,val,&length,0)){
                     val[length]=0;
-                    printf("{ok,{\"%s\",\"%s\"}}.\n",attr,val);
+                    print_init();
+                    print_tuple_header(2);
+                    print_atom("ok");
+                    print_tuple_header(2);
+                    print_string(attr);
+                    print_string(val);
+                    print_end();
+                    //printf("{ok,{\"%s\",\"%s\"}}.\n",attr,val);
                 }
 
             } else if(!strcmp("s",command)){
@@ -203,14 +261,14 @@ int main(){
                 for(;i<5;i++)
                     printf("%c",bla[i]);
                 printf(".\n");
-            
-//                   100 0 # = atom
-//                   104 0 ={}
-//                   104 # = {...}
-//                   106 = [] = ""
-//                   107 0 # ... = "..."
-//                   108 0 0 0 # ... 106 =[...]
-//                   131=start
+
+                //                   100 0 # = atom
+                //                   104 0 ={}
+                //                   104 # = {...}
+                //                   106 = [] = ""
+                //                   107 0 # ... = "..."
+                //                   108 0 0 0 # ... 106 =[...]
+                //                   131=start
             } else if(!strcmp("r",command)){
                 scanf("%s %s",path,attr);
                 if(!remove_file_print_error(path,attr,0)){
@@ -261,7 +319,7 @@ int main(){
                     __int32_t i;
                     attrlist_t *list = (attrlist_t*) buffer;
                     __int32_t count = list->al_count;
-                              //moar = list->al_more;
+                    //moar = list->al_more;
                     printf(count?"{ok,[":"{ok,[]}.\n");
                     for(i=count;i;i--){
                         attrlist_ent_t* ent = ATTR_ENTRY(buffer,i-1);
@@ -276,12 +334,11 @@ int main(){
                 }
 
             } else {
-                printf("{error,invalid_command}.\n");
+                print_atom_tuple("error","invalid_command");
                 scanf("%*[^\n]");
-                /* TODO: how to flush incoming char buffer? */
             }
         } else {
-            printf("{exit,ok}.\n");
+            print_atom_tuple("exit","ok");
             return 0;
         }
         fflush(NULL);
