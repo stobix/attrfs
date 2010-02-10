@@ -45,12 +45,17 @@ void print_list_header(char elems){
 void print_list_end(){
     printf("%c",106);
 }
+
+void print_empty_list(){
+    printf("%c",106);
+}
+
 void print_end(){
     printf(".");
     fflush(NULL);
 }
 
-void print_atom_tuple(const char* a, const char* b){
+void print_atom_tuple_response(const char* a, const char* b){
             print_init();
             print_tuple_header(2);
             print_atom(a);
@@ -58,9 +63,15 @@ void print_atom_tuple(const char* a, const char* b){
             print_end();
 }
 
+void print_string_tuple(const char* a, const char* b){
+            print_tuple_header(2);
+            print_string(a);
+            print_string(b);
+}
+
 
 void print_error(const char* err){
-    print_atom_tuple("error",err);
+    print_atom_tuple_response("error",err);
 }
 
 void print_ok_string_tuple(const char* str, const char * Str){
@@ -77,7 +88,7 @@ void print_ok_string_tuple(const char* str, const char * Str){
 int list_file_print_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
     if( attr_list(path,buffer,length,options,cursor) == -1){
         switch(errno){
-            default: print_atom_tuple("error","list_error");
+            default: print_error("list_error");
         }
         return -1;
     } else {
@@ -87,20 +98,16 @@ int list_file_print_error(const char* path, char* buffer, int length, int option
 
 int get_file_print_error(const char* path, const char* attr, char* val, int* length, int options){
     if( attr_get(path,attr,val,length,options) == -1 ){
-        print_init();
-        print_tuple_header(2);
-        print_atom("error");
         switch(errno){
             case ENOATTR: 
-                print_atom("enoattr");/*The attribute in unreachable or does not exist.");*/ break;
+                print_error("enoattr");/*The attribute in unreachable or does not exist.");*/ break;
             case ERANGE: 
-                print_atom("erange");/*The buffer size is too small");*/ break;
+                print_error("erange");/*The buffer size is too small");*/ break;
             case ENOTSUP: 
-                print_atom("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)");*/ break;
+                print_error("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)");*/ break;
             default: 
-                print_atom("unknown_get_error");
+                print_error("unknown_get_error");
         }
-        print_end();
         return -1;
     } else {
         return 0;
@@ -110,8 +117,8 @@ int get_file_print_error(const char* path, const char* attr, char* val, int* len
 int set_file_print_error(const char* path,const char* attr, const char *val,int length,int options){
     if (attr_set(path,attr,val,length,options) == -1){
         switch(errno){
-            case E2BIG: print_atom_tuple("error","too_big"); break;
-            default: print_atom_tuple("error","unknown_set_error"); break;
+            case E2BIG: print_error("too_big"); break;
+            default: print_error("unknown_set_error"); break;
         }
         return -1;
     } else {
@@ -122,8 +129,8 @@ int set_file_print_error(const char* path,const char* attr, const char *val,int 
 int remove_file_print_error(const char* path, const char* attr, int options){
     if(attr_remove(path,attr,options) == -1){
         switch(errno){
-            case ENOATTR: print_atom_tuple("error","enoattr"); break;
-            default: print_atom_tuple("error","some_error"); break;
+            case ENOATTR: print_error("enoattr"); break;
+            default: print_error("unparsed_remove_error"); break;
         }
         return -1;
     } else {
@@ -219,17 +226,25 @@ int main(){
                     __int32_t i;
                     attrlist_t *list = (attrlist_t*) buffer;
                     __int32_t count = list->al_count;
-                    //moar = list->al_more;
-                    printf(count?"{ok,[":"{ok,[]}.");
+                    //printf(count?"{ok,[":"{ok,[]}.");
+                    print_init();
+                    print_tuple_header(2);
+                    print_atom("ok");
+                    if(count){
+                        print_list_header(count);
+                    }
                     for(i=count;i;i--){
                         attrlist_ent_t* ent = ATTR_ENTRY(buffer,i-1);
                         length=256; //ent->a_valuelen;
                         if( !get_file_print_error(path,ent->a_name,val,&length,0)) {
                             val[length]=0;
-                            printf("{\"%s\",\"%s\"}",ent->a_name,val);
-                            printf((i-1)?",":"]}.");
+                            print_string_tuple(ent->a_name,val);
+                            //printf("{\"%s\",\"%s\"}",ent->a_name,val);
+                            //printf((i-1)?",":"]}.");
                         }
                     }
+                    print_list_end(); /* this is the same as for an empty list, so this works for both empty and non-empty lists */
+                    print_end();
 
                 }
 
@@ -238,7 +253,7 @@ int main(){
                 scanf("%*[^\n]");
             }
         } else {
-            print_atom_tuple("exit","ok");
+            print_atom_tuple_response("exit","ok");
             return 0;
         }
         fflush(NULL);
