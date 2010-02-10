@@ -28,6 +28,7 @@ int print_string(const char* string){
     int len=strlen(string);
     if(len){
         int i=0;
+        printf("%c%c%c",107,0,len);
         for(;i<len;i++){
             printf("%c",string[i]);
         }
@@ -50,6 +51,22 @@ void print_atom_tuple(const char* a, const char* b){
             print_end();
 }
 
+
+void print_error(const char* err){
+    print_atom_tuple("error",err);
+}
+
+void print_ok_string_tuple(const char* str, const char * Str){
+    print_init();
+    print_tuple_header(2);
+    print_atom("ok");
+    print_tuple_header(2);
+    print_string(str);
+    print_string(Str);
+    print_end();
+}
+
+
 int list_file_print_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
     if( attr_list(path,buffer,length,options,cursor) == -1){
         switch(errno){
@@ -68,13 +85,13 @@ int get_file_print_error(const char* path, const char* attr, char* val, int* len
         print_atom("error");
         switch(errno){
             case ENOATTR: 
-                          print_atom("enoattr");/*The attribute in unreachable or does not exist.\n");*/ break;
+                print_atom("enoattr");/*The attribute in unreachable or does not exist.");*/ break;
             case ERANGE: 
-                         print_atom("erange");/*The buffer size is too small\n");*/ break;
+                print_atom("erange");/*The buffer size is too small");*/ break;
             case ENOTSUP: 
-                          print_atom("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)\n");*/ break;
+                print_atom("enotsup");/*Extended arguments disabled or not supported on fs! (Or file missing)");*/ break;
             default: 
-                     print_atom("unknown_get_error");
+                print_atom("unknown_get_error");
         }
         print_end();
         return -1;
@@ -117,34 +134,20 @@ int main(){
                 scanf("%s %s",path,attr);
                 if(!get_file_print_error(path,attr,val,&length,0)){
                     val[length]=0;
-                    print_init();
-                    print_tuple_header(2);
-                    print_atom("ok");
-                    print_tuple_header(2);
-                    print_string(attr);
-                    print_string(val);
-                    print_end();
-                    //printf("{ok,{\"%s\",\"%s\"}}.\n",attr,val);
+                    print_ok_string_tuple(attr,val);
                 }
 
             } else if(!strcmp("s",command)){
                 scanf("%s %s %s",path,attr,val);
                 if(!set_file_print_error(path,attr,val,strlen(val),0)){
-                    printf("{ok,{\"%s\",\"%s\"}}.\n", attr, val);
+                    print_ok_string_tuple(attr,val);
                 }
 
             } else if(!strcmp("t",command)){
                 scanf("%s %s",path,attr);
                 if(!set_file_print_error(path,attr,"",0,0)){
-                    printf("{ok,{\"%s\",\"%s\"}}.\n", attr, "");
+                    print_ok_string_tuple(attr,"");
                 }
-
-            } else if(!strcmp("urt",command)){
-                char bla[5]={131,100,0,1,65};
-                int i=0;
-                for(;i<5;i++)
-                    printf("%c",bla[i]);
-                printf(".\n");
 
                 //                   100 0 # = atom
                 //                   104 0 ={}
@@ -153,15 +156,13 @@ int main(){
                 //                   107 0 # ... = "..."
                 //                   108 0 0 0 # ... 106 =[...]
                 //                   131=start
+                
             } else if(!strcmp("r",command)){
                 scanf("%s %s",path,attr);
                 if(!remove_file_print_error(path,attr,0)){
-                    //printf("ok.\n");
-                    char bla[10]={131,100,0,2,'o','k'};
-                    int i=0;
-                    for(;i<6;i++)
-                        printf("%c",bla[i]);
-                    printf(".\n");
+                    print_init();
+                    print_atom("ok");
+                    print_end();
                 }
 
             } else if(!strcmp("a",command)){
@@ -172,7 +173,7 @@ int main(){
                     prev[length]=0;
                     strcat(prev,val);
                     if ( !set_file_print_error(path,attr,prev,strlen(prev),0)){
-                        printf("{ok,{\"%s\",\"%s\"}}.\n", attr, prev);
+                        print_ok_string_tuple(attr,prev);
                     }
                 }
 
@@ -190,7 +191,7 @@ int main(){
                         printf("\"%s\"",ATTR_ENTRY(buffer,i-1)->a_name);
                         printf(i-1?",":"");
                     }
-                    printf("]}.\n");
+                    printf("]}.");
 
                 }
 
@@ -204,21 +205,21 @@ int main(){
                     attrlist_t *list = (attrlist_t*) buffer;
                     __int32_t count = list->al_count;
                     //moar = list->al_more;
-                    printf(count?"{ok,[":"{ok,[]}.\n");
+                    printf(count?"{ok,[":"{ok,[]}.");
                     for(i=count;i;i--){
                         attrlist_ent_t* ent = ATTR_ENTRY(buffer,i-1);
                         length=256; //ent->a_valuelen;
                         if( !get_file_print_error(path,ent->a_name,val,&length,0)) {
                             val[length]=0;
                             printf("{\"%s\",\"%s\"}",ent->a_name,val);
-                            printf((i-1)?",":"]}.\n");
+                            printf((i-1)?",":"]}.");
                         }
                     }
 
                 }
 
             } else {
-                print_atom_tuple("error","invalid_command");
+                print_error("invalid_command");
                 scanf("%*[^\n]");
             }
         } else {
