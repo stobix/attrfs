@@ -5,6 +5,7 @@
 #include<attr/attributes.h>
 #include<errno.h>
 
+/**********************/
 
 int print_init(){
     return printf("%c",131);
@@ -70,11 +71,11 @@ void print_string_tuple(const char* a, const char* b){
 }
 
 
-void print_error(const char* err){
+void print_error(const char* err){ /* change this to print_error_response or something with a more consistent nomenclature */
     print_atom_tuple_response("error",err);
 }
 
-void print_ok_string_tuple(const char* str, const char * Str){
+void print_ok_string_tuple(const char* str, const char * Str){ /* also this function needs a better name */
     print_init();
     print_tuple_header(2);
     print_atom("ok");
@@ -84,6 +85,8 @@ void print_ok_string_tuple(const char* str, const char * Str){
     print_end();
 }
 
+
+/**********************/
 
 int list_file_print_error(const char* path, char* buffer, int length, int options, attrlist_cursor_t* cursor){
     if( attr_list(path,buffer,length,options,cursor) == -1){
@@ -226,7 +229,6 @@ int main(){
                     __int32_t i;
                     attrlist_t *list = (attrlist_t*) buffer;
                     __int32_t count = list->al_count;
-                    //printf(count?"{ok,[":"{ok,[]}.");
                     print_init();
                     print_tuple_header(2);
                     print_atom("ok");
@@ -239,8 +241,6 @@ int main(){
                         if( !get_file_print_error(path,ent->a_name,val,&length,0)) {
                             val[length]=0;
                             print_string_tuple(ent->a_name,val);
-                            //printf("{\"%s\",\"%s\"}",ent->a_name,val);
-                            //printf((i-1)?",":"]}.");
                         }
                     }
                     print_list_end(); /* this is the same as for an empty list, so this works for both empty and non-empty lists */
