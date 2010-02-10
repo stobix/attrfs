@@ -6,7 +6,7 @@
      {applications, [kernel,stdlib]},
      {mod, {xattr_app, []}},
      {env, [
-         {extprog, attr_server},
+         {extprog, xattr_server},
          {timeout, 10000}
          ]}
 ]}.

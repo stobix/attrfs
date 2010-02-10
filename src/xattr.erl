@@ -137,15 +137,15 @@ parse(List) ->
     binary_to_term(list_to_binary(List)).
 
 %% unchomp does the opposite of the chomp perl function; if the string is not newline terminated, chomp appends a \n to the end of the string.
-unchomp(String) ->
-    unchomp(String,[]).
-
-unchomp([],Gnirts) ->
-    lists:reverse([$\n|Gnirts]);
-
-unchomp("\n",Gnirts) ->
-    lists:reverse([$\n|Gnirts]);
-
-unchomp([Char|String],Gnirts) ->
-    unchomp(String,[Char|Gnirts]).
+%unchomp(String) ->
+%    unchomp(String,[]).
+%
+%unchomp([],Gnirts) ->
+%    lists:reverse([$\n|Gnirts]);
+%
+%unchomp("\n",Gnirts) ->
+%    lists:reverse([$\n|Gnirts]);
+%
+%unchomp([Char|String],Gnirts) ->
+%    unchomp(String,[Char|Gnirts]).
 

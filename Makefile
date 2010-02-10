@@ -1,23 +1,25 @@
 #all: filsystem_app filsystem filsystem_sup move_bin
 
-all src/*erl: 
+all: 
+	cd priv &&\
+	gcc xattr_server.c -Wall -lattr -o xattr_server
 	cd src &&\
 	erlc *.erl
 
 #priv priv/attr_server.c priv/attr_server:
 priv: 
 	cd priv &&\
-	gcc attr_server.c -Wall -lattr -o attr_server
+	gcc xattr_server.c -Wall -lattr -o xattr_server
 
 
-filsystem_app src/filsystem_app.erl:
+filsystem_app:
 	cd src && \
 	erlc filsystem_app.erl
-filsystem src/filsystem.erl:
+filsystem:
 	cd src && \
 	erlc filsystem.erl
 
-filsystem_sup src/filsystem_sup.erl:
+filsystem_sup:
 	cd src && \
 	erlc filsystem_sup.erl
 
