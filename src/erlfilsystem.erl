@@ -36,7 +36,8 @@
          unlink/5,
          write/7]).
 
--export([code_change/3,handle_info/2,init/1]). % TODO: Do something intelligent with this one. Returns "ok" now.
+-export([handle_info/2,init/1]).
+-export([code_change/3]) % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
 -behaviour(fuserl).
 -include_lib("fuserl/include/fuserl.hrl").
 -include("../include/erlfilsystem.hrl").
@@ -69,6 +70,9 @@ init(State) ->
     io:format("~s",["Nu!\n"]),
     {ok, State}.
 
+
+new_inode_list() ->
+    
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     io:format("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
