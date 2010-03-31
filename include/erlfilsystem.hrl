@@ -9,13 +9,15 @@
 -type name_list()::[name_tuple()].
 -type attrib_list()::[{name_tuple(), name_tuple()|null}].
 
--record(real_file,
+-record(external_file,
        {path::string()
        }).
 
--type file_type()::#real_file{}|false_file|real_dir|ext_info_dir.
 
-%record file_info
+%% An internal file is a file without an external representation.
+%% An external file or dir exists in an external file system somewhere.
+%% An ext info dir is an internal directory representation of some attribute of some dir or file.
+-type file_type()::#external_file{}|internal_file|external_dir|ext_info_dir.
 
 
 -record(inode_entry,
@@ -23,10 +25,10 @@
         {children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
         ,type::file_type()
-        % real_file_info mirrors the file info for the real file in some real file system, if applicable.
-        ,real_file_info
-        % fake_file_info is the file info that the file has in my file system.
-        ,fake_file_info
+        % external_file_info mirrors the file info for the real file in some real file system, if applicable.
+        ,external_file_info
+        % internal_file_info is the file info that the file has in my file system.
+        ,internal_file_info
         % ext_info contains a list of attribute - value pairs in xattr style, used to put files into virtual folders.
         ,ext_info::attrib_list()
         }).

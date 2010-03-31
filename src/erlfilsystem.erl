@@ -42,7 +42,9 @@
 -behaviour(fuserl).
 
 -include_lib("fuserl/include/fuserl.hrl").
+-include_lib("kernel/include/file.hrl").
 -include("../include/erlfilsystem.hrl").
+-include("../include/debug.hrl").
 
 
 %% a small record to make it possible for me to choose which start options I want to give
@@ -69,41 +71,47 @@ start_link(Dir,LinkedIn,MountOpts,Args) ->
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,Args,Options).
 
 init(Dir) ->
-    io:format("<init dir=\"~p\"",[Dir]),
-    State=make_initiate_state(Dir),
-    io:format(" state=\"~p\">",[State]),
+    ?DEB2("<init dir=\"~p\"",[Dir]),
+    {InodeList,BiggestIno}=make_inode_list({Dir,1},2),
+    %FlatInodeList=lists:flatten(InodeList),
+    InodeTree=gb_trees:from_orddict(InodeList),
+    InodeListRec=#inode_list{inode_entries=InodeTree,biggest=BiggestIno},
+    State=#state{inode_list=InodeListRec},
+    ?DEB2(" state=\"~p\">",[State]),
     {ok, State}.
 
-%% Reads the contents of a dir, putting every file in the dir in my inode list.
-%% Returns a state record.
-make_initiate_state(Dir) ->
-   {ok,CWD}=file:get_cwd(),
-   {ok,Names}=file:list_dir(Dir),
-   ok=file:set_cwd(Dir),
-   FirstInode=1,
-   {InodeEntryList,NewBiggest}=
-       lists:mapfoldr
-           % I use a fun here, because I might need the Dir from above, and must insert it directly into the function (unless erlang is more into currying than I think).
-           (fun(Name,InodeNo) ->
-               {ok,FileInfo} = file:read_file_info(Name),
-               InodeEntry=#inode_entry{
-                   children=[], % TODO: do something recursive here, if possible.
-                   type=real_file, % For now, assume that this name points to a file.
-                   real_file_info=FileInfo,
-                   fake_file_info=FileInfo#file_info{inode=InodeNo},
-                   ext_info=[]}, % XXX: This is where I will put in my file system specific magic.
-               {{InodeNo,InodeEntry},InodeNo+1}
-           end,
-           FirstInode, % The inode number to assign the first name to.
-           Names),
-   InodeList=#inode_list{biggest=NewBiggest,inode_entries=gb_trees:from_orddict(InodeEntryList)},
-   file:set_cwd(CWD),
-   #state{inode_list=InodeList}.
-
-
-                
-
-
+%% Reads the contents of a dir, putting every file in the dir in my inode list. Recursively.
+%% Reads the contents of a dir, recursively, and produces a non-flat list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict after it has been flattened.
+make_inode_list({Entry,InitialIno},NextIno) ->
+    {ok,FileInfo}=file:read_file_info(Entry),
+    {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
+        directory ->
+            ?DEB1("directory"),
+            {ok,Names} = file:list_dir(Entry),
+            {NameInodePairs,MyIno}=
+                lists:mapfoldl(
+                    fun(Name,Ino) -> {{Entry++"/"++Name,Ino},Ino+1} end, 
+                    NextIno, Names),
+            {ok,NameInodePairs,external_dir,MyIno};
+        regular ->
+            ?DEB1("regular"),
+            % TODO: Get attributes for file and set them as children. I think.
+            {ok,[],external_file,NextIno};
+        _ ->
+            {error,not_supported} % for now
+    end,
+    InodeEntry=#inode_entry{
+        children=Children,
+        type=Type,
+        external_file_info=FileInfo,
+        internal_file_info=FileInfo#file_info{inode=InitialIno},
+        ext_info=[]},
+    {ChildInodeEntries,FinalIno} = 
+        lists:mapfoldl(
+            fun(A,B)->make_inode_list(A,B) end
+                ,NewIno,Children),
+    {lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries]),FinalIno}.
+        
 
 
 
@@ -253,7 +261,7 @@ direntrify([]) -> [];
 
 direntrify([{Name,Inode}|Children]) ->
     Child=gb_sets:get(Inode),
-    ChildPerms=(Child#inode_entry.fake_file_info)#file_info.mode,
+    ChildPerms=(Child#inode_entry.internal_file_info)#file_info.mode,
     Direntry=
         #direntry{name=Name
                   ,stat=#stat{ st_ino=Inode,
