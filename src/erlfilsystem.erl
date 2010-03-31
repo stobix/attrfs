@@ -37,8 +37,10 @@
          write/7]).
 
 -export([handle_info/2,init/1]).
--export([code_change/3]) % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
+-export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
+
 -behaviour(fuserl).
+
 -include_lib("fuserl/include/fuserl.hrl").
 -include("../include/erlfilsystem.hrl").
 
@@ -59,20 +61,54 @@ start_link(Dir) ->
 start_link(Dir,LinkedIn) ->
     start_link(Dir,LinkedIn,"debug").
 
-start_link(Dir,LinkedIn,MountOpts) ->
-    start_link(Dir,LinkedIn,MountOpts,[]).
+start_link(MountDir,LinkedIn,MountOpts) ->
+    start_link(MountDir,LinkedIn,MountOpts,_StartOpts=_MirrorDir=MountDir). %TODO: make the last Dir mirror an arbitary directory, infusing its contents into the first Dir.
 
 start_link(Dir,LinkedIn,MountOpts,Args) ->
     Options=[],
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,Args,Options).
 
-init(State) ->
-    io:format("~s",["Nu!\n"]),
+init(Dir) ->
+    io:format("<init dir=\"~p\"",[Dir]),
+    State=make_initiate_state(Dir),
+    io:format(" state=\"~p\">",[State]),
     {ok, State}.
 
+%% Reads the contents of a dir, putting every file in the dir in my inode list.
+%% Returns a state record.
+make_initiate_state(Dir) ->
+   {ok,CWD}=file:get_cwd(),
+   {ok,Names}=file:list_dir(Dir),
+   ok=file:set_cwd(Dir),
+   FirstInode=1,
+   {InodeEntryList,NewBiggest}=
+       lists:mapfoldr
+           % I use a fun here, because I might need the Dir from above, and must insert it directly into the function (unless erlang is more into currying than I think).
+           (fun(Name,InodeNo) ->
+               {ok,FileInfo} = file:read_file_info(Name),
+               InodeEntry=#inode_entry{
+                   children=[], % TODO: do something recursive here, if possible.
+                   type=real_file, % For now, assume that this name points to a file.
+                   real_file_info=FileInfo,
+                   fake_file_info=FileInfo#file_info{inode=InodeNo},
+                   ext_info=[]}, % XXX: This is where I will put in my file system specific magic.
+               {{InodeNo,InodeEntry},InodeNo+1}
+           end,
+           FirstInode, % The inode number to assign the first name to.
+           Names),
+   InodeList=#inode_list{biggest=NewBiggest,inode_entries=gb_trees:from_orddict(InodeEntryList)},
+   file:set_cwd(CWD),
+   #state{inode_list=InodeList}.
 
-new_inode_list() ->
-    
+
+                
+
+
+
+
+
+
+
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     io:format("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
@@ -101,8 +137,8 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
     
 getattr(#fuse_ctx{uid=Uid,gid=Gid,pid=Pid},Inode,_Continuation,State) ->
-    io:format("~s",["getattr!\n"]),
-    io:format("~p\n",[Pid]),
+    io:format("~s",["<getattr>\n"]),
+    io:format(" <pid=\"~p\"/>\n",[Pid]),
     {#fuse_reply_attr{
         attr=#stat {
             % Seems like I don't have to bother about these, I think.
@@ -125,6 +161,7 @@ getattr(#fuse_ctx{uid=Uid,gid=Gid,pid=Pid},Inode,_Continuation,State) ->
         attr_timeout_ms=0
         }
     ,
+    io:format("</getattr>\n"),
     State}.
 
 
@@ -164,7 +201,7 @@ open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 opendir(_Ctx,_Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io=DirectIO,keep_cache=KeepCache,flush=_,fh=Fh,lock_owner=_},_Continuation,State) ->
-    io:format("<opendir>\n Flags:~.8B\n Writepage:~p\n DirectIO:~p\nKeepCache:~p\nFileHandle:~p\n",[Flags, Writepage, DirectIO, KeepCache, Fh]),
+    io:format("<opendir>\n <flags=\"~.8B\">\n <writepage=\"~p\"/>\n <direct_io=\"~p\"/>\n <keep_cache=\"~p\"/>\n <file_handle=\"~p\"/>\n",[Flags, Writepage, DirectIO, KeepCache, Fh]),
     {#fuse_reply_open{ fuse_file_info = _FI }, State}.
 %    {#fuse_reply_err{err=enotsup},State}.
 
@@ -187,19 +224,8 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                                  }.
 
 %% blatantly stolen from fuserlprocserv.erl
-readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s ~p\n",["readdir! Offset:", Offset]),
-%    {#fuse_reply_direntrylist {direntrylist= [
-%        #direntry{ name=".", offset="1", stat=#stat{
-%            st_ino=_Inode,
-%            st_mode=?S_IFDIR,
-%            st_nlink=1}},
-%        #direntry{ name="..", offset="2", stat=#stat{
-%            st_ino=_Inode,
-%            st_mode=?S_IFDIR,
-%            st_nlink=1}}
-%        ]}, State}.
-
+readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State=#state{inode_list=InodeList}) ->
+  io:format("~s ~p\n",["readdir! Offset:", Offset]),
   DirEntryList = 
     take_while 
       (fun (E, { Total, Max }) -> 
@@ -212,14 +238,36 @@ readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
          end
        end,
        { 0, Size },
-       lists:nthtail 
-         (Offset,
-          [ #direntry{ name = ".", offset = 1, stat = ?DIRATTR (Inode) },
-            #direntry{ name = "..", offset = 2, stat = ?DIRATTR (Inode) },
-            #direntry{ name = "Albinn", offset = 3, stat = ?STAT (Inode,8#755,1) }
-          ])),
+       lists:nthtail(Offset,direntries(Inode,InodeList)) %TODO: create this in the opendir call instead!
+      ),
+
 
   { #fuse_reply_direntrylist{ direntrylist = DirEntryList }, State }.
+
+direntries(Inode,InodeList) ->
+    InodeEntry=gb_trees:get(Inode,InodeList),
+    Children=InodeEntry#inode_entry.children,
+    direntrify(Children).
+
+direntrify([]) -> [];
+
+direntrify([{Name,Inode}|Children]) ->
+    Child=gb_sets:get(Inode),
+    ChildPerms=(Child#inode_entry.fake_file_info)#file_info.mode,
+    Direntry=
+        #direntry{name=Name
+                  ,stat=#stat{ st_ino=Inode,
+                               st_mode=ChildPerms,
+                               st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
+                              }
+                    },
+    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
+    [Direntry1|direntrify(Children)].
+               
+
+
+
+
 
 take_while (_, _, []) -> 
   [];
