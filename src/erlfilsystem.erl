@@ -68,12 +68,15 @@ start_link(Startopts=#startopts{}) ->
     start_link(Startopts#startopts.dir,Startopts#startopts.linkedin,Startopts#startopts.mountopts);
 
 
+start_link({MountDir,MirrorDir}) ->
+    start_link(MountDir,false,"",MirrorDir);
+
 start_link(Dir) ->
     start_link(Dir,false). % A true value for linked in "jeopardizes the erlang emulator stability" according to fuserlproc
 
 start_link(Dir,LinkedIn) ->
-    start_link(Dir,LinkedIn,"debug").
-%    start_link(Dir,LinkedIn,"").
+%    start_link(Dir,LinkedIn,"debug").
+    start_link(Dir,LinkedIn,"").
 
 start_link(MountDir,LinkedIn,MountOpts) ->
     start_link(MountDir,LinkedIn,MountOpts,MountDir). %TODO: make the last Dir mirror an arbitary directory, infusing its contents into the first Dir.
@@ -88,7 +91,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     ?DEB1("   inode tree made"),
     InodeListRec=#inode_list{inode_entries=InodeTree,biggest=BiggestIno},
     ?DEB1("   inode list made"),
-    State=#state{inode_list=InodeListRec},
+    State=#state{inode_list=InodeListRec,open_files=gb_trees:empty()},
     assert_started(fuserl),
     ?DEB1("   fuserl started, starting fuserlsrv"),
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
@@ -169,6 +172,20 @@ get_inode_entries(State) ->
 
 lookup_inode_entry(Inode,State) ->
     gb_trees:lookup(Inode,get_inode_entries(State)).
+
+get_open_files(State) ->
+    State#state.open_files.
+
+set_open_files(State,OpenFiles) ->
+    State#state{open_files=OpenFiles}.
+
+get_open_file(State,Inode) ->
+    gb_trees:lookup(Inode,get_open_files(State)).
+
+set_open_file(State,Inode,FileContents) ->
+    OpenFiles=get_open_files(State),
+    NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
+    set_open_files(State,NewOpenFiles).
 
 %get_biggest_inode_number(State) ->
 %    (State#state.inode_list)#inode_list.biggest.
@@ -305,10 +322,22 @@ open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     io:format("~s",["open!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-opendir(_Ctx,_Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io=DirectIO,keep_cache=KeepCache,flush=_,fh=Fh,lock_owner=_},_Continuation,State) ->
-    io:format("<opendir>\n <flags=\"~.8B\">\n <writepage=\"~p\"/>\n <direct_io=\"~p\"/>\n <keep_cache=\"~p\"/>\n <file_handle=\"~p\"/>\n",[Flags, Writepage, DirectIO, KeepCache, Fh]),
-    {#fuse_reply_open{ fuse_file_info = _FI }, State}.
-%    {#fuse_reply_err{err=enotsup},State}.
+opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io=DirectIO,keep_cache=KeepCache,flush=_,fh=Fh,lock_owner=_},_Continuation,State) ->
+    ?DEB1("opendir"),
+    ?DEB2("   flags ~p~n",Flags),
+    ?DEB2("   writepage ~p~n",Writepage),
+    ?DEB2("   DirectIO ~p~n",DirectIO),
+    ?DEB2("   KeepCache ~p~n",KeepCache),
+    ?DEB2("   FileHandle ~p~n",Fh),
+    ?DEB2("  Getting inode entries for ~p ~n",Inode),
+    Entries=get_inode_entries(State),
+    ?DEB1("  Creating directory entries from inode endtries"),
+    % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
+    NewState=set_open_file(State,Inode,direntries(Inode,Entries)),
+    {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
+
+
+
 
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
     io:format("~s",["read!\n"]),
@@ -328,37 +357,50 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                              st_nlink = Z
                                  }.
 
-%% blatantly stolen from fuserlprocserv.erl
-readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State=#state{inode_list=InodeList}) ->
-  io:format("~s ~p\n",["readdir! Offset:", Offset]),
-  DirEntryList = 
-    take_while 
-      (fun (E, { Total, Max }) -> 
-         Cur = fuserlsrv:dirent_size (E),
-         if 
-           Total + Cur =< Max ->
-             { continue, { Total + Cur, Max } };
-           true ->
-             stop
-         end
-       end,
-       { 0, Size },
-       lists:nthtail(Offset,direntries(Inode,InodeList)) %TODO: create this in the opendir call instead!
-      ),
-
-
-  { #fuse_reply_direntrylist{ direntrylist = DirEntryList }, State }.
+readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
+  ?DEB2("~p","readdir"),
+  ?DEB2(" inode ~p~n",Inode),
+  ?DEB2(" offset(~p)~n",Offset),
+  case get_open_file(State,Inode) of 
+    {value, OpenFile} ->
+        DirEntryList = 
+        take_while 
+          (fun (E, { Total, Max }) -> 
+             Cur = fuserlsrv:dirent_size (E),
+             if 
+               Total + Cur =< Max ->
+                 { continue, { Total + Cur, Max } };
+               true ->
+                 stop
+             end
+           end,
+           { 0, Size },
+           lists:nthtail(Offset,OpenFile) 
+          ),
+          { #fuse_reply_direntrylist{ direntrylist = DirEntryList }, State };
+    none ->
+        {#fuse_reply_err{err=ebadr},State} % XXX: What should this REALLY return when the file is not open for this user?
+  end.
 
 direntries(Inode,InodeList) ->
+    ?DEB1("Creating direntries"),
+    ?DEB1("Getting entries"),
     InodeEntry=gb_trees:get(Inode,InodeList),
+    ?DEB1("Getting children"),
     Children=InodeEntry#inode_entry.children,
+    ?DEB1("Converting children"),
     direntrify(Children).
 
-direntrify([]) -> [];
+direntrify([]) -> 
+    ?DEB1("Done converting children"),
+    [];
 
 direntrify([{Name,Inode}|Children]) ->
+    ?DEB2("Getting inode for child ~p~n",Name),
     Child=gb_sets:get(Inode),
+    ?DEB2("Getting permissions for child ~p~n",Name),
     ChildPerms=(Child#inode_entry.internal_file_info)#file_info.mode,
+    ?DEB2("Creating direntry for child ~p~n",Name),
     Direntry=
         #direntry{name=Name
                   ,stat=#stat{ st_ino=Inode,
@@ -366,7 +408,9 @@ direntrify([{Name,Inode}|Children]) ->
                                st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
                               }
                     },
+    ?DEB2("Calculatig size for direntry for child ~p~n",Name),
     Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
+    ?DEB2("Appending child ~p to list~n",Name),
     [Direntry1|direntrify(Children)].
                
 

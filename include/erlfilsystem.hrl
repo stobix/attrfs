@@ -44,6 +44,7 @@
 
 -record(state,
         {
-        inode_list
+        inode_list,
+        open_files
         }).
 
