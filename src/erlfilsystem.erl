@@ -39,6 +39,12 @@
 -export([handle_info/2,init/1]).
 -export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
 
+%% Debug functions
+-export([get_dir_hier/2]).
+
+-export([test/2]).
+-export([bogus_start/1]).
+
 -behaviour(fuserl).
 
 -include_lib("fuserl/include/fuserl.hrl").
@@ -54,30 +60,63 @@
     mountopts,%="",
     dir}).
 
+bogus_start(Dir) ->
+    assert_started(fuserl),
+    fuserlsrv:start_link(?MODULE,false,"debug",Dir,{bogus,Dir},[]).
+
 start_link(Startopts=#startopts{}) ->
     start_link(Startopts#startopts.dir,Startopts#startopts.linkedin,Startopts#startopts.mountopts);
 
+
 start_link(Dir) ->
-    start_link(Dir,false).
+    start_link(Dir,false). % A true value for linked in "jeopardizes the erlang emulator stability" according to fuserlproc
 
 start_link(Dir,LinkedIn) ->
     start_link(Dir,LinkedIn,"debug").
+%    start_link(Dir,LinkedIn,"").
 
 start_link(MountDir,LinkedIn,MountOpts) ->
-    start_link(MountDir,LinkedIn,MountOpts,_StartOpts=_MirrorDir=MountDir). %TODO: make the last Dir mirror an arbitary directory, infusing its contents into the first Dir.
+    start_link(MountDir,LinkedIn,MountOpts,MountDir). %TODO: make the last Dir mirror an arbitary directory, infusing its contents into the first Dir.
 
-start_link(Dir,LinkedIn,MountOpts,Args) ->
+start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     Options=[],
-    fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,Args,Options).
-
-init(Dir) ->
-    ?DEB2("<init dir=\"~p\"",[Dir]),
-    {InodeList,BiggestIno}=make_inode_list({Dir,1},2),
-    %FlatInodeList=lists:flatten(InodeList),
+    
+    ?DEB2("   using dir=~p~n",MirrorDir),
+    {InodeList,BiggestIno}=make_inode_list({MirrorDir,1},2),
+    ?DEB1("   inode list made"),
     InodeTree=gb_trees:from_orddict(InodeList),
+    ?DEB1("   inode tree made"),
     InodeListRec=#inode_list{inode_entries=InodeTree,biggest=BiggestIno},
+    ?DEB1("   inode list made"),
     State=#state{inode_list=InodeListRec},
-    ?DEB2(" state=\"~p\">",[State]),
+    assert_started(fuserl),
+    ?DEB1("   fuserl started, starting fuserlsrv"),
+    fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
+
+assert_started(Application) ->
+    case find(
+              fun({A,_,_}) when A==Application -> true;
+                 (_) -> false 
+              end,application:loaded_applications())
+       of
+         true -> true;
+         false -> application:start(Application)
+    end.
+
+
+find(_,[]) -> false;
+find(SearchFun,[Item|Items]) ->
+    case SearchFun(Item) of
+        true -> true;
+        _ -> find(SearchFun,Items)
+    end.
+
+
+init({bogus,_Dir}) ->
+    ?DEB1("aoeu"),
+    {ok,bogus};
+
+init(State=#state{}) ->
     {ok, State}.
 
 %% Reads the contents of a dir, putting every file in the dir in my inode list. Recursively.
@@ -110,13 +149,49 @@ make_inode_list({Entry,InitialIno},NextIno) ->
         lists:mapfoldl(
             fun(A,B)->make_inode_list(A,B) end
                 ,NewIno,Children),
-    {lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries]),FinalIno}.
+    {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
         
 
+get_dir_hier(InodeNo,InodeEntries) ->
+    InodeEntry=gb_trees:get(InodeNo,InodeEntries),
+    case InodeEntry#inode_entry.children of
+        [] -> [];
+        Children -> 
+            lists:map(fun({Child,No}) -> {Child,get_dir_hier(No,InodeEntries)} end, Children)
+    end.
 
 
+get_inode_entries(State) ->
+    (State#state.inode_list)#inode_list.inode_entries.
 
+%get_inode_entry(Inode,State) ->
+%    gb_trees:get(Inode,get_inode_entries(State)).
 
+lookup_inode_entry(Inode,State) ->
+    gb_trees:lookup(Inode,get_inode_entries(State)).
+
+%get_biggest_inode_number(State) ->
+%    (State#state.inode_list)#inode_list.biggest.
+
+statify_internal_file_info(#inode_entry{internal_file_info=InternalFileInfo}) ->
+    statify_file_info(InternalFileInfo).
+
+statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+    #stat{st_dev= {MajorDevice,MinorDevice}
+         ,st_ino=Inode
+         ,st_mode=Mode
+         ,st_nlink=Links
+         ,st_uid=UID
+         ,st_gid=GID
+        %,st_rdev
+         ,st_size=Size
+        %,st_blksize
+        %,st_blocks
+         ,st_atime=Atime
+         ,st_mtime=Mtime
+         ,st_ctime=Ctime
+             }.
+           
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     io:format("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
@@ -144,37 +219,58 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
     io:format("~s",["fsyncdir!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-getattr(#fuse_ctx{uid=Uid,gid=Gid,pid=Pid},Inode,_Continuation,State) ->
-    io:format("~s",["<getattr>\n"]),
-    io:format(" <pid=\"~p\"/>\n",[Pid]),
-    {#fuse_reply_attr{
-        attr=#stat {
-            % Seems like I don't have to bother about these, I think.
-%            st_dev = { 32, 453 }, %XXX: Ugly! How to get a good number?
-%            st_rdev = { 32, 455 }, %XXX: See above.
+getattr(_Ctx,_Inode,_Continuation,bogus) ->
+    ?DEB1("getattr(bogus)"),
+    {#fuse_reply_err{err=eacces},bogus};
 
-            st_ino=Inode,
-            st_nlink=2,
-            st_uid=Uid,
-            st_gid=Gid,
-%            st_size=4096,
-%            st_blksize=8,
-%            st_blocks=4096,
-%            st_atime=1234567890,
-%            st_mtime=Pid,
-%            st_ctime=012345678,
-            st_mode=?S_IFDIR bor 8#0755
-                
-        },
-        attr_timeout_ms=0
-        }
-    ,
-    io:format("</getattr>\n"),
-    State}.
-
-
-
+getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
+    ?DEB2("getattr(~p)~n",Inode),
+    spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
+    {noreply,State}.
 %    {#fuse_reply_err{err=eacces},State}.
+%    ?DEB2("~s",["<getattr>\n"]),
+%    ?DEB2(" <inode=\"~p\"/>\n",Inode),
+%    case lookup_inode_entry(Inode,State) of
+%        none ->
+%            {#fuse_reply_err{err=enoent},State};
+%        {value,Entry} ->
+%            
+%            {
+%                #fuse_reply_attr{
+%                    attr=statify_internal_file_info(Entry),
+%                    attr_timeout_ms=5
+%                }, 
+%                State
+%            }
+%    end.
+
+%getattr_internal(_Ctx,Inode,Continuation,State) ->
+
+getattr_internal(Inode,Continuation,State) ->
+    ?DEB2("getattr_internal(~p)~n",Inode),
+
+    case lookup_inode_entry(Inode,State) of
+        none ->
+            ?DEB1("non-existent file"),
+            Reply=#fuse_reply_err{err=enoent};
+        {value,Entry} ->
+            ?DEB1("File exists, converting info"),
+                Reply=#fuse_reply_attr{
+                    attr=statify_internal_file_info(Entry),
+                    attr_timeout_ms=5
+                };
+            A -> 
+                ?DEB2("This should not be happening: ~p~n",A),
+                Reply=#fuse_reply_err{err=enotsup}
+    end,
+                ?DEB1("Sending reply"),
+                fuserlsrv:reply(Continuation,Reply).
+    %fuserlsrv:reply(Continuation,#fuse_reply_err{err=eacces}).
+
+test(Dir,Inode) ->
+    {ok,State}=init(#initargs{dir=Dir}),
+    getattr(#fuse_ctx{},Inode,continuation,State).
+
 
 getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
     io:format("~s",["getlk!\n"]),

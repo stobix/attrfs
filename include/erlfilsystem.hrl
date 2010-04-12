@@ -4,6 +4,9 @@
 
 -include_lib("kernel/include/file.hrl"). %for record file_info
 
+-record(initargs,
+        {dir::string()}).
+
 -type inode_number()::pos_integer()|null.
 -type name_tuple()::{string(),inode_number()}.
 -type name_list()::[name_tuple()].
