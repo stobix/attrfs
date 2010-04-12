@@ -177,19 +177,20 @@ statify_internal_file_info(#inode_entry{internal_file_info=InternalFileInfo}) ->
     statify_file_info(InternalFileInfo).
 
 statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-    #stat{st_dev= {MajorDevice,MinorDevice}
-         ,st_ino=Inode
-         ,st_mode=Mode
+    #stat{
+%        st_dev= {MajorDevice,MinorDevice}
+         st_ino=Inode
+         ,st_mode=?S_IFDIR bor 8#00755 %Mode
          ,st_nlink=Links
          ,st_uid=UID
          ,st_gid=GID
         %,st_rdev
-         ,st_size=Size
+%         ,st_size=Size
         %,st_blksize
         %,st_blocks
-         ,st_atime=Atime
-         ,st_mtime=Mtime
-         ,st_ctime=Ctime
+%         ,st_atime=Atime
+%         ,st_mtime=Mtime
+%         ,st_ctime=Ctime
              }.
            
      
