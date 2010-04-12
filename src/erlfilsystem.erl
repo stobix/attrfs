@@ -125,20 +125,24 @@ init(State=#state{}) ->
 %% Reads the contents of a dir, putting every file in the dir in my inode list. Recursively.
 %% Reads the contents of a dir, recursively, and produces a non-flat list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict after it has been flattened.
 make_inode_list({Entry,InitialIno},NextIno) ->
+    ?DEB1("Making inode list"),
     {ok,FileInfo}=file:read_file_info(Entry),
     {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
         directory ->
-            ?DEB1("directory"),
+            ?DEB2(" directory ~p~n",Entry),
             {ok,Names} = file:list_dir(Entry),
+            ?DEB2("  directory entries:~p~n",Names),
             {NameInodePairs,MyIno}=
+                %make entries of type {{ExternalName,InternalName},Ino}
                 lists:mapfoldl(
-                    fun(Name,Ino) -> {{Entry++"/"++Name,Ino},Ino+1} end, 
+                    fun(Name,Ino) -> {{Name,Ino},Ino+1} end, 
+                    %fun(Name,Ino) -> {Entry++"/"++Name,Ino},Ino+1} end, 
                     NextIno, Names),
             {ok,NameInodePairs,external_dir,MyIno};
         regular ->
             ?DEB1("regular"),
             % TODO: Get attributes for file and set them as children. I think.
-            {ok,[],external_file,NextIno};
+            {ok,[],#external_file{path=Entry},NextIno};
         _ ->
             {error,not_supported} % for now
     end,
@@ -150,7 +154,7 @@ make_inode_list({Entry,InitialIno},NextIno) ->
         ext_info=[]},
     {ChildInodeEntries,FinalIno} = 
         lists:mapfoldl(
-            fun(A,B)->make_inode_list(A,B) end
+            fun({A,AA},B)->make_inode_list({Entry++"/"++A,AA},B) end
                 ,NewIno,Children),
     {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
         
@@ -358,7 +362,7 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                                  }.
 
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEB2("~p","readdir"),
+  ?DEB2("~p~n","readdir"),
   ?DEB2(" inode ~p~n",Inode),
   ?DEB2(" offset(~p)~n",Offset),
   case get_open_file(State,Inode) of 
@@ -382,6 +386,12 @@ readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
         {#fuse_reply_err{err=ebadr},State} % XXX: What should this REALLY return when the file is not open for this user?
   end.
 
+length(List) -> length(List,0).
+
+length([],N) -> N;
+length([H|T],N) -> length(T,N+1).
+
+
 direntries(Inode,InodeList) ->
     ?DEB1("Creating direntries"),
     ?DEB1("Getting entries"),
@@ -389,18 +399,18 @@ direntries(Inode,InodeList) ->
     ?DEB1("Getting children"),
     Children=InodeEntry#inode_entry.children,
     ?DEB1("Converting children"),
-    direntrify(Children).
+    direntrify(Children,InodeList).
 
-direntrify([]) -> 
+direntrify([],_) -> 
     ?DEB1("Done converting children"),
     [];
 
-direntrify([{Name,Inode}|Children]) ->
-    ?DEB2("Getting inode for child ~p~n",Name),
-    Child=gb_sets:get(Inode),
-    ?DEB2("Getting permissions for child ~p~n",Name),
+direntrify([{Name,Inode}|Children],InodeList) ->
+    ?DEB2("Getting inode for child ~p~n",{Name,Inode}),
+    Child=gb_trees:get(Inode,InodeList),
+    ?DEB2("Getting permissions for child ~p~n",{Name,Inode}),
     ChildPerms=(Child#inode_entry.internal_file_info)#file_info.mode,
-    ?DEB2("Creating direntry for child ~p~n",Name),
+    ?DEB2("Creating direntry for child ~p~n",{Name,Inode}),
     Direntry=
         #direntry{name=Name
                   ,stat=#stat{ st_ino=Inode,
@@ -411,7 +421,7 @@ direntrify([{Name,Inode}|Children]) ->
     ?DEB2("Calculatig size for direntry for child ~p~n",Name),
     Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
     ?DEB2("Appending child ~p to list~n",Name),
-    [Direntry1|direntrify(Children)].
+    [Direntry1|direntrify(Children,InodeList)].
                
 
 
