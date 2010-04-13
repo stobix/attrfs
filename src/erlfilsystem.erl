@@ -203,7 +203,8 @@ set_open_file(State,Inode,FileContents) ->
 statify_internal_file_info(#inode_entry{internal_file_info=InternalFileInfo}) ->
     statify_file_info(InternalFileInfo).
 
-statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+%TODO: Find out what info it is I cannot provid here lest fuserl hangs.
+statify_file_info(#file_info{size=_Size,type=_Type,atime=_Atime,ctime=_Ctime,mtime=_Mtime,access=_Access,mode=_Mode,links=Links,major_device=_MajorDevice,minor_device=_MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
     #stat{
 %        st_dev= {MajorDevice,MinorDevice}
          st_ino=Inode
@@ -222,17 +223,17 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
            
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
-    io:format("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
+    ?DEBL("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
     % So, if I've gotten this right, I've got an inode to look up rights for, a context in Ctx which tells me who wanted to know their rights to the file, a mask, which does SOMETHING - maybe this is what is used on file systems who has no rights normally? - a Continuation, which is a magical item which somehow is used to make asyncronuous calls - more on this when I find a documentation for the record - and finally the state, which, afaik, I will NOT be changing by checking access to files.
     % First, lets try to just create an "access denied" version of this thing.
     {#fuse_reply_err{err=ebadr},State}. % like this?
 
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
-    io:format("~s",["create!\n"]),
+    ?DEBL("~s",["create!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["flush!\n"]),
+    ?DEBL("~s",["flush!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 forget(_Ctx,_Inode,_Nlookup,_Continuation,State) ->
@@ -240,11 +241,11 @@ forget(_Ctx,_Inode,_Nlookup,_Continuation,State) ->
     {#fuse_reply_none{},State}.
 
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["fsync!\n"]),
+    ?DEBL("~s",["fsync!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["fsyncdir!\n"]),
+    ?DEBL("~s",["fsyncdir!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 getattr(_Ctx,_Inode,_Continuation,bogus) ->
@@ -284,19 +285,20 @@ test(Dir,Inode) ->
 
 
 getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
-    io:format("~s",["getlk!\n"]),
+    ?DEBL("~s",["getlk!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%% TODO: Maybe this will be how one can view which attributes a file is sorted under?
 getxattr(_Ctx,_Inode,_Name,_Size,_Continuation,State) ->
-    io:format("~s",["getxattr!\n"]),
+    ?DEBL("~s",["getxattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
-    io:format("~s",["link!\n"]),
+    ?DEBL("~s",["link!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 listxattr(_Ctx,_Inode,_Size,_Continuation,State) ->
-    io:format("~s",["listxattr!\n"]),
+    ?DEBL("~s",["listxattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
@@ -306,7 +308,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
         {value,Children} ->
             ?DEB2("   Got children for ~p~n",ParentInode),
             case find_child(Child,Children) of
-                {value,{Name,Inode}} ->
+                {value,{_Name,Inode}} ->
                     ?DEB2("   Found child ~p~n",Child),
                     {value,Entry} = lookup_inode_entry(Inode,State),
                     ?DEB1("   Got child inode entry"),
@@ -335,15 +337,15 @@ find_child(Name,[Child={ChildName,_Inode}|Children]) ->
 
 
 mkdir(_Ctx,_ParentInode,_Name,_Mode,_Continuation,State) ->
-    io:format("~s",["mkdir!\n"]),
+    ?DEBL("~s",["mkdir!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
-    io:format("~s",["mknod!\n"]),
+    ?DEBL("~s",["mknod!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["open!\n"]),
+    ?DEBL("~s",["open!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io=DirectIO,keep_cache=KeepCache,flush=_,fh=Fh,lock_owner=_},_Continuation,State) ->
@@ -355,7 +357,7 @@ opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io
     ?DEB2("   FileHandle ~p~n",Fh),
     ?DEB2("  Getting inode entries for ~p ~n",Inode),
     Entries=get_inode_entries(State),
-    ?DEB1("  Creating directory entries from inode endtries"),
+    ?DEB1("  Creating directory entries from inode entries"),
     % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
     NewState=set_open_file(State,Inode,direntries(Inode,Entries)),
     {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
@@ -364,7 +366,7 @@ opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io
 
 
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["read!\n"]),
+    ?DEBL("~s",["read!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 %these two I stole from fuserlproc. Maybe they'll come in handy.
@@ -379,7 +381,7 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                                  }.
 
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEB2("~p~n","readdir"),
+  ?DEBL("~s inode:~p offset:~p~n",["readdir",Inode,Offset]),
   ?DEB2(" inode ~p~n",Inode),
   ?DEB2(" offset(~p)~n",Offset),
   case get_open_file(State,Inode) of 
@@ -458,70 +460,70 @@ take_while (F, Acc, [ H | T ]) ->
     %{#fuse_reply_err{err=enotsup},State}.
 
 readlink(_Ctx,_Inode,_Continuation,State) ->
-    io:format("~s",["readlink!\n"]),
+    ?DEBL("~s",["readlink!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["release!\n"]),
+    ?DEBL("~s",["release!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["releasedir!\n"]),
+    ?DEBL("~s",["releasedir!\n"]),
     % TODO: Release dir info from open files here. Make sure no other process tries to get to the same info etc.
     {#fuse_reply_err{err=ok},State}.
 
 removexattr(_Ctx,_Inode,_Name,_Continuation,State) ->
-    io:format("~s",["removexattr!\n"]),
+    ?DEBL("~s",["removexattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
-    io:format("~s",["rename!\n"]),
+    ?DEBL("~s",["rename!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
-    io:format("~s",["rmdir!\n"]),
+    ?DEBL("~s",["rmdir!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 setattr(_Ctx,_Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["setattr!\n"]),
+    ?DEBL("~s",["setattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
-    io:format("~s",["setlk!\n"]),
+    ?DEBL("~s",["setlk!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 setxattr(_Ctx,_Inode,_Name,_Value,_Flags,_Continuation,State) ->
-    io:format("~s",["setxattr!\n"]),
+    ?DEBL("~s",["setxattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 statfs(_Ctx,_Inode,_Continuation,State) ->
-    io:format("~s",["statfs!\n"]),
+    ?DEBL("~s",["statfs!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
-    io:format("~s",["symlink!\n"]),
+    ?DEBL("~s",["symlink!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 terminate(_Reason,_State) ->
-    io:format("~s ~p\n",["terminate!",_Reason]),
+    ?DEBL("~s ~p\n",["terminate!",_Reason]),
     exit(3).
 
 unlink(_Ctx,_Inode,_Name,_Cont,State) ->
-    io:format("~s\n",["unlink!"]),
+    ?DEBL("~s\n",["unlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    io:format("~s",["write!"]),
+    ?DEBL("~s",["write!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
     
 
 handle_info(_Msg,State) ->
-    io:format("~s",["handle_info!"]),
+    ?DEBL("~s",["handle_info!"]),
     {noreply,State}.
 
 code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
-    io:format("~s",["code_change!"]),
+    ?DEBL("~s",["code_change!"]),
     ok.
 
 
