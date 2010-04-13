@@ -177,6 +177,12 @@ get_inode_entries(State) ->
 lookup_inode_entry(Inode,State) ->
     gb_trees:lookup(Inode,get_inode_entries(State)).
 
+lookup_children(Inode,State) ->
+    case lookup_inode_entry(Inode,State) of
+        {value, Entry} -> {value,Entry#inode_entry.children};
+        none -> none
+    end.
+
 get_open_files(State) ->
     State#state.open_files.
 
@@ -230,7 +236,7 @@ flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 forget(_Ctx,_Inode,_Nlookup,_Continuation,State) ->
-    io:format("~s",["forget!\n"]),
+    ?DEB2("forget ~p~n",_Inode),
     {#fuse_reply_none{},State}.
 
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
@@ -249,22 +255,6 @@ getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
     ?DEB2("getattr(~p)~n",Inode),
     spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
     {noreply,State}.
-%    {#fuse_reply_err{err=eacces},State}.
-%    ?DEB2("~s",["<getattr>\n"]),
-%    ?DEB2(" <inode=\"~p\"/>\n",Inode),
-%    case lookup_inode_entry(Inode,State) of
-%        none ->
-%            {#fuse_reply_err{err=enoent},State};
-%        {value,Entry} ->
-%            
-%            {
-%                #fuse_reply_attr{
-%                    attr=statify_internal_file_info(Entry),
-%                    attr_timeout_ms=5
-%                }, 
-%                State
-%            }
-%    end.
 
 %getattr_internal(_Ctx,Inode,Continuation,State) ->
 
@@ -285,9 +275,8 @@ getattr_internal(Inode,Continuation,State) ->
                 ?DEB2("This should not be happening: ~p~n",A),
                 Reply=#fuse_reply_err{err=enotsup}
     end,
-                ?DEB1("Sending reply"),
-                fuserlsrv:reply(Continuation,Reply).
-    %fuserlsrv:reply(Continuation,#fuse_reply_err{err=eacces}).
+    ?DEB1("Sending reply"),
+    fuserlsrv:reply(Continuation,Reply).
 
 test(Dir,Inode) ->
     {ok,State}=init(#initargs{dir=Dir}),
@@ -310,9 +299,40 @@ listxattr(_Ctx,_Inode,_Size,_Continuation,State) ->
     io:format("~s",["listxattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-lookup(_Ctx,_ParentInode,_Name,_Continuation,State) ->
-    io:format("~s Parent: ~p Name: ~p\n",["lookup!",_ParentInode,_Name]),
-    {#fuse_reply_err{err=enoent},State}. %empty file system, bitch!
+lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
+    Child=binary_to_list(BinaryChild),
+    ?DEBL("~s Parent: ~p Name: ~p\n",["lookup!",ParentInode,Child]),
+    case lookup_children(ParentInode,State) of
+        {value,Children} ->
+            ?DEB2("   Got children for ~p~n",ParentInode),
+            case find_child(Child,Children) of
+                {value,{Name,Inode}} ->
+                    ?DEB2("   Found child ~p~n",Child),
+                    {value,Entry} = lookup_inode_entry(Inode,State),
+                    ?DEB1("   Got child inode entry"),
+                    Stat=statify_internal_file_info(Entry),
+                    ?DEB1("   Made a stat of the inode entry, returning"),
+                    Param=#fuse_entry_param{
+                        ino=Inode,
+                        generation=1, %for now.
+                        attr=Stat,
+                        attr_timeout_ms=1000,
+                        entry_timeout_ms=1000
+                            },
+                    {#fuse_reply_entry{fuse_entry_param=Param},State};
+                none ->{#fuse_reply_err{err=enoent},State} % child nonexistent.
+            end;
+        none -> {#fuse_reply_err{err=enoent},State} %no parent
+    end.
+
+find_child(_,[]) -> false;
+
+find_child(Name,[Child={ChildName,_Inode}|Children]) ->
+    case Name == ChildName of
+        true -> {value,Child};
+        false -> find_child(Name,Children)
+    end.
+
 
 mkdir(_Ctx,_ParentInode,_Name,_Mode,_Continuation,State) ->
     io:format("~s",["mkdir!\n"]),
@@ -347,13 +367,10 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
     io:format("~s",["read!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%these two I stole from fuserlproc. Maybe they'll come in handy.
 -define (DIRATTR (X), #stat{ st_ino = (X), 
                              st_mode = ?S_IFDIR bor 8#0555, 
                              st_nlink = 1 }).
-
-%-define (DIRATTR (X), #stat{ st_ino = (X), 
-%                             st_mode = ?S_IFDIR bor 8#0555, 
-%                             st_nlink = 1 }).
 
 
 -define(STAT (X,Y,Z), #stat{ st_ino = (X),
@@ -368,30 +385,30 @@ readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
   case get_open_file(State,Inode) of 
     {value, OpenFile} ->
         DirEntryList = 
-        take_while 
-          (fun (E, { Total, Max }) -> 
-             Cur = fuserlsrv:dirent_size (E),
-             if 
-               Total + Cur =< Max ->
-                 { continue, { Total + Cur, Max } };
-               true ->
-                 stop
-             end
-           end,
-           { 0, Size },
-           lists:nthtail(Offset,OpenFile) 
-          ),
+        case Offset<length(OpenFile) of
+            true ->
+                take_while 
+                  (fun (E, { Total, Max }) -> 
+                     Cur = fuserlsrv:dirent_size (E),
+                     if 
+                       Total + Cur =< Max ->
+                         { continue, { Total + Cur, Max } };
+                       true ->
+                         stop
+                     end
+                   end,
+                   { 0, Size },
+                   lists:nthtail(Offset,OpenFile) 
+                  );
+            false ->
+                []
+         end,
           { #fuse_reply_direntrylist{ direntrylist = DirEntryList }, State };
     none ->
         {#fuse_reply_err{err=ebadr},State} % XXX: What should this REALLY return when the file is not open for this user?
   end.
 
-length(List) -> length(List,0).
-
-length([],N) -> N;
-length([H|T],N) -> length(T,N+1).
-
-
+%% TODO: rebuild this with lookup_children?
 direntries(Inode,InodeList) ->
     ?DEB1("Creating direntries"),
     ?DEB1("Getting entries"),
@@ -450,6 +467,7 @@ release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 
 releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     io:format("~s",["releasedir!\n"]),
+    % TODO: Release dir info from open files here. Make sure no other process tries to get to the same info etc.
     {#fuse_reply_err{err=ok},State}.
 
 removexattr(_Ctx,_Inode,_Name,_Continuation,State) ->
