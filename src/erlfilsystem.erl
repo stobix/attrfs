@@ -79,7 +79,9 @@ start_link(MountDir,LinkedIn,MountOpts) ->
 start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     Options=[],
     
-    ?DEB2("   using dir=~p~n",MirrorDir),
+    ?DEBL("   opening attribute database file ~p as ~p~n", [?ATTR_DB_FILE, ?ATTR_DB]),
+    {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
+    ?DEB2("   mirroring dir ~p~n",MirrorDir),
     {InodeList,BiggestIno}=make_inode_list({MirrorDir,1},2),
     ?DEB1("   inode list made"),
     InodeTree=gb_trees:from_orddict(InodeList),
@@ -93,11 +95,11 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
 
 assert_started(Application) ->
     case find(
-              fun({A,_,_}) when A==Application -> true;
+              fun({A,_,_}) when A==Application -> {true,A};
                  (_) -> false 
               end,application:loaded_applications())
        of
-         true -> true;
+         {true,_} -> true;
          false -> application:start(Application)
     end.
 
@@ -105,7 +107,7 @@ assert_started(Application) ->
 find(_,[]) -> false;
 find(SearchFun,[Item|Items]) ->
     case SearchFun(Item) of
-        true -> true;
+        {true,Value} -> {true,Value};
         _ -> find(SearchFun,Items)
     end.
 
@@ -129,24 +131,30 @@ make_inode_list({Entry,InitialIno},NextIno) ->
                     fun(Name,Ino) -> {{Name,Ino},Ino+1} end, 
                     %fun(Name,Ino) -> {Entry++"/"++Name,Ino},Ino+1} end, 
                     NextIno, Names),
-            {ok,NameInodePairs,external_dir,MyIno};
+            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Entry},MyIno};
         regular ->
-            ?DEB1("regular"),
+            ?DEB1(" regular"),
             % TODO: Get attributes for file and set them as children. I think.
-            {ok,[],#external_file{path=Entry},NextIno};
-        _ ->
+            {ok,[],#external_file{external_file_info=FileInfo,path=Entry},NextIno};
+                _ ->
             {error,not_supported} % for now
     end,
-    InodeEntry=#inode_entry{
-        children=Children,
-        type=Type,
-        external_file_info=FileInfo,
-        internal_file_info=FileInfo#file_info{inode=InitialIno},
-        ext_info=[]},
+    ExtInfo=generate_ext_info(Entry),
+    ?DEB2("  ext info: ~p~n", ExtInfo),
+        ?DEB1("ext_info_to_ext_io"),
+    ExtIo=ext_info_to_ext_io(ExtInfo),
+    ?DEB1("Generating entry"),
+    InodeEntry=#inode_entry{ 
+             children=Children
+            ,type=Type
+            ,internal_file_info=FileInfo#file_info{inode=InitialIno}
+            ,ext_info=ExtInfo
+            ,ext_io=ExtIo},
     {ChildInodeEntries,FinalIno} = 
         lists:mapfoldl(
             fun({A,AA},B)->make_inode_list({Entry++"/"++A,AA},B) end
                 ,NewIno,Children),
+    % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
     {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
         
 
@@ -161,9 +169,6 @@ get_dir_hier(InodeNo,InodeEntries) ->
 
 get_inode_entries(State) ->
     (State#state.inode_list)#inode_list.inode_entries.
-
-%get_inode_entry(Inode,State) ->
-%    gb_trees:get(Inode,get_inode_entries(State)).
 
 lookup_inode_entry(Inode,State) ->
     gb_trees:lookup(Inode,get_inode_entries(State)).
@@ -276,6 +281,7 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 %% TODO: Maybe this will be how one can view which attributes a file is sorted under?
+%% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 getxattr(_Ctx,_Inode,_Name,_Size,_Continuation,State) ->
     ?DEBL("~s",["getxattr!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
@@ -284,9 +290,26 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
     ?DEBL("~s",["link!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-listxattr(_Ctx,_Inode,_Size,_Continuation,State) ->
-    ?DEBL("~s",["listxattr!\n"]),
-    {#fuse_reply_err{err=enotsup},State}.
+%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
+listxattr(_Ctx,Inode,Size,_Continuation,State) ->
+    ?DEB2("listxattr(~p)~n",Inode),
+    {value,Entry}=lookup_inode_entry(Inode,State),
+    ?DEB1("   got inode number."),
+    {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
+    ?DEB1("   got attribute and size"),
+    Reply=case Size == 0 of 
+        true -> ?DEB1("   they want to know our size."),#fuse_reply_xattr{count=ExtSize};
+        false -> 
+            case Size < ExtSize of
+                true -> ?DEBL("   they are using a too small buffer; ~p < ~p ~n",[Size,ExtSize]),#fuse_reply_err{err=erange};
+                false -> ?DEB1("   all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
+            end
+    end,
+    {Reply,State}.
+
+
+
+
     
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
@@ -477,9 +500,67 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
     ?DEBL("~s",["setlk!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-setxattr(_Ctx,_Inode,_Name,_Value,_Flags,_Continuation,State) ->
-    ?DEBL("~s",["setxattr!\n"]),
-    {#fuse_reply_err{err=enotsup},State}.
+%% Set file attributes. #fuse_reply_err{err = ok} indicates success. Flags is a bitmask consisting of ?XATTR_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setxattr_async_reply ().
+
+setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
+    ?DEBL("setxattr inode:~p name:~p value:~p flags: ~p~n",[Inode,BName,BValue,_Flags]),
+    ?DEB1("   getting inode entry"),
+    {value,Entry} = lookup_inode_entry(Inode,State),
+    ?DEB1("   transforming input data"),
+    Name=binary_to_list(BName),
+    Value=binary_to_list(BValue),
+    case Entry#inode_entry.type of
+        #external_file{path=Path} ->
+            ?DEBL("   adding attribute {~p,~p} for file ~p to database~n",[Name,Value,Path]),
+            add_new_attribute(Path,{Name,Value}),
+            ?DEB1("   generating ext io and info"),
+            NewExtIo=generate_ext_io(Path),
+            NewExtInfo=generate_ext_info(Path),
+            ?DEB1("   creating new inode entry"),
+            NewEntry=Entry#inode_entry{ext_io=NewExtIo,ext_info=NewExtInfo},
+            Entries=get_inode_entries(State),
+            NewEntries=gb_trees:enter(Inode,NewEntry,Entries),
+            InodeList=State#state.inode_list,
+            NewInodeList=InodeList#inode_list{inode_entries=NewEntries},
+            NewState=State#state{inode_list=NewInodeList},
+            {#fuse_reply_err{err=ok},NewState};
+        _ ->
+            ?DEB1("   entry not an external file, skipping..."),
+            {#fuse_reply_err{err=enotsup},State}
+    end.
+
+
+%% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
+add_new_attribute(Path,{Name,Value}) ->
+    dets:insert(?ATTR_DB,{Path,{Name,Value}}).
+
+
+generate_ext_info(Path) ->
+    ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
+    lists:flatten(ExtInfo0). % Going from a list of lists of tuples to a list of tuples.
+
+generate_ext_io(Path) ->
+    ExtInfo=generate_ext_info(Path),
+    ext_info_to_ext_io(ExtInfo).
+
+ext_info_to_ext_io(InternalExtInfoTupleList) ->
+    ?DEB1(">ext_info_to_ext_io"),
+    ext_info_to_ext_io(InternalExtInfoTupleList,{0,[]}).
+
+
+ext_info_to_ext_io([],{A,B}) -> {A+1,B++"\0"};
+ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],{N,String}) ->
+    ?DEB1("   Adding zero to end of name"),
+    Name0=Name++"\0",
+    ?DEB1("   Appending name to namelist"),
+    NewName=String++Name,
+    ?DEB1("   Updating size"),
+    NewN=N+length(Name0),
+    ?DEB1("   Recursion"),
+    ext_info_to_ext_io(InternalExtInfoTupleList,{NewN,NewName}).
+
+
+
 
 statfs(_Ctx,_Inode,_Continuation,State) ->
     ?DEBL("~s",["statfs!\n"]),
@@ -491,6 +572,8 @@ symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
 
 terminate(_Reason,_State) ->
     ?DEBL("~s ~p\n",["terminate!",_Reason]),
+    ?DEB2("Closing database ~p~n",?ATTR_DB),
+    dets:close(?ATTR_DB),
     exit(3).
 
 unlink(_Ctx,_Inode,_Name,_Cont,State) ->
@@ -498,13 +581,13 @@ unlink(_Ctx,_Inode,_Name,_Cont,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["write!"]),
+    ?DEBL("~s~n",["write!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
     
 
 handle_info(_Msg,State) ->
-    ?DEBL("~s",["handle_info!"]),
+    ?DEBL(">handle_info(~p)",[_Msg]),
     {noreply,State}.
 
 code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?

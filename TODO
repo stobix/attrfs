@@ -3,9 +3,11 @@ Make the main app sort files into attribute folders.
 Implement xattr to see and set the attributes of a file.
 Make it possible to copy files between folders. (Which will mostly be the same ass changing attributes for files.)
     Copy or only link?
-Learn how to use Mnesia.
-Create Mnesia database app for file attributes.
-Intregrate Mnesia app into main app.
+I'll wait with Mnesia until (if ever) I make this thing distributed.
+%Learn how to use Mnesia.
+%Create Mnesia database app for file attributes.
+%Intregrate Mnesia app into main app.
+Use dets instead of Mnesia for the above three points?
 Make a real app of the main app.
 
 
