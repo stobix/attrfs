@@ -5,4 +5,5 @@
 -else.
 -define(DEB1(X),void).
 -define(DEB2(X,Y),void).
+-define(DEBL(X,Y),void).
 -endif.

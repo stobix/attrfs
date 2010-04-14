@@ -43,7 +43,6 @@
 -export([get_dir_hier/2]).
 
 -export([test/2]).
--export([bogus_start/1]).
 
 -behaviour(fuserl).
 
@@ -59,10 +58,6 @@
     linkedin=false,
     mountopts,%="",
     dir}).
-
-bogus_start(Dir) ->
-    assert_started(fuserl),
-    fuserlsrv:start_link(?MODULE,false,"debug",Dir,{bogus,Dir},[]).
 
 start_link(Startopts=#startopts{}) ->
     start_link(Startopts#startopts.dir,Startopts#startopts.linkedin,Startopts#startopts.mountopts);
@@ -114,10 +109,6 @@ find(SearchFun,[Item|Items]) ->
         _ -> find(SearchFun,Items)
     end.
 
-
-init({bogus,_Dir}) ->
-    ?DEB1("aoeu"),
-    {ok,bogus};
 
 init(State=#state{}) ->
     {ok, State}.
@@ -237,7 +228,7 @@ flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 forget(_Ctx,_Inode,_Nlookup,_Continuation,State) ->
-    ?DEB2("forget ~p~n",_Inode),
+    ?DEB2(">forget ~p~n",_Inode),
     {#fuse_reply_none{},State}.
 
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
@@ -248,12 +239,8 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["fsyncdir!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-getattr(_Ctx,_Inode,_Continuation,bogus) ->
-    ?DEB1("getattr(bogus)"),
-    {#fuse_reply_err{err=eacces},bogus};
-
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
-    ?DEB2("getattr(~p)~n",Inode),
+    ?DEB2(">getattr(~p)~n",Inode),
     spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
     {noreply,State}.
 
@@ -272,8 +259,8 @@ getattr_internal(Inode,Continuation,State) ->
                     attr=statify_internal_file_info(Entry),
                     attr_timeout_ms=5
                 };
-            A -> 
-                ?DEB2("This should not be happening: ~p~n",A),
+            _A -> 
+                ?DEB2("This should not be happening: ~p~n",_A),
                 Reply=#fuse_reply_err{err=enotsup}
     end,
     ?DEB1("Sending reply"),
@@ -303,7 +290,7 @@ listxattr(_Ctx,_Inode,_Size,_Continuation,State) ->
     
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
-    ?DEBL("~s Parent: ~p Name: ~p\n",["lookup!",ParentInode,Child]),
+    ?DEBL(">~s Parent: ~p Name: ~p\n",["lookup!",ParentInode,Child]),
     case lookup_children(ParentInode,State) of
         {value,Children} ->
             ?DEB2("   Got children for ~p~n",ParentInode),
@@ -348,13 +335,13 @@ open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["open!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=Flags,writepage=Writepage,direct_io=DirectIO,keep_cache=KeepCache,flush=_,fh=Fh,lock_owner=_},_Continuation,State) ->
-    ?DEB1("opendir"),
-    ?DEB2("   flags ~p~n",Flags),
-    ?DEB2("   writepage ~p~n",Writepage),
-    ?DEB2("   DirectIO ~p~n",DirectIO),
-    ?DEB2("   KeepCache ~p~n",KeepCache),
-    ?DEB2("   FileHandle ~p~n",Fh),
+opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
+    ?DEB1(">opendir"),
+    ?DEB2("   flags ~p~n",_Flags),
+    ?DEB2("   writepage ~p~n",_Writepage),
+    ?DEB2("   DirectIO ~p~n",_DirectIO),
+    ?DEB2("   KeepCache ~p~n",_KeepCache),
+    ?DEB2("   FileHandle ~p~n",_Fh),
     ?DEB2("  Getting inode entries for ~p ~n",Inode),
     Entries=get_inode_entries(State),
     ?DEB1("  Creating directory entries from inode entries"),
@@ -381,9 +368,7 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                                  }.
 
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEBL("~s inode:~p offset:~p~n",["readdir",Inode,Offset]),
-  ?DEB2(" inode ~p~n",Inode),
-  ?DEB2(" offset(~p)~n",Offset),
+  ?DEBL(">~s inode:~p offset:~p~n",["readdir",Inode,Offset]),
   case get_open_file(State,Inode) of 
     {value, OpenFile} ->
         DirEntryList = 
@@ -437,9 +422,9 @@ direntrify([{Name,Inode}|Children],InodeList) ->
                                st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
                               }
                     },
-    ?DEB2("Calculatig size for direntry for child ~p~n",Name),
+    ?DEB2("Calculatig size for direntry for child ~p~n",{Name,Inode}),
     Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-    ?DEB2("Appending child ~p to list~n",Name),
+    ?DEB2("Appending child ~p to list~n",{Name,Inode}),
     [Direntry1|direntrify(Children,InodeList)].
                
 
@@ -468,7 +453,7 @@ release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["releasedir!\n"]),
+    ?DEBL(">~s~n",["releasedir"]),
     % TODO: Release dir info from open files here. Make sure no other process tries to get to the same info etc.
     {#fuse_reply_err{err=ok},State}.
 
