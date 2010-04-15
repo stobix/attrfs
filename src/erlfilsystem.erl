@@ -79,9 +79,9 @@ start_link(MountDir,LinkedIn,MountOpts) ->
 start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     Options=[],
     
-    ?DEBL("   opening attribute database file ~p as ~p~n", [?ATTR_DB_FILE, ?ATTR_DB]),
+    ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
-    ?DEB2("   mirroring dir ~p~n",MirrorDir),
+    ?DEB2("   mirroring dir ~p",MirrorDir),
     {InodeList,BiggestIno}=make_inode_list({MirrorDir,1},2),
     ?DEB1("   inode list made"),
     InodeTree=gb_trees:from_orddict(InodeList),
@@ -122,9 +122,9 @@ make_inode_list({Entry,InitialIno},NextIno) ->
     {ok,FileInfo}=file:read_file_info(Entry),
     {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
         directory ->
-            ?DEB2(" directory ~p~n",Entry),
+            ?DEB2(" directory ~p",Entry),
             {ok,Names} = file:list_dir(Entry),
-            ?DEB2("  directory entries:~p~n",Names),
+            ?DEB2("  directory entries:~p",Names),
             {NameInodePairs,MyIno}=
                 %make entries of type {{ExternalName,InternalName},Ino}
                 lists:mapfoldl(
@@ -140,8 +140,7 @@ make_inode_list({Entry,InitialIno},NextIno) ->
             {error,not_supported} % for now
     end,
     ExtInfo=generate_ext_info(Entry),
-    ?DEB2("  ext info: ~p~n", ExtInfo),
-        ?DEB1("ext_info_to_ext_io"),
+    ?DEB2("  ext info: ~p", ExtInfo),
     ExtIo=ext_info_to_ext_io(ExtInfo),
     ?DEB1("Generating entry"),
     InodeEntry=#inode_entry{ 
@@ -219,40 +218,40 @@ statify_file_info(#file_info{size=_Size,type=_Type,atime=_Atime,ctime=_Ctime,mti
            
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
-    ?DEBL("~s I: ~p M: ~p\n",["access!",_Inode,_Mask]),
+    ?DEBL("~s I: ~p M: ~p",["access!",_Inode,_Mask]),
     % So, if I've gotten this right, I've got an inode to look up rights for, a context in Ctx which tells me who wanted to know their rights to the file, a mask, which does SOMETHING - maybe this is what is used on file systems who has no rights normally? - a Continuation, which is a magical item which somehow is used to make asyncronuous calls - more on this when I find a documentation for the record - and finally the state, which, afaik, I will NOT be changing by checking access to files.
     % First, lets try to just create an "access denied" version of this thing.
     {#fuse_reply_err{err=ebadr},State}. % like this?
 
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
-    ?DEBL("~s",["create!\n"]),
+    ?DEBL("~s",["create!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["flush!\n"]),
+    ?DEBL("~s",["flush!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 forget(_Ctx,_Inode,_Nlookup,_Continuation,State) ->
-    ?DEB2(">forget ~p~n",_Inode),
+    ?DEB2(">forget ~p",_Inode),
     {#fuse_reply_none{},State}.
 
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["fsync!\n"]),
+    ?DEBL("~s",["fsync!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["fsyncdir!\n"]),
+    ?DEBL("~s",["fsyncdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
-    ?DEB2(">getattr(~p)~n",Inode),
+    ?DEB2(">getattr(~p)",Inode),
     spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
     {noreply,State}.
 
 %getattr_internal(_Ctx,Inode,Continuation,State) ->
 
 getattr_internal(Inode,Continuation,State) ->
-    ?DEB2("getattr_internal(~p)~n",Inode),
+    ?DEB2("getattr_internal(~p)",Inode),
 
     case lookup_inode_entry(Inode,State) of
         none ->
@@ -265,7 +264,7 @@ getattr_internal(Inode,Continuation,State) ->
                     attr_timeout_ms=5
                 };
             _A -> 
-                ?DEB2("This should not be happening: ~p~n",_A),
+                ?DEB2("This should not be happening: ~p",_A),
                 Reply=#fuse_reply_err{err=enotsup}
     end,
     ?DEB1("Sending reply"),
@@ -280,28 +279,46 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
     ?DEBL("~s",["getlk!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-%% TODO: Maybe this will be how one can view which attributes a file is sorted under?
+%% TODO: Handle the case where the OS wants some strange value which isn't implemented, say the value for system.posix_acl_access
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
-getxattr(_Ctx,_Inode,_Name,_Size,_Continuation,State) ->
-    ?DEBL("~s",["getxattr!\n"]),
-    {#fuse_reply_err{err=enotsup},State}.
-    
-link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
-    ?DEBL("~s",["link!\n"]),
-    {#fuse_reply_err{err=enotsup},State}.
-    
-%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
-listxattr(_Ctx,Inode,Size,_Continuation,State) ->
-    ?DEB2("listxattr(~p)~n",Inode),
+getxattr(_Ctx,Inode,Name,Size,_Continuation,State) ->
+    ?DEBL(">getxattr, name:~p, size:~p, inode:~p)",[Name,Size,Inode]),
     {value,Entry}=lookup_inode_entry(Inode,State),
-    ?DEB1("   got inode number."),
-    {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
-    ?DEB1("   got attribute and size"),
+    ?DEB1("   got inode entry."),
+    ExtInfo=Entry#inode_entry.ext_info,
+    ?DEB1("   got extinfo."),
+    {value,ExtInfoValue}=lookup_tuple(binary_to_list(Name),ExtInfo),
+    ?DEB1("   got attribute value"),
+    ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
+    ExtSize=length(ExtAttrib),
+    ?DEBL("   converted attribute and got (~p,~p)",[ExtAttrib,ExtSize]),
     Reply=case Size == 0 of 
         true -> ?DEB1("   they want to know our size."),#fuse_reply_xattr{count=ExtSize};
         false -> 
             case Size < ExtSize of
-                true -> ?DEBL("   they are using a too small buffer; ~p < ~p ~n",[Size,ExtSize]),#fuse_reply_err{err=erange};
+                true -> ?DEBL("   they are using a too small buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
+                false -> ?DEB1("   all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
+            end
+    end,
+    {Reply,State}.
+    
+    
+link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
+    ?DEBL("~s",["link!"]),
+    {#fuse_reply_err{err=enotsup},State}.
+    
+%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
+listxattr(_Ctx,Inode,Size,_Continuation,State) ->
+    ?DEB2("listxattr(~p)",Inode),
+    {value,Entry}=lookup_inode_entry(Inode,State),
+    ?DEB1("   got inode entry."),
+    {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
+    ?DEBL("   got attributes and size (~p,~p)",[ExtAttribs,ExtSize]),
+    Reply=case Size == 0 of 
+        true -> ?DEB1("   they want to know our size."),#fuse_reply_xattr{count=ExtSize};
+        false -> 
+            case Size < ExtSize of
+                true -> ?DEBL("   they are using a too small buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
                 false -> ?DEB1("   all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
             end
     end,
@@ -313,13 +330,13 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
-    ?DEBL(">~s Parent: ~p Name: ~p\n",["lookup!",ParentInode,Child]),
+    ?DEBL(">~s Parent: ~p Name: ~p",["lookup!",ParentInode,Child]),
     case lookup_children(ParentInode,State) of
         {value,Children} ->
-            ?DEB2("   Got children for ~p~n",ParentInode),
-            case find_child(Child,Children) of
-                {value,{_Name,Inode}} ->
-                    ?DEB2("   Found child ~p~n",Child),
+            ?DEB2("   Got children for ~p",ParentInode),
+            case lookup_tuple(Child,Children) of
+                {value,Inode} ->
+                    ?DEB2("   Found child ~p",Child),
                     {value,Entry} = lookup_inode_entry(Inode,State),
                     ?DEB1("   Got child inode entry"),
                     Stat=statify_internal_file_info(Entry),
@@ -337,35 +354,35 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
         none -> {#fuse_reply_err{err=enoent},State} %no parent
     end.
 
-find_child(_,[]) -> false;
+lookup_tuple(_,[]) -> false;
 
-find_child(Name,[Child={ChildName,_Inode}|Children]) ->
+lookup_tuple(Name,[{ChildName,Inode}|Children]) ->
     case Name == ChildName of
-        true -> {value,Child};
-        false -> find_child(Name,Children)
+        true -> {value,Inode};
+        false -> lookup_tuple(Name,Children)
     end.
 
 
 mkdir(_Ctx,_ParentInode,_Name,_Mode,_Continuation,State) ->
-    ?DEBL("~s",["mkdir!\n"]),
+    ?DEBL("~s",["mkdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
-    ?DEBL("~s",["mknod!\n"]),
+    ?DEBL("~s",["mknod!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["open!\n"]),
+    ?DEBL("~s",["open!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
     ?DEB1(">opendir"),
-    ?DEB2("   flags ~p~n",_Flags),
-    ?DEB2("   writepage ~p~n",_Writepage),
-    ?DEB2("   DirectIO ~p~n",_DirectIO),
-    ?DEB2("   KeepCache ~p~n",_KeepCache),
-    ?DEB2("   FileHandle ~p~n",_Fh),
-    ?DEB2("  Getting inode entries for ~p ~n",Inode),
+    ?DEB2("   flags ~p",_Flags),
+    ?DEB2("   writepage ~p",_Writepage),
+    ?DEB2("   DirectIO ~p",_DirectIO),
+    ?DEB2("   KeepCache ~p",_KeepCache),
+    ?DEB2("   FileHandle ~p",_Fh),
+    ?DEB2("  Getting inode entries for ~p",Inode),
     Entries=get_inode_entries(State),
     ?DEB1("  Creating directory entries from inode entries"),
     % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
@@ -376,7 +393,7 @@ opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_
 
 
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["read!\n"]),
+    ?DEBL("~s",["read!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 %these two I stole from fuserlproc. Maybe they'll come in handy.
@@ -391,7 +408,7 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                                  }.
 
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEBL(">~s inode:~p offset:~p~n",["readdir",Inode,Offset]),
+  ?DEBL(">~s inode:~p offset:~p",["readdir",Inode,Offset]),
   case get_open_file(State,Inode) of 
     {value, OpenFile} ->
         DirEntryList = 
@@ -433,11 +450,11 @@ direntrify([],_) ->
     [];
 
 direntrify([{Name,Inode}|Children],InodeList) ->
-    ?DEB2("Getting inode for child ~p~n",{Name,Inode}),
+    ?DEB2("Getting inode for child ~p",{Name,Inode}),
     Child=gb_trees:get(Inode,InodeList),
-    ?DEB2("Getting permissions for child ~p~n",{Name,Inode}),
+    ?DEB2("Getting permissions for child ~p",{Name,Inode}),
     ChildPerms=(Child#inode_entry.internal_file_info)#file_info.mode,
-    ?DEB2("Creating direntry for child ~p~n",{Name,Inode}),
+    ?DEB2("Creating direntry for child ~p",{Name,Inode}),
     Direntry=
         #direntry{name=Name
                   ,stat=#stat{ st_ino=Inode,
@@ -445,9 +462,9 @@ direntrify([{Name,Inode}|Children],InodeList) ->
                                st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
                               }
                     },
-    ?DEB2("Calculatig size for direntry for child ~p~n",{Name,Inode}),
+    ?DEB2("Calculatig size for direntry for child ~p",{Name,Inode}),
     Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-    ?DEB2("Appending child ~p to list~n",{Name,Inode}),
+    ?DEB2("Appending child ~p to list",{Name,Inode}),
     [Direntry1|direntrify(Children,InodeList)].
                
 
@@ -468,11 +485,11 @@ take_while (F, Acc, [ H | T ]) ->
     %{#fuse_reply_err{err=enotsup},State}.
 
 readlink(_Ctx,_Inode,_Continuation,State) ->
-    ?DEBL("~s",["readlink!\n"]),
+    ?DEBL("~s",["readlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
     
 release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["release!\n"]),
+    ?DEBL("~s",["release!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
@@ -481,29 +498,29 @@ releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=ok},State}.
 
 removexattr(_Ctx,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["removexattr!\n"]),
+    ?DEBL("~s",["removexattr!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
-    ?DEBL("~s",["rename!\n"]),
+    ?DEBL("~s",["rename!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["rmdir!\n"]),
+    ?DEBL("~s",["rmdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 setattr(_Ctx,_Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["setattr!\n"]),
+    ?DEBL("~s",["setattr!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
-    ?DEBL("~s",["setlk!\n"]),
+    ?DEBL("~s",["setlk!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 %% Set file attributes. #fuse_reply_err{err = ok} indicates success. Flags is a bitmask consisting of ?XATTR_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setxattr_async_reply ().
 
 setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
-    ?DEBL("setxattr inode:~p name:~p value:~p flags: ~p~n",[Inode,BName,BValue,_Flags]),
+    ?DEBL("setxattr inode:~p name:~p value:~p flags: ~p",[Inode,BName,BValue,_Flags]),
     ?DEB1("   getting inode entry"),
     {value,Entry} = lookup_inode_entry(Inode,State),
     ?DEB1("   transforming input data"),
@@ -511,7 +528,7 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
     Value=binary_to_list(BValue),
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
-            ?DEBL("   adding attribute {~p,~p} for file ~p to database~n",[Name,Value,Path]),
+            ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Name,Value,Path]),
             add_new_attribute(Path,{Name,Value}),
             ?DEB1("   generating ext io and info"),
             NewExtIo=generate_ext_io(Path),
@@ -545,46 +562,46 @@ generate_ext_io(Path) ->
 
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
     ?DEB1(">ext_info_to_ext_io"),
-    ext_info_to_ext_io(InternalExtInfoTupleList,{0,[]}).
+    ext_info_to_ext_io(InternalExtInfoTupleList,[]).
 
 
-ext_info_to_ext_io([],{A,B}) -> {A+1,B++"\0"};
-ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],{N,String}) ->
-    ?DEB1("   Adding zero to end of name"),
+ext_info_to_ext_io([],B) -> 
+    B0=B++"\0",
+    B0len=length(B0),
+    ?DEBL("Done creating ext_io. Final string: \"~p\", size: ~p",[B0,B0len]),
+    {B0len,B0};
+ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
+    ?DEB2("   Adding zero to end of name ~p",Name),
     Name0=Name++"\0",
     ?DEB1("   Appending name to namelist"),
-    NewName=String++Name,
-    ?DEB1("   Updating size"),
-    NewN=N+length(Name0),
+    NewString=String++Name0,
     ?DEB1("   Recursion"),
-    ext_info_to_ext_io(InternalExtInfoTupleList,{NewN,NewName}).
+    ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
 
 
 
 statfs(_Ctx,_Inode,_Continuation,State) ->
-    ?DEBL("~s",["statfs!\n"]),
+    ?DEBL("~s",["statfs!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["symlink!\n"]),
+    ?DEBL("~s",["symlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 terminate(_Reason,_State) ->
-    ?DEBL("~s ~p\n",["terminate!",_Reason]),
-    ?DEB2("Closing database ~p~n",?ATTR_DB),
+    ?DEBL("~s ~p",["terminate!",_Reason]),
+    ?DEB2("Closing database ~p",?ATTR_DB),
     dets:close(?ATTR_DB),
     exit(3).
 
 unlink(_Ctx,_Inode,_Name,_Cont,State) ->
-    ?DEBL("~s\n",["unlink!"]),
+    ?DEBL("~s",["unlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
 write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s~n",["write!"]),
+    ?DEBL("~s",["write!"]),
     {#fuse_reply_err{err=enotsup},State}.
-
-    
 
 handle_info(_Msg,State) ->
     ?DEBL(">handle_info(~p)",[_Msg]),
