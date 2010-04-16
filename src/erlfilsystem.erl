@@ -1,8 +1,15 @@
 -module(erlfilsystem).
 
+%%%=========================================================================
+%%% server functions
+%%%=========================================================================
+-export([handle_info/2,init/1]).
+-export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
 -export([start_link/1,start_link/2,start_link/3,start_link/4]).
-%%%--------------
-%%% Fuserl functions
+
+%%%=========================================================================
+%%% fuserl functions
+%%%=========================================================================
 -export([access/5,
          create/7,
          flush/5,
@@ -36,13 +43,12 @@
          unlink/5,
          write/7]).
 
--export([handle_info/2,init/1]).
--export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
 
-%% Debug functions
+%%%=========================================================================
+%%% debug functions
+%%%=========================================================================
+
 -export([get_dir_hier/2]).
-
--export([test/2]).
 
 -behaviour(fuserl).
 
@@ -51,17 +57,16 @@
 -include("../include/erlfilsystem.hrl").
 -include("../include/debug.hrl").
 
+%%%=========================================================================
+%%% server functions
+%%%=========================================================================
+handle_info(_Msg,State) ->
+    ?DEBL(">handle_info(~p)",[_Msg]),
+    {noreply,State}.
 
-%% a small record to make it possible for me to choose which start options I want to give
-%% Only used here, only used as a test, only used temporary.
--record(startopts,{
-    linkedin=false,
-    mountopts,%="",
-    dir}).
-
-start_link(Startopts=#startopts{}) ->
-    start_link(Startopts#startopts.dir,Startopts#startopts.linkedin,Startopts#startopts.mountopts);
-
+code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
+    ?DEBL("~s",["code_change!"]),
+    ok.
 
 start_link({MountDir,MirrorDir}) ->
     start_link(MountDir,false,"",MirrorDir);
@@ -114,146 +119,12 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     ?DEB1("   fuserl started, starting fuserlsrv"),
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
 
-assert_started(Application) ->
-    case find(
-              fun({A,_,_}) when A==Application -> {true,A};
-                 (_) -> false 
-              end,application:loaded_applications())
-       of
-         {true,_} -> true;
-         false -> application:start(Application)
-    end.
-
-
-find(_,[]) -> false;
-find(SearchFun,[Item|Items]) ->
-    case SearchFun(Item) of
-        {true,Value} -> {true,Value};
-        _ -> find(SearchFun,Items)
-    end.
-
-
 init(State=#state{}) ->
     {ok, State}.
 
-%% Reads the contents of a dir, putting every file in the dir in my inode list. Recursively.
-%% Reads the contents of a dir, recursively, and produces a non-flat list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict after it has been flattened.
-make_inode_list({Entry,InitialIno},NextIno) ->
-    ?DEB2("   reading file info for ~p:",Entry),
-    {ok,FileInfo}=file:read_file_info(Entry),
-    {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
-        directory ->
-            ?DEB1("    directory"),
-            {ok,Names} = file:list_dir(Entry),
-            ?DEB2("     directory entries:~p",Names),
-            {NameInodePairs,MyIno}=
-                %make entries of type {{ExternalName,InternalName},Ino}
-                lists:mapfoldl(
-                    fun(Name,Ino) -> {{Name,Ino},Ino+1} end, 
-                    %fun(Name,Ino) -> {Entry++"/"++Name,Ino},Ino+1} end, 
-                    NextIno, Names),
-            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Entry},MyIno};
-        regular ->
-            ?DEB1("    regular"),
-            {ok,[],#external_file{external_file_info=FileInfo,path=Entry},NextIno};
-                _ ->
-            {error,not_supported} % for now
-    end,
-    {ExtInfo,ExtIo}=generate_ext_info_io(Entry),
-    ?DEB2("     ext info: ~p", ExtInfo),
-    ?DEB1("    Generating entry"),
-    % XXX: This will break if provided with a date and time that does not
-    % occur.
-    EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
-    EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
-    EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
-        
-    ?DEBL("\tatime:~p~n\t\t\tctime:~p~n\t\t\tmtime:~p",[EpochAtime,EpochCtime,EpochMtime]),
-    InodeEntry=#inode_entry{ 
-             children=Children
-            ,type=Type
-            ,internal_file_info=statify_file_info(
-                FileInfo#file_info{
-                    inode=InitialIno
-                   ,atime=EpochAtime
-                   ,ctime=EpochCtime
-                   ,mtime=EpochMtime
-                       })
-            ,ext_info=ExtInfo
-            ,ext_io=ExtIo},
-    {ChildInodeEntries,FinalIno} = 
-        lists:mapfoldl
-            (
-                fun({A,AA},B)->make_inode_list({Entry++"/"++A,AA},B) end
-                ,NewIno
-                ,Children
-            ),
-    % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
-    {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
-        
-
-get_dir_hier(InodeNo,InodeEntries) ->
-    InodeEntry=gb_trees:get(InodeNo,InodeEntries),
-    case InodeEntry#inode_entry.children of
-        [] -> [];
-        Children -> 
-            lists:map(fun({Child,No}) -> {Child,get_dir_hier(No,InodeEntries)} end, Children)
-    end.
-
-
-get_inode_entries(State) ->
-    (State#state.inode_list)#inode_list.inode_entries.
-
-lookup_inode_entry(Inode,State) ->
-    gb_trees:lookup(Inode,get_inode_entries(State)).
-
-lookup_children(Inode,State) ->
-    case lookup_inode_entry(Inode,State) of
-        {value, Entry} -> {value,Entry#inode_entry.children};
-        none -> none
-    end.
-
-get_open_files(State) ->
-    State#state.open_files.
-
-set_open_files(State,OpenFiles) ->
-    State#state{open_files=OpenFiles}.
-
-get_open_file(State,Inode) ->
-    gb_trees:lookup(Inode,get_open_files(State)).
-
-set_open_file(State,Inode,FileContents) ->
-    OpenFiles=get_open_files(State),
-    NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
-    set_open_files(State,NewOpenFiles).
-
-%get_biggest_inode_number(State) ->
-%    (State#state.inode_list)#inode_list.biggest.
-
-
-%TODO: Find out what info it is I cannot provid here lest fuserl hangs.
-statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-    ?DEBL("    converting file info for ~p to fuse stat info",[Inode]),
-    #stat{
-        st_dev= {MajorDevice,MinorDevice}
-         ,st_ino=Inode
-         ,st_mode=Mode
-         ,st_nlink=Links
-         ,st_uid=UID
-         ,st_gid=GID
-        %,st_rdev
-         ,st_size=Size
-        %,st_blksize
-        %,st_blocks
-         ,st_atime=datetime_to_epoch(Atime)
-         ,st_mtime=datetime_to_epoch(Mtime)
-         ,st_ctime=datetime_to_epoch(Ctime)
-             }.
-
-     
-datetime_to_epoch(DateTime) ->
-    calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
-
+%%%=========================================================================
+%%% fuserl functions
+%%%=========================================================================
 
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     ?DEBL("~s I: ~p M: ~p",["access!",_Inode,_Mask]),
@@ -285,8 +156,6 @@ getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
     spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
     {noreply,State}.
 
-%getattr_internal(_Ctx,Inode,Continuation,State) ->
-
 getattr_internal(Inode,Continuation,State) ->
     ?DEB2("getattr_internal(~p)",Inode),
     case lookup_inode_entry(Inode,State) of
@@ -305,10 +174,6 @@ getattr_internal(Inode,Continuation,State) ->
     end,
     ?DEB1("Sending reply"),
     fuserlsrv:reply(Continuation,Reply).
-
-test(Dir,Inode) ->
-    {ok,State}=init(#initargs{dir=Dir}),
-    getattr(#fuse_ctx{},Inode,continuation,State).
 
 
 getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
@@ -394,15 +259,6 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
             ?DEB1("   Parent nonexistent!"),
             {#fuse_reply_err{err=enoent},State} %no parent
     end.
-%% lookup_tuple takes a key, and a [{Key,Value}] and returns {value,Value} or none
-lookup_tuple(_,[]) -> none;
-
-lookup_tuple(Name,[{ChildName,Inode}|Children]) ->
-    case Name == ChildName of
-        true -> {value,Inode};
-        false -> lookup_tuple(Name,Children)
-    end.
-
 
 mkdir(_Ctx,_ParentInode,_Name,_Mode,_Continuation,State) ->
     ?DEBL("~s",["mkdir!"]),
@@ -430,27 +286,13 @@ opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_
     NewState=set_open_file(State,Inode,direntries(Inode,Entries)),
     {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
 
-
-
-
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["read!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-%these two I stole from fuserlproc. Maybe they'll come in handy.
--define (DIRATTR (X), #stat{ st_ino = (X), 
-                             st_mode = ?S_IFDIR bor 8#0555, 
-                             st_nlink = 1 }).
-
-
--define(STAT (X,Y,Z), #stat{ st_ino = (X),
-                             st_mode = (Y),
-                             st_nlink = Z
-                                 }.
-
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
   ?DEBL(">readdir inode:~p offset:~p",[Inode,Offset]),
-  case get_open_file(State,Inode) of 
+  case lookup_open_file(State,Inode) of 
     {value, OpenFile} ->
         DirEntryList = 
         case Offset<length(OpenFile) of
@@ -475,49 +317,6 @@ readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
     none ->
         {#fuse_reply_err{err=ebadr},State} % XXX: What should this REALLY return when the file is not open for this user?
   end.
-
-%% TODO: rebuild this with lookup_children?
-direntries(Inode,InodeList) ->
-    ?DEB1("    Creating direntries"),
-    ?DEB1("     Getting entries"),
-    InodeEntry=gb_trees:get(Inode,InodeList),
-    ?DEB1("     Getting children"),
-    Children=InodeEntry#inode_entry.children,
-    ?DEB1("     Converting children"),
-    direntrify(Children,InodeList).
-
-direntrify([],_) -> 
-    ?DEB1("    Done converting children"),
-    [];
-
-direntrify([{Name,Inode}|Children],InodeList) ->
-    ?DEB2("    Getting inode for child ~p",{Name,Inode}),
-    Child=gb_trees:get(Inode,InodeList),
-    ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
-    ChildStats=Child#inode_entry.internal_file_info,
-    ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
-    Direntry= #direntry{name=Name ,stat=ChildStats },
-    ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
-    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-    ?DEB2("    Appending child ~p to list",{Name,Inode}),
-    [Direntry1|direntrify(Children,InodeList)].
-
-
-
-
-
-
-take_while (_, _, []) -> 
-    [];
-take_while (F, Acc, [ H | T ]) ->
-    case F (H, Acc) of
-        { continue, NewAcc } ->
-            [ H | take_while (F, NewAcc, T) ];
-        stop ->
-            []
-                end.
-
-%{#fuse_reply_err{err=enotsup},State}.
 
 readlink(_Ctx,_Inode,_Continuation,State) ->
     ?DEBL("~s",["readlink!"]),
@@ -564,6 +363,7 @@ rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["rmdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
+
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
 setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
@@ -627,7 +427,6 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 %% Set file attributes. #fuse_reply_err{err = ok} indicates success. Flags is a bitmask consisting of ?XATTR_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setxattr_async_reply ().
-
 setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
     ?DEBL("setxattr inode:~p name:~p value:~p flags: ~p",[Inode,BName,BValue,_Flags]),
     ?DEB1("   getting inode entry"),
@@ -652,12 +451,108 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
             {#fuse_reply_err{err=enotsup},State}
     end.
 
+statfs(_Ctx,_Inode,_Continuation,State) ->
+    ?DEBL("~s",["statfs!"]),
+    {#fuse_reply_err{err=enotsup},State}.
 
+symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
+    ?DEBL("~s",["symlink!"]),
+    {#fuse_reply_err{err=enotsup},State}.
+
+terminate(_Reason,_State) ->
+    ?DEBL(">terminate ~p",[_Reason]),
+    ?DEB2("   Closing database ~p",?ATTR_DB),
+    dets:close(?ATTR_DB),
+    exit(3).
+
+unlink(_Ctx,_Inode,_Name,_Cont,State) ->
+    ?DEBL("~s",["unlink!"]),
+    {#fuse_reply_err{err=enotsup},State}.
+
+write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
+    ?DEBL("~s",["write!"]),
+    {#fuse_reply_err{err=enotsup},State}.
+
+
+%%%=========================================================================
+%%% Helper functions
+%%%=========================================================================
+
+%% lookup_tuple takes a key, and a [{Key,Value}] and returns {value,Value} or none
+lookup_tuple(_,[]) -> none;
+
+lookup_tuple(Name,[{ChildName,Inode}|Children]) ->
+    case Name == ChildName of
+        true -> {value,Inode};
+        false -> lookup_tuple(Name,Children)
+    end.
+
+%% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
+datetime_to_epoch(DateTime) ->
+    calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
+
+%% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
+statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+    ?DEBL("    converting file info for ~p to fuse stat info",[Inode]),
+    #stat{
+        st_dev= {MajorDevice,MinorDevice}
+         ,st_ino=Inode
+         ,st_mode=Mode
+         ,st_nlink=Links
+         ,st_uid=UID
+         ,st_gid=GID
+        %,st_rdev
+         ,st_size=Size
+        %,st_blksize
+        %,st_blocks
+         ,st_atime=datetime_to_epoch(Atime)
+         ,st_mtime=datetime_to_epoch(Mtime)
+         ,st_ctime=datetime_to_epoch(Ctime)
+         }.
+
+%% get_inode_entries returns the inode entries for a state.
+get_inode_entries(State) ->
+    (State#state.inode_list)#inode_list.inode_entries.
+
+%% lookup_inode_entry gets the inode entry from the state corresponding to
+%% the inode provided. Returns like gb_trees:lookup.
+lookup_inode_entry(Inode,State) ->
+    gb_trees:lookup(Inode,get_inode_entries(State)).
+
+%% lookup_children returns the children for the inode, if the inode is 
+%% present. Returns like gb_trees:lookup
+lookup_children(Inode,State) ->
+    case lookup_inode_entry(Inode,State) of
+        {value, Entry} -> {value,Entry#inode_entry.children};
+        none -> none
+    end.
+
+%% get_open_files returns the opened files for the state
+get_open_files(State) ->
+    State#state.open_files.
+
+%% set_open_files returns a state with the open files updated
+set_open_files(State,OpenFiles) ->
+    State#state{open_files=OpenFiles}.
+
+%% get_open_file gets the open file corresponding to the inode provided.
+%% returns like gb_trees:lookup
+lookup_open_file(State,Inode) ->
+    gb_trees:lookup(Inode,get_open_files(State)).
+
+%% set_open_file returns a state with the open file for the provided inode
+%% changed to the FileContents provided.
+set_open_file(State,Inode,FileContents) ->
+    OpenFiles=get_open_files(State),
+    NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
+    set_open_files(State,NewOpenFiles).
+
+%% add_new_attribute
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
 add_new_attribute(Path,{Name,Value}) ->
     dets:insert(?ATTR_DB,{Path,{Name,Value}}).
 
-
+%% remove_old_attribute
 %% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
 remove_old_attribute(Path,{Name,_Value}) ->
     dets:match_delete(?ATTR_DB,{Path,{Name,'_'}}).
@@ -671,7 +566,6 @@ generate_ext_info_io(Path) ->
     ExtInfo=generate_ext_info(Path),
     ExtIo=ext_info_to_ext_io(ExtInfo),
     {ExtInfo,ExtIo}.
-
 
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
     ?DEB1("   Creating ext_io"),
@@ -692,37 +586,142 @@ ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     ?DEB1("    Recursion"),
     ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
+%% TODO: rebuild this with lookup_children?
+%% Gets the children for the inode from the inode list, and runs direntrify
+%% on it.
+direntries(Inode,InodeList) ->
+    ?DEB1("    Creating direntries"),
+    ?DEB1("     Getting entries"),
+    InodeEntry=gb_trees:get(Inode,InodeList),
+    ?DEB1("     Getting children"),
+    Children=InodeEntry#inode_entry.children,
+    ?DEB1("     Converting children"),
+    direntrify(Children,InodeList).
 
 
+%% direntrify takes a [{Name,Inode}] and returns a [fuserl:#{direntry}]
+direntrify([],_) -> 
+    ?DEB1("    Done converting children"),
+    [];
 
-statfs(_Ctx,_Inode,_Continuation,State) ->
-    ?DEBL("~s",["statfs!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+direntrify([{Name,Inode}|Children],InodeList) ->
+    ?DEB2("    Getting inode for child ~p",{Name,Inode}),
+    Child=gb_trees:get(Inode,InodeList),
+    ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
+    ChildStats=Child#inode_entry.internal_file_info,
+    ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
+    Direntry= #direntry{name=Name ,stat=ChildStats },
+    ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
+    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
+    ?DEB2("    Appending child ~p to list",{Name,Inode}),
+    [Direntry1|direntrify(Children,InodeList)].
 
-symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["symlink!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+assert_started(Application) ->
+    case find(
+              fun({A,_,_}) when A==Application -> true;
+                 (_) -> false 
+              end,application:loaded_applications())
+       of
+         true -> true;
+         false -> application:start(Application)
+    end.
 
-terminate(_Reason,_State) ->
-    ?DEBL("~s ~p",["terminate!",_Reason]),
-    ?DEB2("Closing database ~p",?ATTR_DB),
-    dets:close(?ATTR_DB),
-    exit(3).
+%% find runs SearchFun for one element at a time in the provided list,
+%% until SearchFun returns {true,Value} or true, whereupon it returns this.
+find(_,[]) -> false;
+find(SearchFun,[Item|Items]) ->
+    case SearchFun(Item) of
+        {true,Value} -> {true,Value};
+        true -> true;
+        _ -> find(SearchFun,Items)
+    end.
 
-unlink(_Ctx,_Inode,_Name,_Cont,State) ->
-    ?DEBL("~s",["unlink!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+%% make_inode_list reads the contents of a dir, recursively, and produces a non-flat list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict after it has been flattened.
+make_inode_list({Entry,InitialIno},NextIno) ->
+    ?DEB2("   reading file info for ~p:",Entry),
+    {ok,FileInfo}=file:read_file_info(Entry),
+    {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
+        directory ->
+            ?DEB1("    directory"),
+            {ok,Names} = file:list_dir(Entry),
+            ?DEB2("     directory entries:~p",Names),
+            {NameInodePairs,MyIno}=
+                %make entries of type {{ExternalName,InternalName},Ino}
+                lists:mapfoldl(
+                    fun(Name,Ino) -> {{Name,Ino},Ino+1} end, 
+                    %fun(Name,Ino) -> {Entry++"/"++Name,Ino},Ino+1} end, 
+                    NextIno, Names),
+            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Entry},MyIno};
+        regular ->
+            ?DEB1("    regular"),
+            {ok,[],#external_file{external_file_info=FileInfo,path=Entry},NextIno};
+                _ ->
+            {error,not_supported} % for now
+    end,
+    {ExtInfo,ExtIo}=generate_ext_info_io(Entry),
+    ?DEB2("     ext info: ~p", ExtInfo),
+    ?DEB1("    Generating entry"),
+    % XXX: This will break if provided with a local date and time that does not
+    % exist. Shouldn't be much of a problem.
+    EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
+    EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
+    EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
+        
+    ?DEBL("\tatime:~p~n\t\t\tctime:~p~n\t\t\tmtime:~p",[EpochAtime,EpochCtime,EpochMtime]),
+    InodeEntry=#inode_entry{ 
+             children=Children
+            ,type=Type
+            ,internal_file_info=statify_file_info(
+                FileInfo#file_info{
+                    inode=InitialIno
+                   ,atime=EpochAtime
+                   ,ctime=EpochCtime
+                   ,mtime=EpochMtime
+                       })
+            ,ext_info=ExtInfo
+            ,ext_io=ExtIo},
+    {ChildInodeEntries,FinalIno} = 
+        lists:mapfoldl
+            (
+                fun({A,AA},B)->make_inode_list({Entry++"/"++A,AA},B) end
+                ,NewIno
+                ,Children
+            ),
+    % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
+    {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
+%these I stole from fuserlproc. Maybe they'll come in handy.
+-define (DIRATTR (X), #stat{ st_ino = (X), 
+                             st_mode = ?S_IFDIR bor 8#0555, 
+                             st_nlink = 1 }).
 
-write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["write!"]),
-    {#fuse_reply_err{err=enotsup},State}.
 
-handle_info(_Msg,State) ->
-    ?DEBL(">handle_info(~p)",[_Msg]),
-    {noreply,State}.
+-define(STAT (X,Y,Z), #stat{ st_ino = (X),
+                             st_mode = (Y),
+                             st_nlink = Z
+                                 }.
 
-code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
-    ?DEBL("~s",["code_change!"]),
-    ok.
+%% this take_while runs the function F until it returns stop
+%% Good for taking items from list where the number of list items taken
+%% are dependent on the individual size of each item.
+take_while (_, _, []) -> 
+    [];
+take_while (F, Acc, [ H | T ]) ->
+    case F (H, Acc) of
+        { continue, NewAcc } ->
+            [ H | take_while (F, NewAcc, T) ];
+        stop ->
+            []
+    end.
 
+%%%=========================================================================
+%%% Debug functions
+%%%=========================================================================
+
+get_dir_hier(InodeNo,InodeEntries) ->
+    InodeEntry=gb_trees:get(InodeNo,InodeEntries),
+    case InodeEntry#inode_entry.children of
+        [] -> [];
+        Children -> 
+            lists:map(fun({Child,No}) -> {Child,get_dir_hier(No,InodeEntries)} end, Children)
+    end.
 

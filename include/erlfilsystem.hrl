@@ -1,6 +1,4 @@
 
-%-type fs::[gb_trees()].
-%-type inode_list::[gb_trees()].
 
 -define(ATTR_DB, attributes).
 -define(ATTR_DB_FILE, attributes).
@@ -61,10 +59,9 @@
         ,biggest::integer()
         }).
 
-
 -record(state,
         {inode_list::#inode_list{}
         ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
-        ,attribute_list%::#gb_trees{} of #attribute_entry with inode number string
+        ,attribute_list%::#gb_trees{} of #attribute_entry{} with inode number string
         }).
 
