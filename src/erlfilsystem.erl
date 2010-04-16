@@ -142,18 +142,22 @@ make_inode_list({Entry,InitialIno},NextIno) ->
     ?DEB2("     ext info: ~p", ExtInfo),
     ExtIo=ext_info_to_ext_io(ExtInfo),
     ?DEB1("    Generating entry"),
+    % XXX: This will break if provided with a date and time that does not
+    % occur.
+    EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
+    EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
+    EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
+        
+    ?DEBL("\tatime:~p~n\t\t\tctime:~p~n\t\t\tmtime:~p",[EpochAtime,EpochCtime,EpochMtime]),
     InodeEntry=#inode_entry{ 
              children=Children
             ,type=Type
             ,internal_file_info=statify_file_info(
                 FileInfo#file_info{
                     inode=InitialIno
-                        % XXX: Ugly hack, yes, but it works most of the time.
-                        % If someone wants to break my file system by having
-                        % files with non-existant dates, then go ahead.
-                   ,atime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime))
-                   ,ctime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime))
-                   ,mtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime))
+                   ,atime=EpochAtime
+                   ,ctime=EpochCtime
+                   ,mtime=EpochMtime
                        })
             ,ext_info=ExtInfo
             ,ext_io=ExtIo},
@@ -208,18 +212,17 @@ set_open_file(State,Inode,FileContents) ->
 
 
 %TODO: Find out what info it is I cannot provid here lest fuserl hangs.
-statify_file_info(#file_info{size=_Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=_Mode,links=Links,major_device=_MajorDevice,minor_device=_MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-    ?DEBL("    converting file info for ~p to fuse stat info:~n    atime:~p, converted atime:~p",[Inode,Atime,datetime_to_epoch(Atime)]),
+statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+    ?DEBL("    converting file info for ~p to fuse stat info",[Inode]),
     #stat{
-%        st_dev= {MajorDevice,MinorDevice}
-         st_ino=Inode
-         %,st_mode=?S_IFDIR bor 8#00755 %Mode
-         ,st_mode=_Mode
+        st_dev= {MajorDevice,MinorDevice}
+         ,st_ino=Inode
+         ,st_mode=Mode
          ,st_nlink=Links
          ,st_uid=UID
          ,st_gid=GID
         %,st_rdev
-%         ,st_size=Size
+         ,st_size=Size
         %,st_blksize
         %,st_blocks
          ,st_atime=datetime_to_epoch(Atime)
@@ -231,11 +234,11 @@ statify_file_info(#file_info{size=_Size,type=_Type,atime=Atime,ctime=Ctime,mtime
 datetime_to_epoch(DateTime) ->
     calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
 
+
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     ?DEBL("~s I: ~p M: ~p",["access!",_Inode,_Mask]),
-    % So, if I've gotten this right, I've got an inode to look up rights for, a context in Ctx which tells me who wanted to know their rights to the file, a mask, which does SOMETHING - maybe this is what is used on file systems who has no rights normally? - a Continuation, which is a magical item which somehow is used to make asyncronuous calls - more on this when I find a documentation for the record - and finally the state, which, afaik, I will NOT be changing by checking access to files.
     % First, lets try to just create an "access denied" version of this thing.
-    {#fuse_reply_err{err=ebadr},State}. % like this?
+    {#fuse_reply_err{err=enotsup},State}. 
 
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
     ?DEBL("~s",["create!"]),
@@ -258,7 +261,7 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
     
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
-    ?DEB2(">getattr(~p)",Inode),
+    ?DEBL(">getattr inode:~p",[Inode]),
     spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
     {noreply,State}.
 
@@ -266,7 +269,6 @@ getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
 
 getattr_internal(Inode,Continuation,State) ->
     ?DEB2("getattr_internal(~p)",Inode),
-
     case lookup_inode_entry(Inode,State) of
         none ->
             ?DEB1("non-existent file"),
@@ -544,25 +546,62 @@ rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["rmdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
-setattr(_Ctx,_Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[_Inode,_Attr,_ToSet,_Fuse_File_Info]),
-%?FUSE_SET_ATTR_MODE
+setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
+    ?DEBL("setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
 %?FUSE_SET_ATTR_UID
 %?FUSE_SET_ATTR_GID
-%?FUSE_SET_ATTR_SIZE
-        case (?FUSE_SET_ATTR_ATIME band _ToSet) == 0 of
-            false ->
-                ?DEB1("    setting atime");
+    {value,Entry}=lookup_inode_entry(Inode,State),
+    Stat=Entry#inode_entry.internal_file_info,
+    NewStat=Stat#stat{
+        st_atime=
+            case (?FUSE_SET_ATTR_ATIME band _ToSet) == 0 of
+                false ->
+                    ?DEB1("    setting atime"),
+                    _Attr#stat.st_atime;
+                true ->
+                    ?DEB1("    not setting atime"),
+                    Stat#stat.st_atime
+            end
+        ,st_mtime=
+            case (?FUSE_SET_ATTR_MTIME band _ToSet) == 0 of
+                false ->
+                    ?DEB1("    setting mtime"),
+                _Attr#stat.st_mtime;
             true ->
-                ?DEB1("    not setting atime")
-        end,
-        case (?FUSE_SET_ATTR_MTIME band _ToSet) == 0 of
-            false ->
-                ?DEB1("    setting mtime");
+                ?DEB1("    not setting mtime"),
+                Stat#stat.st_mtime
+            end
+        ,st_mode=
+            case (?FUSE_SET_ATTR_MODE band _ToSet) == 0 of
+                false ->
+                    ?DEB1("    setting mode"),
+                _Attr#stat.st_mode;
             true ->
-                ?DEB1("    not setting atime")
-        end,
-    {#fuse_reply_err{err=enotsup},State}.
+                ?DEB1("    not setting mode"),
+                Stat#stat.st_mode
+            end
+        ,st_size=
+            case (?FUSE_SET_ATTR_SIZE band _ToSet) == 0 of
+                false ->
+                    ?DEB1("    setting size"),
+                _Attr#stat.st_size;
+            true ->
+                ?DEB1("    not setting size"),
+                Stat#stat.st_size
+            end
+                },
+    NewState=update_inode_entry(Inode,Entry#inode_entry{internal_file_info=NewStat},State),
+    {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=100000},NewState}.
+
+
+update_inode_entry(Inode,Entry,State) ->
+    ?DEB1("   updating state"),
+    Entries=get_inode_entries(State),
+    NewEntries=gb_trees:enter(Inode,Entry,Entries),
+    InodeList=State#state.inode_list,
+    NewInodeList=InodeList#inode_list{inode_entries=NewEntries},
+    State#state{inode_list=NewInodeList}.
+
 
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
     ?DEBL("~s",["setlk!"]),
@@ -586,11 +625,7 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
             NewExtInfo=generate_ext_info(Path),
             ?DEB1("   creating new inode entry"),
             NewEntry=Entry#inode_entry{ext_io=NewExtIo,ext_info=NewExtInfo},
-            Entries=get_inode_entries(State),
-            NewEntries=gb_trees:enter(Inode,NewEntry,Entries),
-            InodeList=State#state.inode_list,
-            NewInodeList=InodeList#inode_list{inode_entries=NewEntries},
-            NewState=State#state{inode_list=NewInodeList},
+            NewState=update_inode_entry(Inode,NewEntry,State),
             {#fuse_reply_err{err=ok},NewState};
         _ ->
             ?DEB1("   entry not an external file, skipping..."),
