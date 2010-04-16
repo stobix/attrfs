@@ -6,6 +6,7 @@
 -define(ATTR_DB_FILE, attributes).
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
+-include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
 -record(initargs,
         {dir::string()}).
@@ -21,7 +22,7 @@
         % the path is what path leads to the file in some external file system.
        {path::string()
         % external_file_info mirrors the file info for the real file in some real file system, if applicable.
-        ,external_file_info
+        ,external_file_info::#file_info{} % file:#file_info{}
        }).
 
 -record(external_dir,
@@ -43,7 +44,7 @@
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
         ,type::file_type()
         % internal_file_info is the file info that the file has in my file system.
-        ,internal_file_info
+        ,internal_file_info::#stat{} % fuserl:#stat{}
         % ext_info contains a list of attribute - value pairs in xattr style, used to put files into virtual folders.
         ,ext_info::attrib_list()
         ,ext_io::ext_io_tuple()

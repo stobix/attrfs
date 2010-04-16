@@ -118,13 +118,13 @@ init(State=#state{}) ->
 %% Reads the contents of a dir, putting every file in the dir in my inode list. Recursively.
 %% Reads the contents of a dir, recursively, and produces a non-flat list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict after it has been flattened.
 make_inode_list({Entry,InitialIno},NextIno) ->
-    ?DEB1("Making inode list"),
+    ?DEB2("   reading file info for ~p:",Entry),
     {ok,FileInfo}=file:read_file_info(Entry),
     {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
         directory ->
-            ?DEB2(" directory ~p",Entry),
+            ?DEB1("    directory"),
             {ok,Names} = file:list_dir(Entry),
-            ?DEB2("  directory entries:~p",Names),
+            ?DEB2("     directory entries:~p",Names),
             {NameInodePairs,MyIno}=
                 %make entries of type {{ExternalName,InternalName},Ino}
                 lists:mapfoldl(
@@ -133,20 +133,19 @@ make_inode_list({Entry,InitialIno},NextIno) ->
                     NextIno, Names),
             {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Entry},MyIno};
         regular ->
-            ?DEB1(" regular"),
-            % TODO: Get attributes for file and set them as children. I think.
+            ?DEB1("    regular"),
             {ok,[],#external_file{external_file_info=FileInfo,path=Entry},NextIno};
                 _ ->
             {error,not_supported} % for now
     end,
     ExtInfo=generate_ext_info(Entry),
-    ?DEB2("  ext info: ~p", ExtInfo),
+    ?DEB2("     ext info: ~p", ExtInfo),
     ExtIo=ext_info_to_ext_io(ExtInfo),
-    ?DEB1("Generating entry"),
+    ?DEB1("    Generating entry"),
     InodeEntry=#inode_entry{ 
              children=Children
             ,type=Type
-            ,internal_file_info=FileInfo#file_info{inode=InitialIno}
+            ,internal_file_info=statify_file_info(FileInfo#file_info{inode=InitialIno})
             ,ext_info=ExtInfo
             ,ext_io=ExtIo},
     {ChildInodeEntries,FinalIno} = 
@@ -195,11 +194,10 @@ set_open_file(State,Inode,FileContents) ->
 %get_biggest_inode_number(State) ->
 %    (State#state.inode_list)#inode_list.biggest.
 
-statify_internal_file_info(#inode_entry{internal_file_info=InternalFileInfo}) ->
-    statify_file_info(InternalFileInfo).
 
 %TODO: Find out what info it is I cannot provid here lest fuserl hangs.
-statify_file_info(#file_info{size=_Size,type=_Type,atime=_Atime,ctime=_Ctime,mtime=_Mtime,access=_Access,mode=_Mode,links=Links,major_device=_MajorDevice,minor_device=_MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+statify_file_info(#file_info{size=_Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=_Mode,links=Links,major_device=_MajorDevice,minor_device=_MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+    ?DEB1("    converting file info to fuse stat info"),
     #stat{
 %        st_dev= {MajorDevice,MinorDevice}
          st_ino=Inode
@@ -211,11 +209,11 @@ statify_file_info(#file_info{size=_Size,type=_Type,atime=_Atime,ctime=_Ctime,mti
 %         ,st_size=Size
         %,st_blksize
         %,st_blocks
-%         ,st_atime=Atime
-%         ,st_mtime=Mtime
-%         ,st_ctime=Ctime
+         ,st_atime=calendar:datetime_to_gregorian_seconds(Atime)
+         ,st_mtime=calendar:datetime_to_gregorian_seconds(Mtime)
+         ,st_ctime=calendar:datetime_to_gregorian_seconds(Ctime)
              }.
-           
+
      
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     ?DEBL("~s I: ~p M: ~p",["access!",_Inode,_Mask]),
@@ -258,9 +256,9 @@ getattr_internal(Inode,Continuation,State) ->
             ?DEB1("non-existent file"),
             Reply=#fuse_reply_err{err=enoent};
         {value,Entry} ->
-            ?DEB1("File exists, converting info"),
+            ?DEB1("File exists, returning info"),
                 Reply=#fuse_reply_attr{
-                    attr=statify_internal_file_info(Entry),
+                    attr=Entry#inode_entry.internal_file_info,
                     attr_timeout_ms=5
                 };
             _A -> 
@@ -284,21 +282,26 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 getxattr(_Ctx,Inode,Name,Size,_Continuation,State) ->
     ?DEBL(">getxattr, name:~p, size:~p, inode:~p)",[Name,Size,Inode]),
     {value,Entry}=lookup_inode_entry(Inode,State),
-    ?DEB1("   got inode entry."),
+    ?DEB1("   Got inode entry"),
     ExtInfo=Entry#inode_entry.ext_info,
-    ?DEB1("   got extinfo."),
-    {value,ExtInfoValue}=lookup_tuple(binary_to_list(Name),ExtInfo),
-    ?DEB1("   got attribute value"),
-    ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
-    ExtSize=length(ExtAttrib),
-    ?DEBL("   converted attribute and got (~p,~p)",[ExtAttrib,ExtSize]),
-    Reply=case Size == 0 of 
-        true -> ?DEB1("   they want to know our size."),#fuse_reply_xattr{count=ExtSize};
-        false -> 
-            case Size < ExtSize of
-                true -> ?DEBL("   they are using a too small buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
-                false -> ?DEB1("   all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
-            end
+    ?DEB1("   Got extinfo"),
+    Reply=case lookup_tuple(binary_to_list(Name),ExtInfo) of
+        {value,ExtInfoValue} ->
+            ?DEB1("   Got attribute value"),
+            ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
+            ExtSize=length(ExtAttrib),
+            ?DEBL("   Converted attribute and got (~p,~p)",[ExtAttrib,ExtSize]),
+            case Size == 0 of 
+                true -> ?DEB1("   They want to know our size."),#fuse_reply_xattr{count=ExtSize};
+                false -> 
+                    case Size < ExtSize of
+                        true -> ?DEBL("   They are using a too small buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
+                        false -> ?DEB1("   All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
+                    end
+            end;
+        none ->
+            ?DEB1("   Argument nonexistant, returning error"),
+            #fuse_reply_err{err=enodata}
     end,
     {Reply,State}.
     
@@ -307,7 +310,7 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
     ?DEBL("~s",["link!"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
+%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (inCLUDING Null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     ?DEB2("listxattr(~p)",Inode),
     {value,Entry}=lookup_inode_entry(Inode,State),
@@ -330,7 +333,7 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
-    ?DEBL(">~s Parent: ~p Name: ~p",["lookup!",ParentInode,Child]),
+    ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
     case lookup_children(ParentInode,State) of
         {value,Children} ->
             ?DEB2("   Got children for ~p",ParentInode),
@@ -339,7 +342,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                     ?DEB2("   Found child ~p",Child),
                     {value,Entry} = lookup_inode_entry(Inode,State),
                     ?DEB1("   Got child inode entry"),
-                    Stat=statify_internal_file_info(Entry),
+                    Stat=Entry#inode_entry.internal_file_info,
                     ?DEB1("   Made a stat of the inode entry, returning"),
                     Param=#fuse_entry_param{
                         ino=Inode,
@@ -349,12 +352,16 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                         entry_timeout_ms=1000
                             },
                     {#fuse_reply_entry{fuse_entry_param=Param},State};
-                none ->{#fuse_reply_err{err=enoent},State} % child nonexistent.
+                none ->
+                    ?DEB1("   Child nonexistent!"),
+                    {#fuse_reply_err{err=enoent},State} % child nonexistent.
             end;
-        none -> {#fuse_reply_err{err=enoent},State} %no parent
+        none -> 
+            ?DEB1("   Parent nonexistent!"),
+            {#fuse_reply_err{err=enoent},State} %no parent
     end.
-
-lookup_tuple(_,[]) -> false;
+%% lookup_tuple takes a key, and a [{Key,Value}] and returns {value,Value} or none
+lookup_tuple(_,[]) -> none;
 
 lookup_tuple(Name,[{ChildName,Inode}|Children]) ->
     case Name == ChildName of
@@ -408,7 +415,7 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
                                  }.
 
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEBL(">~s inode:~p offset:~p",["readdir",Inode,Offset]),
+  ?DEBL(">readdir inode:~p offset:~p",[Inode,Offset]),
   case get_open_file(State,Inode) of 
     {value, OpenFile} ->
         DirEntryList = 
@@ -437,69 +444,87 @@ readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 
 %% TODO: rebuild this with lookup_children?
 direntries(Inode,InodeList) ->
-    ?DEB1("Creating direntries"),
-    ?DEB1("Getting entries"),
+    ?DEB1("    Creating direntries"),
+    ?DEB1("     Getting entries"),
     InodeEntry=gb_trees:get(Inode,InodeList),
-    ?DEB1("Getting children"),
+    ?DEB1("     Getting children"),
     Children=InodeEntry#inode_entry.children,
-    ?DEB1("Converting children"),
+    ?DEB1("     Converting children"),
     direntrify(Children,InodeList).
 
 direntrify([],_) -> 
-    ?DEB1("Done converting children"),
+    ?DEB1("    Done converting children"),
     [];
 
 direntrify([{Name,Inode}|Children],InodeList) ->
-    ?DEB2("Getting inode for child ~p",{Name,Inode}),
+    ?DEB2("    Getting inode for child ~p",{Name,Inode}),
     Child=gb_trees:get(Inode,InodeList),
-    ?DEB2("Getting permissions for child ~p",{Name,Inode}),
-    ChildPerms=(Child#inode_entry.internal_file_info)#file_info.mode,
-    ?DEB2("Creating direntry for child ~p",{Name,Inode}),
+    ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
+    ChildPerms=(Child#inode_entry.internal_file_info)#stat.st_mode,
+    ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
     Direntry=
         #direntry{name=Name
-                  ,stat=#stat{ st_ino=Inode,
-                               st_mode=ChildPerms,
-                               st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
-                              }
+            ,stat=#stat{ st_ino=Inode,
+            st_mode=ChildPerms,
+            st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
+                }
                     },
-    ?DEB2("Calculatig size for direntry for child ~p",{Name,Inode}),
-    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-    ?DEB2("Appending child ~p to list",{Name,Inode}),
-    [Direntry1|direntrify(Children,InodeList)].
-               
+                    ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
+                    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
+                    ?DEB2("    Appending child ~p to list",{Name,Inode}),
+                    [Direntry1|direntrify(Children,InodeList)].
+
 
 
 
 
 
 take_while (_, _, []) -> 
-  [];
+    [];
 take_while (F, Acc, [ H | T ]) ->
-  case F (H, Acc) of
-    { continue, NewAcc } ->
-      [ H | take_while (F, NewAcc, T) ];
-    stop ->
-      []
-  end.
+    case F (H, Acc) of
+        { continue, NewAcc } ->
+            [ H | take_while (F, NewAcc, T) ];
+        stop ->
+            []
+                end.
 
-    %{#fuse_reply_err{err=enotsup},State}.
+%{#fuse_reply_err{err=enotsup},State}.
 
 readlink(_Ctx,_Inode,_Continuation,State) ->
     ?DEBL("~s",["readlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
-    
+
 release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["release!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">~s~n",["releasedir"]),
-    % TODO: Release dir info from open files here. Make sure no other process tries to get to the same info etc.
     {#fuse_reply_err{err=ok},State}.
 
-removexattr(_Ctx,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["removexattr!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+%%Remove an extended attribute. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type removexattr_async_reply ().
+removexattr(_Ctx,Inode,Name,_Continuation,State) ->
+    ?DEBL(">removexattr inode: ~p name: ~p",[Inode,Name]),
+    {value,Entry} = lookup_inode_entry(Inode,State),
+    case Entry#inode_entry.type of
+        #external_file{ path=Path } ->
+            case dets:match_delete(?ATTR_DB,{Path,{binary_to_list(Name),'_'}}) of
+                ok -> 
+                    % XXX: Getting here is not a guarantee that there was any deleted elements to start with.
+                    ?DEB1("   Removed attribute, if any"),
+                    {#fuse_reply_err{err=ok},State};
+                {error, Error} ->
+                    ?DEBL("   Error: ~p", [Error]),
+                    {#fuse_reply_err{err=enoent},State}
+            end;
+
+        _ ->
+            ?DEB1("   Non-existent inode"),
+            {#fuse_reply_err{err=enoent},State}
+    end.
+
 
 rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
     ?DEBL("~s",["rename!"]),
@@ -508,9 +533,15 @@ rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["rmdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
-
+%% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
 setattr(_Ctx,_Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["setattr!"]),
+    ?DEBL("setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[_Inode,_Attr,_ToSet,_Fuse_File_Info]),
+%?FUSE_SET_ATTR_MODE
+%?FUSE_SET_ATTR_UID
+%?FUSE_SET_ATTR_GID
+%?FUSE_SET_ATTR_SIZE
+%?FUSE_SET_ATTR_ATIME
+%?FUSE_SET_ATTR_MTIME
     {#fuse_reply_err{err=enotsup},State}.
 
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
@@ -561,21 +592,22 @@ generate_ext_io(Path) ->
     ext_info_to_ext_io(ExtInfo).
 
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
-    ?DEB1(">ext_info_to_ext_io"),
+    ?DEB1("   Creating ext_io"),
     ext_info_to_ext_io(InternalExtInfoTupleList,[]).
 
 
 ext_info_to_ext_io([],B) -> 
     B0=B++"\0",
     B0len=length(B0),
-    ?DEBL("Done creating ext_io. Final string: \"~p\", size: ~p",[B0,B0len]),
+    ?DEB1("   Done creating ext_io"),
+    ?DEBL("   Final string: \"~p\", size: ~p",[B0,B0len]),
     {B0len,B0};
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
-    ?DEB2("   Adding zero to end of name ~p",Name),
+    ?DEB2("    Adding zero to end of name ~p",Name),
     Name0=Name++"\0",
-    ?DEB1("   Appending name to namelist"),
+    ?DEB1("    Appending name to namelist"),
     NewString=String++Name0,
-    ?DEB1("   Recursion"),
+    ?DEB1("    Recursion"),
     ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
 
