@@ -197,11 +197,12 @@ set_open_file(State,Inode,FileContents) ->
 
 %TODO: Find out what info it is I cannot provid here lest fuserl hangs.
 statify_file_info(#file_info{size=_Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=_Mode,links=Links,major_device=_MajorDevice,minor_device=_MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-    ?DEB1("    converting file info to fuse stat info"),
+    ?DEBL("    converting file info for ~p to fuse stat info:~n    atime:~p, converted atime:~p",[Inode,Atime,datetime_to_epoch(Atime)]),
     #stat{
 %        st_dev= {MajorDevice,MinorDevice}
          st_ino=Inode
-         ,st_mode=?S_IFDIR bor 8#00755 %Mode
+         %,st_mode=?S_IFDIR bor 8#00755 %Mode
+         ,st_mode=_Mode
          ,st_nlink=Links
          ,st_uid=UID
          ,st_gid=GID
@@ -209,12 +210,15 @@ statify_file_info(#file_info{size=_Size,type=_Type,atime=Atime,ctime=Ctime,mtime
 %         ,st_size=Size
         %,st_blksize
         %,st_blocks
-         ,st_atime=calendar:datetime_to_gregorian_seconds(Atime)
-         ,st_mtime=calendar:datetime_to_gregorian_seconds(Mtime)
-         ,st_ctime=calendar:datetime_to_gregorian_seconds(Ctime)
+         ,st_atime=datetime_to_epoch(Atime)
+         ,st_mtime=datetime_to_epoch(Mtime)
+         ,st_ctime=datetime_to_epoch(Ctime)
              }.
 
      
+datetime_to_epoch(DateTime) ->
+    calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
+
 access(_Ctx,_Inode,_Mask,_Continuation,State) ->
     ?DEBL("~s I: ~p M: ~p",["access!",_Inode,_Mask]),
     % So, if I've gotten this right, I've got an inode to look up rights for, a context in Ctx which tells me who wanted to know their rights to the file, a mask, which does SOMETHING - maybe this is what is used on file systems who has no rights normally? - a Continuation, which is a magical item which somehow is used to make asyncronuous calls - more on this when I find a documentation for the record - and finally the state, which, afaik, I will NOT be changing by checking access to files.
@@ -343,7 +347,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                     {value,Entry} = lookup_inode_entry(Inode,State),
                     ?DEB1("   Got child inode entry"),
                     Stat=Entry#inode_entry.internal_file_info,
-                    ?DEB1("   Made a stat of the inode entry, returning"),
+                    ?DEB1("   Got child inode entry stat file info, returning"),
                     Param=#fuse_entry_param{
                         ino=Inode,
                         generation=1, %for now.
@@ -460,19 +464,13 @@ direntrify([{Name,Inode}|Children],InodeList) ->
     ?DEB2("    Getting inode for child ~p",{Name,Inode}),
     Child=gb_trees:get(Inode,InodeList),
     ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
-    ChildPerms=(Child#inode_entry.internal_file_info)#stat.st_mode,
+    ChildStats=Child#inode_entry.internal_file_info,
     ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
-    Direntry=
-        #direntry{name=Name
-            ,stat=#stat{ st_ino=Inode,
-            st_mode=ChildPerms,
-            st_nlink=1 % For now. TODO: Make this mirror how many directories the file is in? Maybe just count the number of attributes and add one?
-                }
-                    },
-                    ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
-                    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-                    ?DEB2("    Appending child ~p to list",{Name,Inode}),
-                    [Direntry1|direntrify(Children,InodeList)].
+    Direntry= #direntry{name=Name ,stat=ChildStats },
+    ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
+    Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
+    ?DEB2("    Appending child ~p to list",{Name,Inode}),
+    [Direntry1|direntrify(Children,InodeList)].
 
 
 
@@ -540,8 +538,18 @@ setattr(_Ctx,_Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
 %?FUSE_SET_ATTR_UID
 %?FUSE_SET_ATTR_GID
 %?FUSE_SET_ATTR_SIZE
-%?FUSE_SET_ATTR_ATIME
-%?FUSE_SET_ATTR_MTIME
+        case (?FUSE_SET_ATTR_ATIME band _ToSet) == 0 of
+            false ->
+                ?DEB1("    setting atime");
+            true ->
+                ?DEB1("    not setting atime")
+        end,
+        case (?FUSE_SET_ATTR_MTIME band _ToSet) == 0 of
+            false ->
+                ?DEB1("    setting mtime");
+            true ->
+                ?DEB1("    not setting atime")
+        end,
     {#fuse_reply_err{err=enotsup},State}.
 
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
