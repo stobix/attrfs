@@ -145,13 +145,25 @@ make_inode_list({Entry,InitialIno},NextIno) ->
     InodeEntry=#inode_entry{ 
              children=Children
             ,type=Type
-            ,internal_file_info=statify_file_info(FileInfo#file_info{inode=InitialIno})
+            ,internal_file_info=statify_file_info(
+                FileInfo#file_info{
+                    inode=InitialIno
+                        % XXX: Ugly hack, yes, but it works most of the time.
+                        % If someone wants to break my file system by having
+                        % files with non-existant dates, then go ahead.
+                   ,atime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime))
+                   ,ctime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime))
+                   ,mtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime))
+                       })
             ,ext_info=ExtInfo
             ,ext_io=ExtIo},
     {ChildInodeEntries,FinalIno} = 
-        lists:mapfoldl(
-            fun({A,AA},B)->make_inode_list({Entry++"/"++A,AA},B) end
-                ,NewIno,Children),
+        lists:mapfoldl
+            (
+                fun({A,AA},B)->make_inode_list({Entry++"/"++A,AA},B) end
+                ,NewIno
+                ,Children
+            ),
     % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
     {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
         
