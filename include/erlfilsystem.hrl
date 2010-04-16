@@ -29,13 +29,13 @@
         % the path is what path leads to the file in some external file system.
        {path::string()
         % external_file_info mirrors the file info for the real file in some real file system, if applicable.
-        ,external_file_info
+        ,external_file_info::#file_info{} % file:#file_info{}
        }).
 
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
--type file_type()::#external_file{}|internal_file|#external_dir{}|ext_info_dir.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|internal_dir.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 -record(inode_entry,
@@ -50,15 +50,21 @@
         ,ext_io::ext_io_tuple()
         }).
 
+
+%% This record is a quick way to find which files has what attribute.
+-record(attribute_entry,
+        {children::name_tuple()
+        }).
+
 -record(inode_list,
-        {inode_entries% ::gb_list of inode_entry
+        {inode_entries% ::gb_trees{} of inode_entry
         ,biggest::integer()
         }).
 
 
 -record(state,
-        {
-        inode_list,
-        open_files
+        {inode_list::#inode_list{}
+        ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
+        ,attribute_list%::#gb_trees{} of #attribute_entry with inode number string
         }).
 

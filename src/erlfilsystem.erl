@@ -638,8 +638,7 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   removing attribute ~p for file ~p from database",[Name,Path]), %% Maybe I shouldn't do this?  Depends on how I deal with attribute sub folders.
-            N=dets:match_delete(?ATTR_DB,{Path,{Name,'_'}}),
-            ?DEBL("   removed ~p attributes",[N]),
+            remove_old_attribute(Path,Name),
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Name,Value,Path]),
             add_new_attribute(Path,{Name,Value}),
             ?DEB1("   generating ext io and info"),
@@ -657,6 +656,11 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
 add_new_attribute(Path,{Name,Value}) ->
     dets:insert(?ATTR_DB,{Path,{Name,Value}}).
+
+
+%% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
+remove_old_attribute(Path,{Name,_Value}) ->
+    dets:match_delete(?ATTR_DB,{Path,{Name,'_'}}).
 
 
 generate_ext_info(Path) ->
