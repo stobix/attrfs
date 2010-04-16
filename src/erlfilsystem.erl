@@ -78,13 +78,34 @@ start_link(MountDir,LinkedIn,MountOpts) ->
 
 start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     Options=[],
-    
     ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
-    {InodeList,BiggestIno}=make_inode_list({MirrorDir,1},2),
+    RootEntry=#inode_entry{
+        children=[{"real",2},{"attribs",3}]
+       ,type=internal_dir %XXX: Really ok to let this have the same type as attribute dirs?
+       ,internal_file_info=#stat{
+           st_mode=8#755 bor ?S_IFDIR
+          ,st_ino=2
+        }
+       ,ext_info=[]
+       ,ext_io=ext_info_to_ext_io([])
+    },
+    AttributeEntry=#inode_entry{
+        children=[]
+       ,type=internal_dir
+       ,internal_file_info=#stat{
+            st_mode=8#755 bor ?S_IFDIR
+           ,st_ino=3
+        }
+       ,ext_info=[]
+       ,ext_io=ext_info_to_ext_io([])
+    },
+    {InodeList,BiggestIno}=make_inode_list({MirrorDir,2},4),
     ?DEB1("   inode list made"),
-    InodeTree=gb_trees:from_orddict(InodeList),
+    InodeTree0=gb_trees:from_orddict(InodeList),
+    InodeTree1=gb_trees:insert(1,RootEntry,InodeTree0),
+    InodeTree=gb_trees:insert(3,AttributeEntry,InodeTree1),
     ?DEB1("   inode tree made"),
     InodeListRec=#inode_list{inode_entries=InodeTree,biggest=BiggestIno},
     ?DEB1("   inode list made"),
@@ -138,9 +159,8 @@ make_inode_list({Entry,InitialIno},NextIno) ->
                 _ ->
             {error,not_supported} % for now
     end,
-    ExtInfo=generate_ext_info(Entry),
+    {ExtInfo,ExtIo}=generate_ext_info_io(Entry),
     ?DEB2("     ext info: ~p", ExtInfo),
-    ExtIo=ext_info_to_ext_io(ExtInfo),
     ?DEB1("    Generating entry"),
     % XXX: This will break if provided with a date and time that does not
     % occur.
@@ -295,10 +315,10 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
     ?DEBL("~s",["getlk!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-%% TODO: Handle the case where the OS wants some strange value which isn't implemented, say the value for system.posix_acl_access
+%% TODO: Do something with system.posix_acl_access and similar?
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 getxattr(_Ctx,Inode,Name,Size,_Continuation,State) ->
-    ?DEBL(">getxattr, name:~p, size:~p, inode:~p)",[Name,Size,Inode]),
+    ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[Name,Size,Inode]),
     {value,Entry}=lookup_inode_entry(Inode,State),
     ?DEB1("   Got inode entry"),
     ExtInfo=Entry#inode_entry.ext_info,
@@ -330,7 +350,7 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
     
 %%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (inCLUDING Null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
-    ?DEB2("listxattr(~p)",Inode),
+    ?DEB2(">listxattr inode:~p",Inode),
     {value,Entry}=lookup_inode_entry(Inode,State),
     ?DEB1("   got inode entry."),
     {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
@@ -345,10 +365,6 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     end,
     {Reply,State}.
 
-
-
-
-    
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
     ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
@@ -525,16 +541,19 @@ removexattr(_Ctx,Inode,Name,_Continuation,State) ->
             case dets:match_delete(?ATTR_DB,{Path,{binary_to_list(Name),'_'}}) of
                 ok -> 
                     % XXX: Getting here is not a guarantee that there was any deleted elements to start with.
-                    ?DEB1("   Removed attribute, if any"),
-                    {#fuse_reply_err{err=ok},State};
+                    ?DEB1("   Removed attribute, if any, from database and inode entry"),
+                    {ExtInfo,ExtIo}=generate_ext_info_io(Path),
+                    NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
+                    NewState=update_inode_entry(Inode,NewEntry,State),
+                    {#fuse_reply_err{err=ok},NewState};
                 {error, Error} ->
                     ?DEBL("   Error: ~p", [Error]),
-                    {#fuse_reply_err{err=enoent},State}
+                    {#fuse_reply_err{err=enodata},State}
             end;
 
         _ ->
-            ?DEB1("   Non-existent inode"),
-            {#fuse_reply_err{err=enoent},State}
+            ?DEB1("   Non-supported inode type"),
+            {#fuse_reply_err{err=enosup},State}
     end.
 
 
@@ -618,11 +637,13 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
     Value=binary_to_list(BValue),
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
+            ?DEBL("   removing attribute ~p for file ~p from database",[Name,Path]), %% Maybe I shouldn't do this?  Depends on how I deal with attribute sub folders.
+            N=dets:match_delete(?ATTR_DB,{Path,{Name,'_'}}),
+            ?DEBL("   removed ~p attributes",[N]),
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Name,Value,Path]),
             add_new_attribute(Path,{Name,Value}),
             ?DEB1("   generating ext io and info"),
-            NewExtIo=generate_ext_io(Path),
-            NewExtInfo=generate_ext_info(Path),
+            {NewExtInfo,NewExtIo}=generate_ext_info_io(Path),
             ?DEB1("   creating new inode entry"),
             NewEntry=Entry#inode_entry{ext_io=NewExtIo,ext_info=NewExtInfo},
             NewState=update_inode_entry(Inode,NewEntry,State),
@@ -642,14 +663,15 @@ generate_ext_info(Path) ->
     ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
     lists:flatten(ExtInfo0). % Going from a list of lists of tuples to a list of tuples.
 
-generate_ext_io(Path) ->
+generate_ext_info_io(Path) ->
     ExtInfo=generate_ext_info(Path),
-    ext_info_to_ext_io(ExtInfo).
+    ExtIo=ext_info_to_ext_io(ExtInfo),
+    {ExtInfo,ExtIo}.
+
 
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
     ?DEB1("   Creating ext_io"),
     ext_info_to_ext_io(InternalExtInfoTupleList,[]).
-
 
 ext_info_to_ext_io([],B) -> 
     B0=B++"\0",
@@ -657,6 +679,7 @@ ext_info_to_ext_io([],B) ->
     ?DEB1("   Done creating ext_io"),
     ?DEBL("   Final string: \"~p\", size: ~p",[B0,B0len]),
     {B0len,B0};
+
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     ?DEB2("    Adding zero to end of name ~p",Name),
     Name0=Name++"\0",
