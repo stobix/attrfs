@@ -1,6 +1,30 @@
 -module(erlfilsystem).
 
 %%%=========================================================================
+%%%=========================================================================
+%%% @author Joel Ericson <kasettbok@gmail.com>
+%%%
+%%% @copyright Copylefted using some GNU license or other.
+%%%
+%%% @version Almost working, yo...
+%%%-------------------------------------------------------------------------
+%%% @doc This is the attrfs fuserl server.
+%%% Attrfs is a file system that is used to sort files into several virtual
+%%% directories according to what xattr attributes one assigns to the files.
+%%% 
+%%% start_link({Dir,Fluff}) recursively takes the files in the directory 
+%%% Fluff and sorts them into subfolders in the directory Dir/attribs. 
+%%% One can add or modify attributes by means of changing xattribs on the 
+%%% files, or using move operations (once I implement it, that is.)
+%%% Since most of what this module does is implement the functions 
+%%% documented in fuserl, not many functions in this module are documented.
+%%% @end
+%%%=========================================================================
+%%%=========================================================================
+
+
+
+%%%=========================================================================
 %%% server functions
 %%%=========================================================================
 -export([handle_info/2,init/1]).
@@ -437,7 +461,7 @@ setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   removing attribute ~p for file ~p from database",[Name,Path]), %% Maybe I shouldn't do this?  Depends on how I deal with attribute sub folders.
-            remove_old_attribute(Path,Name),
+            remove_old_attribute(Path,{Name,Value}),
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Name,Value,Path]),
             add_new_attribute(Path,{Name,Value}),
             ?DEB1("   generating ext io and info"),
@@ -461,7 +485,7 @@ symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
 
 terminate(_Reason,_State) ->
     ?DEBL(">terminate ~p",[_Reason]),
-    ?DEB2("   Closing database ~p",?ATTR_DB),
+    ?DEB2("   Closing database \"~p\"",?ATTR_DB),
     dets:close(?ATTR_DB),
     exit(3).
 
@@ -555,7 +579,11 @@ add_new_attribute(Path,{Name,Value}) ->
 %% remove_old_attribute
 %% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
 remove_old_attribute(Path,{Name,_Value}) ->
-    dets:match_delete(?ATTR_DB,{Path,{Name,'_'}}).
+%    case length(dets:match(?ATTR_DB,{Path,{Name,'$1'}}))>0 of
+%        true -> dets:match_delete(?ATTR_DB,{Path,{Name,'_'}});
+%        false -> ok
+%    end.
+ok.
 
 
 generate_ext_info(Path) ->
@@ -689,17 +717,8 @@ make_inode_list({Entry,InitialIno},NextIno) ->
             ),
     % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
     {lists:keysort(1,lists:flatten([{InitialIno,InodeEntry},ChildInodeEntries])),FinalIno}.
-%these I stole from fuserlproc. Maybe they'll come in handy.
--define (DIRATTR (X), #stat{ st_ino = (X), 
-                             st_mode = ?S_IFDIR bor 8#0555, 
-                             st_nlink = 1 }).
 
-
--define(STAT (X,Y,Z), #stat{ st_ino = (X),
-                             st_mode = (Y),
-                             st_nlink = Z
-                                 }.
-
+%% (This one I stole from fuserlproc.)
 %% this take_while runs the function F until it returns stop
 %% Good for taking items from list where the number of list items taken
 %% are dependent on the individual size of each item.

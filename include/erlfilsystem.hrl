@@ -1,4 +1,12 @@
 
+%%%-------------------------------------------------------
+%%% @author Joel Ericson <kasettbok@gmail.com>
+%%%
+%%% @version Almost working, yo...
+%%% @doc Header file for the attrfs modul.
+%%% 
+%%% @end
+%%%-------------------------------------------------------
 
 -define(ATTR_DB, attributes).
 -define(ATTR_DB_FILE, attributes).
@@ -65,3 +73,13 @@
         ,attribute_list%::#gb_trees{} of #attribute_entry{} with inode number string
         }).
 
+%these I stole from fuserlproc. Maybe they'll come in handy.
+-define (DIRATTR (X), #stat{ st_ino = (X), 
+                             st_mode = ?S_IFDIR bor 8#0555, 
+                             st_nlink = 1 }).
+
+
+-define(STAT (X,Y,Z), #stat{ st_ino = (X),
+                             st_mode = (Y),
+                             st_nlink = Z
+                                 }.
