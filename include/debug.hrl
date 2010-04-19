@@ -1,7 +1,13 @@
 -ifdef(debug).
+-ifdef(timestamp).
+-define(DEB1(X),io:format("[~p:~p:~p] ~p:~p ~s~n",tuple_to_list(time())++[?MODULE,?LINE,X])).
+-define(DEB2(X,Y),io:format("[~p:~p:~p] ~p:~p "++X++"~n",tuple_to_list(time())++[?MODULE,?LINE,Y])).
+-define(DEBL(X,Y),io:format("[~p:~p:~p] ~p:~p "++X++"~n",tuple_to_list(time())++[?MODULE,?LINE]++Y)).
+-else.
 -define(DEB1(X),io:format("~p:~p ~s~n",[?MODULE,?LINE,X])).
 -define(DEB2(X,Y),io:format("~p:~p "++X++"~n",[?MODULE,?LINE,Y])).
 -define(DEBL(X,Y),io:format("~p:~p "++X++"~n",[?MODULE,?LINE]++Y)).
+-endif.
 -else.
 -define(DEB1(X),void).
 -define(DEB2(X,Y),void).

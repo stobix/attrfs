@@ -25,14 +25,14 @@
 
 
 %%%=========================================================================
-%%% server functions
+%%% server function exports
 %%%=========================================================================
 -export([handle_info/2,init/1]).
 -export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
 -export([start_link/1,start_link/2,start_link/3,start_link/4]).
 
 %%%=========================================================================
-%%% fuserl functions
+%%% fuserl function exports
 %%%=========================================================================
 -export([access/5,
          create/7,
@@ -69,21 +69,27 @@
 
 
 %%%=========================================================================
-%%% debug functions
+%%% debug function exports
 %%%=========================================================================
 
 -export([get_dir_hier/2]).
+
+%%%=========================================================================
+%%% Includes and behaviour
+%%%=========================================================================
 
 -behaviour(fuserl).
 
 -include_lib("fuserl/include/fuserl.hrl").
 -include_lib("kernel/include/file.hrl").
+
 -include("../include/erlfilsystem.hrl").
 -include("../include/debug.hrl").
 
 %%%=========================================================================
 %%% server functions
 %%%=========================================================================
+
 handle_info(_Msg,State) ->
     ?DEBL(">handle_info(~p)",[_Msg]),
     {noreply,State}.
@@ -92,6 +98,7 @@ code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
     ?DEBL("~s",["code_change!"]),
     ok.
 
+%% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
 start_link({MountDir,MirrorDir}) ->
     start_link(MountDir,false,"",MirrorDir);
 
@@ -155,7 +162,7 @@ init(State=#state{}) ->
 %%Check file access permissions. Mask is a bitmask consisting of ?F_OK, ?X_OK, ?W_OK, and ?R_OK, which are portably defined in fuserl.hrl . #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type access_async_reply ().
 access(Ctx,Inode,Mask,_Continuation,State) ->
     ?DEBL(">access inode: ~p, mask: ~p, context: ~p",[Inode,Mask,Ctx]),
-    Reply=transmogrify(has_access(Inode,Mask,Ctx,State),ok,eacces),
+    Reply=test_access(Inode,Mask,Ctx,State),
     {#fuse_reply_err{err=Reply},State}.
 
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
@@ -392,14 +399,31 @@ rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
+%% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
 setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
-%?FUSE_SET_ATTR_UID
-%?FUSE_SET_ATTR_GID
+    ?DEBL(">setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
     {value,Entry}=lookup_inode_entry(Inode,State),
     Stat=Entry#inode_entry.internal_file_info,
     NewStat=Stat#stat{
-        st_atime=
+        st_uid=
+            case (?FUSE_SET_ATTR_UID band _ToSet) == 0 of
+                false ->
+                    ?DEB1("    setting UID"),
+                    _Attr#stat.st_uid;
+                true ->
+                    ?DEB1("    not setting atime"),
+                    Stat#stat.st_uid
+            end
+        ,st_gid=
+            case (?FUSE_SET_ATTR_GID band _ToSet) == 0 of
+                false ->
+                    ?DEB1("    setting GID"),
+                    _Attr#stat.st_gid;
+                true ->
+                    ?DEB1("    not setting atime"),
+                    Stat#stat.st_gid
+            end
+        ,st_atime=
             case (?FUSE_SET_ATTR_ATIME band _ToSet) == 0 of
                 false ->
                     ?DEB1("    setting atime"),
@@ -735,47 +759,43 @@ take_while (F, Acc, [ H | T ]) ->
             []
     end.
 
-
-transmogrify(Value,True,False) ->
-    if Value -> True;
-        true -> False
+%% @spec (boolean(),A,B) -> A|B.
+%% @doc Takes a boolean and redefines the meanings of true and false.
+%% Example: transmogrify(is_foo(X),good,{error,no_foo}) will return either 
+%% good or {error, no_foo}, depending on whether is_foo(X) returns true or 
+%% false.
+transmogrify(TrueOrFalse,NewTrue,NewFalse) ->
+    if 
+        TrueOrFalse -> 
+            ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewTrue]),
+            NewTrue;
+        true -> 
+            ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewFalse]),
+            NewFalse
     end.
 
-%% This is a boolean function that resides in an alternate universe, where true is ok and false is eacces
-has_access(Inode,Mask,Ctx,State) ->
+test_access(Inode,Mask,Ctx,State) ->
     ?DEB1("   checking access..."),
     case lookup_inode_entry(Inode,State) of
         {value, Entry} ->
             % Can I use the mask like this?
             case Mask of
                 ?F_OK ->
-                    true;
-                _ -> has_rwx_access(Entry,Mask,Ctx)
+                    ?DEB1("   file existing"),
+                    ok;
+                _ -> 
+                    transmogrify(has_rwx_access(Entry,Mask,Ctx),ok,eacces)
             end;
         none ->
             ?DEB1("   file does not exist!"),
-            false
+            enoent
     end.
 
 has_rwx_access(Entry,Mask,Ctx) ->
     #stat{st_mode=Mode,st_uid=Uid,st_gid=Gid}=Entry#inode_entry.internal_file_info,
-    lists:foldr(
-        fun(_,true) -> true;
-           (true,_) -> true;
-           (false,_) -> false
-        end,
-        false,
-        [
-            if Gid==Ctx#fuse_ctx.gid ->
-                   has_group_perms(Mode,Mask);
-               true -> false
-            end,
-            if Uid==Ctx#fuse_ctx.uid ->
-                   has_user_perms(Mode,Mask);
-               true -> false
-            end,
-            has_other_perms(Mode,Mask)
-        ]).
+    has_other_perms(Mode,Mask)
+        orelse Gid==Ctx#fuse_ctx.gid andalso has_group_perms(Mode,Mask)
+        orelse Uid==Ctx#fuse_ctx.uid andalso has_user_perms(Mode,Mask).
 
 has_other_perms(Mode,Mask) ->
     Mode band ?S_IRWXO band Mask/=0.
