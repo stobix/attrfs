@@ -148,12 +148,15 @@ init(State=#state{}) ->
 
 %%%=========================================================================
 %%% fuserl functions
+%%% The rudimentary file headers in here are copied from the fuserl 
+%%% documentation.
 %%%=========================================================================
 
-access(_Ctx,_Inode,_Mask,_Continuation,State) ->
-    ?DEBL("~s I: ~p M: ~p",["access!",_Inode,_Mask]),
-    % First, lets try to just create an "access denied" version of this thing.
-    {#fuse_reply_err{err=enotsup},State}. 
+%%Check file access permissions. Mask is a bitmask consisting of ?F_OK, ?X_OK, ?W_OK, and ?R_OK, which are portably defined in fuserl.hrl . #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type access_async_reply ().
+access(Ctx,Inode,Mask,_Continuation,State) ->
+    ?DEBL(">access inode: ~p, mask: ~p, context: ~p",[Inode,Mask,Ctx]),
+    Reply=transmogrify(has_access(Inode,Mask,Ctx,State),ok,eacces),
+    {#fuse_reply_err{err=Reply},State}.
 
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
     ?DEBL("~s",["create!"]),
@@ -181,22 +184,22 @@ getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
     {noreply,State}.
 
 getattr_internal(Inode,Continuation,State) ->
-    ?DEB2("getattr_internal(~p)",Inode),
+    ?DEB2("  >getattr_internal inode:~p",Inode),
     case lookup_inode_entry(Inode,State) of
         none ->
-            ?DEB1("non-existent file"),
+            ?DEB1("   Non-existent file"),
             Reply=#fuse_reply_err{err=enoent};
         {value,Entry} ->
-            ?DEB1("File exists, returning info"),
+            ?DEB1("   File exists, returning info"),
                 Reply=#fuse_reply_attr{
                     attr=Entry#inode_entry.internal_file_info,
                     attr_timeout_ms=5
                 };
             _A -> 
-                ?DEB2("This should not be happening: ~p",_A),
+                ?DEB2("   This should not be happening: ~p",_A),
                 Reply=#fuse_reply_err{err=enotsup}
     end,
-    ?DEB1("Sending reply"),
+    ?DEB1("   Sending reply"),
     fuserlsrv:reply(Continuation,Reply).
 
 
@@ -311,7 +314,7 @@ opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_
     {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
 
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["read!"]),
+    ?DEBL(">read",[]),
     {#fuse_reply_err{err=enotsup},State}.
 
 readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
@@ -369,8 +372,8 @@ removexattr(_Ctx,Inode,Name,_Continuation,State) ->
                     NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
                     NewState=update_inode_entry(Inode,NewEntry,State),
                     {#fuse_reply_err{err=ok},NewState};
-                {error, Error} ->
-                    ?DEBL("   Error: ~p", [Error]),
+                {error, _Error} ->
+                    ?DEBL("   Error: ~p", [_Error]),
                     {#fuse_reply_err{err=enodata},State}
             end;
 
@@ -571,19 +574,19 @@ set_open_file(State,Inode,FileContents) ->
     NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
     set_open_files(State,NewOpenFiles).
 
-%% add_new_attribute
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
 add_new_attribute(Path,{Name,Value}) ->
-    dets:insert(?ATTR_DB,{Path,{Name,Value}}).
+    ok=dets:insert(?ATTR_DB,{Path,{Name,Value}}).
 
-%% remove_old_attribute
 %% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
 remove_old_attribute(Path,{Name,_Value}) ->
-%    case length(dets:match(?ATTR_DB,{Path,{Name,'$1'}}))>0 of
-%        true -> dets:match_delete(?ATTR_DB,{Path,{Name,'_'}});
-%        false -> ok
-%    end.
-ok.
+    Matches=dets:match(?ATTR_DB,{Path,{Name,'$1'}}),
+    ?DEBL("   removing the following items (if any): ~p",[Matches]),
+    case length(Matches)>0 of
+        true -> dets:match_delete(?ATTR_DB,{Path,{Name,'_'}});
+        false -> ok
+    end.
+%ok.
 
 
 generate_ext_info(Path) ->
@@ -731,6 +734,57 @@ take_while (F, Acc, [ H | T ]) ->
         stop ->
             []
     end.
+
+
+transmogrify(Value,True,False) ->
+    if Value -> True;
+        true -> False
+    end.
+
+%% This is a boolean function that resides in an alternate universe, where true is ok and false is eacces
+has_access(Inode,Mask,Ctx,State) ->
+    ?DEB1("   checking access..."),
+    case lookup_inode_entry(Inode,State) of
+        {value, Entry} ->
+            % Can I use the mask like this?
+            case Mask of
+                ?F_OK ->
+                    true;
+                _ -> has_rwx_access(Entry,Mask,Ctx)
+            end;
+        none ->
+            ?DEB1("   file does not exist!"),
+            false
+    end.
+
+has_rwx_access(Entry,Mask,Ctx) ->
+    #stat{st_mode=Mode,st_uid=Uid,st_gid=Gid}=Entry#inode_entry.internal_file_info,
+    lists:foldr(
+        fun(_,true) -> true;
+           (true,_) -> true;
+           (false,_) -> false
+        end,
+        false,
+        [
+            if Gid==Ctx#fuse_ctx.gid ->
+                   has_group_perms(Mode,Mask);
+               true -> false
+            end,
+            if Uid==Ctx#fuse_ctx.uid ->
+                   has_user_perms(Mode,Mask);
+               true -> false
+            end,
+            has_other_perms(Mode,Mask)
+        ]).
+
+has_other_perms(Mode,Mask) ->
+    Mode band ?S_IRWXO band Mask/=0.
+
+has_group_perms(Mode,Mask) ->
+    Mode band ?S_IRWXG bsr 3 band Mask/=0.
+
+has_user_perms(Mode,Mask) ->
+    Mode band ?S_IRWXU bsr 6 band Mask/=0.
 
 %%%=========================================================================
 %%% Debug functions
