@@ -20,7 +20,7 @@
 -type inode_number()::pos_integer()|null.
 -type name_tuple()::{string(),inode_number()}.
 -type name_list()::[name_tuple()].
--type attrib_list()::[{name_tuple(), name_tuple()|null}].
+-type attrib_list()::[{name_tuple(), name_tuple()}].
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.
 
@@ -41,12 +41,15 @@
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
--type file_type()::#external_file{}|internal_file|#external_dir{}|internal_dir.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 -record(inode_entry,
+        % This file system uses a one-to-one correspondence between names and inodes, so that move, link and copy can produce the same results.
+        % TODO: Deal with the case that several files in external dirs have the same name.
+        {name::string()
         % children are the children of the file/dir
-        {children::name_list()
+        ,children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
         ,type::file_type()
         % internal_file_info is the file info that the file has in my file system.
@@ -59,12 +62,13 @@
 
 %% This record is a quick way to find which files has what attribute.
 -record(attribute_entry,
-        {children::name_tuple()
+        {inode::non_neg_integer(),
+        children::name_list()
         }).
 
 -record(inode_list,
         {inode_entries% ::gb_trees{} of inode_entry
-        ,biggest::integer()
+        ,biggest::integer() % actually the smallest available inode number.
         }).
 
 -record(state,
@@ -72,6 +76,8 @@
         ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
         ,attribute_list%::#gb_trees{} of #attribute_entry{} with inode number string
         }).
+
+-define (DIR (Stat), Stat#stat{ st_mode = Stat#stat.st_mode bor ?S_IFDIR }).
 
 %these I stole from fuserlproc. Maybe they'll come in handy.
 -define (DIRATTR (X), #stat{ st_ino = (X), 
