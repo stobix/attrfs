@@ -624,6 +624,10 @@ remove_old_attribute(Path,{Name,_Value}) ->
     end.
 %ok.
 
+dir(Stat) ->
+    NewMode=(Stat#stat.st_mode band 8#777) bor ?S_IFDIR,
+    ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
+    Stat#stat{st_mode=NewMode}.
 
 generate_ext_info(Path) ->
     ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
@@ -802,7 +806,7 @@ append_attribute_dir(AttrDir,ChildName,ChildIno,Stat,{AttrDict,IList,CurrIno,Chi
                     type=attribute_dir,
                     name=AttrDir,
                     children=[{ChildName,ChildIno}],
-                    internal_file_info=?DIR(Stat),
+                    internal_file_info=dir(Stat),
                     ext_info=[],
                     ext_io=ext_info_to_ext_io([])
                 }}]),

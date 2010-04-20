@@ -77,7 +77,8 @@
         ,attribute_list%::#gb_trees{} of #attribute_entry{} with inode number string
         }).
 
--define (DIR (Stat), Stat#stat{ st_mode = Stat#stat.st_mode bor ?S_IFDIR }).
+-define (DIR (Stat), Stat#stat{ st_mode = (Stat#stat.st_mode band 8#777) bor ?S_IFDIR }).
+%-define (DIR (Stat), Stat).
 
 %these I stole from fuserlproc. Maybe they'll come in handy.
 -define (DIRATTR (X), #stat{ st_ino = (X), 
