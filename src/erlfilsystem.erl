@@ -148,8 +148,10 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ,ext_info=[]
        ,ext_io=ext_info_to_ext_io([])
     },
-            InodeList=InodeList1++AttributeBranchList, % Since InodeList1 is created first, this will produce an ordered list.
     ?DEB1("   attribute inode list made"),
+    % Since InodeList1 is created first, and both InodeList1 and 
+    % AttributeBranchList are sorted, this will produce an ordered list.
+    InodeList=InodeList1++AttributeBranchList,
     InodeTree0=gb_trees:from_orddict(InodeList),
     InodeTree1=gb_trees:insert(1,RootEntry,InodeTree0),
     InodeTree=gb_trees:insert(3,AttributeEntry,InodeTree1),

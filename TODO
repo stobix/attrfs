@@ -1,13 +1,13 @@
-Create simple file storing for file attributes?
-Make the main app sort files into attribute folders.
 Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
     Copy or only link?
 Make a real app of the main app.
 
+Include support for "deep attributes":
+    % attr -s "Foo/Bar" -V "Etaoin,Shrdlu" Baz
+    =>
+    % ls attribs/Foo/Bar -R
+    Etaoin/Baz
+    Shrdlu/Baz
 
-A two-tuple should be enough to represent attributes. {Name,Val} <-> /Name/Val, {{Name,Val,Foo},Beep} <-> /Name/Val/Foo/Beep, {Name,{Val,Foo}} <-> /Name/{Val,Foo}
-Possibly, dots are more human readable. {"Cathegory.SubCat","{Foo,Bar}"} <-> Cathegory/SubCat/{Foo,Bar}
-Or maybe {"Cat/Sub","Etaoin,Shrdlu"}. This, I think I like the most.
 
 Apparently, linux calls open before calling setattr. What to do with open?
-Access needs to be dealt with.
