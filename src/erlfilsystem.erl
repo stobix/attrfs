@@ -128,9 +128,18 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ,ext_info=[]
        ,ext_io=ext_info_to_ext_io([])
     },
+    {InodeList0,BiggestIno0}=make_inode_list({MirrorDir,2},4),
+    ?DEB2("   inode list made; smallest available inode: ~p",BiggestIno0),
+    {InodeList1,{AttributeDict,AttributeBranchList,BiggestIno,AttribChildren}}=
+        lists:mapfoldl
+            (
+                fun(A,B) -> make_attribute_list(A,B) end, 
+                {dict:new(),[],BiggestIno0,[]},
+                InodeList0
+            ),
     AttributeEntry=#inode_entry{
         name="attribs"
-       ,children=[]
+       ,children=AttribChildren
        ,type=internal_dir
        ,internal_file_info=#stat{
             st_mode=8#755 bor ?S_IFDIR
@@ -139,15 +148,6 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ,ext_info=[]
        ,ext_io=ext_info_to_ext_io([])
     },
-    {InodeList0,BiggestIno0}=make_inode_list({MirrorDir,2},4),
-    ?DEB2("   inode list made; smallest available inode: ~p",BiggestIno0),
-    {InodeList1,{AttributeDict,AttributeBranchList,BiggestIno}}=
-        lists:mapfoldl
-            (
-                fun(A,B) -> make_attribute_list(A,B) end, 
-                {dict:new(),[],BiggestIno0},
-                InodeList0
-            ),
             InodeList=InodeList1++AttributeBranchList, % Since InodeList1 is created first, this will produce an ordered list.
     ?DEB1("   attribute inode list made"),
     InodeTree0=gb_trees:from_orddict(InodeList),
@@ -771,13 +771,14 @@ make_inode_list({Entry,InitialIno},NextIno) ->
 make_attribute_list({Ino,Entry},Acc) ->
     #inode_entry{ext_info=EInfo,internal_file_info=Stat,name=Name}=Entry,
     ?DEBL("   making attribute list for {~p,~p}",[Ino,Name]),
-    {NewEInfo,NewAcc={_,_,_Ino}}=lists:mapfoldl(
+    {NewEInfo,NewAcc={_,_,_Ino,_}}=lists:mapfoldl(
         fun({Attr,Val},Acc) ->
             ?DEBL("    appending ~p/{~p,~p}",[Val,Ino,Name]),
             {ValIno,Acc0}=append_attribute_dir(Val,Name,Ino,Stat,Acc),
             ?DEBL("    appending ~p/{~p,~p}",[Attr,ValIno,Val]),
             {AttrIno,Acc1}=append_attribute_dir(Attr,Val,ValIno,Stat,Acc0),
-            {{{Attr,AttrIno},{Val,ValIno}},Acc1}
+            Acc2=append_attribute_child({Attr,AttrIno},Acc1),
+            {{{Attr,AttrIno},{Val,ValIno}},Acc2}
         end,
         Acc,
         EInfo),
@@ -785,8 +786,11 @@ make_attribute_list({Ino,Entry},Acc) ->
     {{Ino,Entry#inode_entry{ext_info=NewEInfo}},NewAcc}.
 
 
-append_attribute_dir(AttrDir,ChildName,ChildIno,Stat,{AttrDict,IList,CurrIno}) ->
-%   {MyIno, {NewAttrDict,NewIList,NewCurrIno}} =
+append_attribute_child(Child,{_Dict,_List,_Ino,Children}) ->
+    {_Dict,_List,_Ino,lists:keymerge(1,Children,[Child])}.
+
+append_attribute_dir(AttrDir,ChildName,ChildIno,Stat,{AttrDict,IList,CurrIno,Children}) ->
+%   {MyIno, {NewAttrDict,NewIList,NewCurrIno,_Children}} =
     case dict:find(AttrDir,AttrDict) of
         % No entry found, creating new attribute entry.
         error ->
@@ -802,7 +806,8 @@ append_attribute_dir(AttrDir,ChildName,ChildIno,Stat,{AttrDict,IList,CurrIno}) -
                     ext_info=[],
                     ext_io=ext_info_to_ext_io([])
                 }}]),
-            CurrIno+1
+            CurrIno+1,
+            Children
             }};
         {ok,TupleList} ->
             {inode,MyIno}=lists:keyfind(inode,1,TupleList),
@@ -815,7 +820,8 @@ append_attribute_dir(AttrDir,ChildName,ChildIno,Stat,{AttrDict,IList,CurrIno}) -
             {
             dict:append(AttrDir,{ChildName,ChildIno},AttrDict),
             lists:keymerge(1,[{AttrDir,NewEntry}],IList),
-            CurrIno
+            CurrIno,
+            Children
             }}
     end.
 
