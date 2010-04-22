@@ -666,22 +666,22 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
 %%  * removes the attribute from the file entry
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
 
-remove_old_attribute(Path,Inode,Entry,Name,State) ->
-    ?DEBL("    deleting ~p from ~p",[Name,Path]),
-    Matches=dets:match(?ATTR_DB,{Path,{Name,'$1'}}),
+remove_old_attribute(Path,Inode,Entry,AName,State) ->
+    ?DEBL("    deleting ~p from ~p",[AName,Path]),
+    Matches=dets:match(?ATTR_DB,{Path,{AName,'$1'}}),
     case length(Matches)>0 of
         true -> 
             ?DEBL("   removing the following items (if any): ~p",[Matches]),
-            dets:match_delete(?ATTR_DB,{Path,{Name,'_'}});
+            dets:match_delete(?ATTR_DB,{Path,{AName,'_'}});
         false -> 
             ?DEB1("   found no items to remove, doing nothing"),
             ok
     end,
-    ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{Name,'$1'}})]),
+    ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{AName,'$1'}})]),
     % Filters out the attribute to be deleted from the rest of the children for the file whose attribute is to be deleted.
     case lists:foldl
         (
-        fun(Deleted={{DName,_DNameIno},{_DValue,_DValueIno}},{_Empty,Acc}) when DName==Name ->
+        fun(Deleted={{DName,_DNameIno},{_DValue,_DValueIno}},{_Empty,Acc}) when DName==AName ->
                {Deleted,Acc};
            (OtherKey,{Deleted,Acc0}) ->
                {Deleted,[OtherKey|Acc0]}
@@ -691,27 +691,35 @@ remove_old_attribute(Path,Inode,Entry,Name,State) ->
         ) 
     of
         {none,_ExtInfo} ->
-            ?DEB1("Got no attribute to delete!"),
+            ?DEB1("    Got no attribute to delete!"),
             State;
         % This ExtInfo does no longer contain InfoToDelete
         {_InfoToDelete={{AName,_ANinode},{AValue,AVinode}},ExtInfo} ->
-            ?DEBL("Going to delete ~p from ~p",[_InfoToDelete,Entry#inode_entry.name]),
+            FName=Entry#inode_entry.name,
+            ?DEBL("    Going to delete ~p from ~p",[_InfoToDelete,FName]),
+
             % Updating ext io using the filtered ext info
             ExtIo=ext_info_to_ext_io(ExtInfo),
             NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
             NewState0=update_inode_entry(Inode,NewEntry,State),
-            % Removing {file,ino} from attribute list attribute entry
-            AttrDict=State#state.attribute_list,
-            AttrChildList=dict:fetch({AName,AValue},AttrDict),
-            NewAttrChildList=lists:keydelete(Name,1,AttrChildList),
-            NewAttrDict=dict:store({AName,AValue},NewAttrChildList,AttrDict),
+
             % removing file child from attribute folder entry
             {value,AVEntry}=lookup_inode_entry(AVinode,State),
-            Children=lists:keydelete(Name,1,AVEntry#inode_entry.children),
-            NewAVEntry=AVEntry#inode_entry{children=Children},
+            Children=AVEntry#inode_entry.children,
+            NewChildren=lists:keydelete(FName,1,Children),
+            NewAVEntry=AVEntry#inode_entry{children=NewChildren},
             NewState1=update_inode_entry(AVinode,NewAVEntry,NewState0),
-            % updating the state
-            NewState=NewState1#state{attribute_list=NewAttrDict},
+
+            % Removing {file,ino} from attribute list attribute entry
+            ADict=State#state.attribute_list,
+            AChildList=dict:fetch({AName,AValue},ADict),
+            ?DEBL("    attribute children before: ~p",[AChildList]),
+            NewAChildList=lists:keydelete(FName,1,AChildList),
+            ?DEBL("    attribute children after: ~p",[NewAChildList]),
+            NewADict=dict:store({AName,AValue},NewAChildList,ADict),
+            NewState=NewState1#state{attribute_list=NewADict},
+
+            % Returning the changed state.
             NewState
     end.
 
