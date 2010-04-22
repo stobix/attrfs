@@ -277,17 +277,17 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
-    ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
+%    ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
     case lookup_children(ParentInode,State) of
         {value,Children} ->
-            ?DEB2("   Got children for ~p",ParentInode),
+%            ?DEB2("   Got children for ~p",ParentInode),
             case lists:keysearch(Child,1,Children) of
                 {value,{_,Inode}} ->
-                    ?DEB2("   Found child ~p",Child),
+%                    ?DEB2("   Found child ~p",Child),
                     {value,Entry} = lookup_inode_entry(Inode,State),
-                    ?DEB1("   Got child inode entry"),
+%                    ?DEB1("   Got child inode entry"),
                     Stat=Entry#inode_entry.internal_file_info,
-                    ?DEB1("   Got child inode entry stat file info, returning"),
+%                    ?DEB1("   Got child inode entry stat file info, returning"),
                     Param=#fuse_entry_param{
                         ino=Inode,
                         generation=1, %for now.
@@ -297,11 +297,11 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                             },
                     {#fuse_reply_entry{fuse_entry_param=Param},State};
                 false ->
-                    ?DEB1("   Child nonexistent!"),
+%                    ?DEB1("   Child nonexistent!"),
                     {#fuse_reply_err{err=enoent},State} % child nonexistent.
             end;
         none -> 
-            ?DEB1("   Parent nonexistent!"),
+%            ?DEB1("   Parent nonexistent!"),
             {#fuse_reply_err{err=enoent},State} %no parent
     end.
 
@@ -377,7 +377,8 @@ releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=ok},State}.
 
 %%Remove an extended attribute. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type removexattr_async_reply ().
-removexattr(_Ctx,Inode,Name,_Continuation,State) ->
+removexattr(_Ctx,Inode,BName,_Continuation,State) ->
+    Name=binary_to_list(BName),
     ?DEBL(">removexattr inode: ~p name: ~p",[Inode,Name]),
     {value,Entry} = lookup_inode_entry(Inode,State),
     case Entry#inode_entry.type of
@@ -659,25 +660,60 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
 
 
 %% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
+%% remove_old_attribute 
+%%  * removes the {path,attribute} entry from the attribute database;
+%%  * removes the file entry from the attributes/attrName/attrVal/ folder
+%%  * removes the attribute from the file entry
+%%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
+
 remove_old_attribute(Path,Inode,Entry,Name,State) ->
+    ?DEBL("    deleting ~p from ~p",[Name,Path]),
     Matches=dets:match(?ATTR_DB,{Path,{Name,'$1'}}),
-    ?DEBL("   removing the following items (if any): ~p",[Matches]),
     case length(Matches)>0 of
-        true -> dets:match_delete(?ATTR_DB,{Path,{Name,'_'}});
-        false -> ok
+        true -> 
+            ?DEBL("   removing the following items (if any): ~p",[Matches]),
+            dets:match_delete(?ATTR_DB,{Path,{Name,'_'}});
+        false -> 
+            ?DEB1("   found no items to remove, doing nothing"),
+            ok
     end,
-    {ExtInfo0,ExtIo}=generate_ext_info_io(Path),
-    AttrDict=State#state.attribute_list,
-    ExtInfo=lists:map(
-        fun({Name,Value}) -> 
-            {ok,NInode} = dict:find(Name,AttrDict),
-            {ok,VInode} = dict:find({Name,Value},AttrDict),
-            {{Name,NInode},{Value,VInode}} 
-        end, 
-        ExtInfo0),
-    NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
-    NewState=update_inode_entry(Inode,NewEntry,State),
-    NewState.
+    ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{Name,'$1'}})]),
+    % Filters out the attribute to be deleted from the rest of the children for the file whose attribute is to be deleted.
+    case lists:foldl
+        (
+        fun(Deleted={{DName,_DNameIno},{_DValue,_DValueIno}},{_Empty,Acc}) when DName==Name ->
+               {Deleted,Acc};
+           (OtherKey,{Deleted,Acc0}) ->
+               {Deleted,[OtherKey|Acc0]}
+        end,
+        {none,[]},
+        Entry#inode_entry.ext_info
+        ) 
+    of
+        {none,_ExtInfo} ->
+            ?DEB1("Got no attribute to delete!"),
+            State;
+        % This ExtInfo does no longer contain InfoToDelete
+        {_InfoToDelete={{AName,_ANinode},{AValue,AVinode}},ExtInfo} ->
+            ?DEBL("Going to delete ~p from ~p",[_InfoToDelete,Entry#inode_entry.name]),
+            % Updating ext io using the filtered ext info
+            ExtIo=ext_info_to_ext_io(ExtInfo),
+            NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
+            NewState0=update_inode_entry(Inode,NewEntry,State),
+            % Removing {file,ino} from attribute list attribute entry
+            AttrDict=State#state.attribute_list,
+            AttrChildList=dict:fetch({AName,AValue},AttrDict),
+            NewAttrChildList=lists:keydelete(Name,1,AttrChildList),
+            NewAttrDict=dict:store({AName,AValue},NewAttrChildList,AttrDict),
+            % removing file child from attribute folder entry
+            {value,AVEntry}=lookup_inode_entry(AVinode,State),
+            Children=lists:keydelete(Name,1,AVEntry#inode_entry.children),
+            NewAVEntry=AVEntry#inode_entry{children=Children},
+            NewState1=update_inode_entry(AVinode,NewAVEntry,NewState0),
+            % updating the state
+            NewState=NewState1#state{attribute_list=NewAttrDict},
+            NewState
+    end.
 
 dir(Stat) ->
     NewMode=(Stat#stat.st_mode band 8#777) bor ?S_IFDIR,
