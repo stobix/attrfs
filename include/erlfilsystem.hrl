@@ -17,7 +17,7 @@
 -record(initargs,
         {dir::string()}).
 
--type inode_number()::pos_integer()|null.
+-type inode_number()::pos_integer().
 -type name_tuple()::{string(),inode_number()}.
 -type name_list()::[name_tuple()].
 -type attrib_list()::[{name_tuple(), name_tuple()}].
@@ -60,21 +60,17 @@
         }).
 
 
-%% This record is a quick way to find which files has what attribute.
--record(attribute_entry,
-        {inode::non_neg_integer(),
-        children::name_list()
-        }).
+-type attribute_entries()::[name_tuple()|{inode,inode_number()}].
 
 -record(inode_list,
         {inode_entries% ::gb_trees{} of inode_entry
-        ,biggest::integer() % actually the smallest available inode number.
         }).
 
 -record(state,
-        {inode_list::#inode_list{}
+        {inode_entries% ::gb_trees{} of inode_entry with inode_number() keys
         ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
-        ,attribute_list%::#gb_trees{} of #attribute_entry{} with inode number string
+        ,attribute_list%:: indexed by {Attribute,Value}, containing attribute_entries()
+        ,biggest_ino::integer() % actually the smallest available inode number.
         }).
 
 -define (DIR (Stat), Stat#stat{ st_mode = (Stat#stat.st_mode band 8#777) bor ?S_IFDIR }).
