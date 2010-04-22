@@ -529,9 +529,9 @@ lookup_attr_value(Name,[{{Key,_},{Value,_}}|Attribs]) ->
     end.
 
 update_inode_entry(Inode,Entry,State) ->
-    ?DEB1("   updating state"),
-    Entries=get_inode_entries(State),
-    NewEntries=gb_trees:enter(Inode,Entry,Entries),
+    ?DEBL("   updating state for {~p,~p}",[Inode,Entry#inode_entry.name]),
+    Entries=State#state.inode_entries,
+    NewEntries=gb_trees:update(Inode,Entry,Entries),
     State#state{inode_entries=NewEntries}.
 
 %% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
@@ -596,11 +596,13 @@ set_open_file(State,Inode,FileContents) ->
 
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
 add_new_attribute(Path,Inode,Entry,{Name,Value},State) ->
+    ?DEB1("  >add_new_attribute"),
     % Add the new attribute pair, if non-existent.
+    ?DEBL("   inserting (~p){~p,~p} into database, if nonexistent",[Path,Name,Value]),
     length(dets:match(?ATTR_DB,{Path,{Name,Value}}))==0 andalso
         (ok=dets:insert(?ATTR_DB,{Path,{Name,Value}})),
         % I need a function here that checks whether the attribute in question exists.
-        % If it does not exist, it needs to be added, to the file system attributes/Name/Value folder, with a
+        % If it does not exist, it needs to be added, to the file system attributes/Name/Value folder, with an
         % {Inode,Entry#inode_entry.name} child.
         % In any case, the {Inode,Entry#inode_entry.name} needs to be added to the attribute list under Name,Value
         % Maybe return the new file system and the new attribute list?
@@ -614,10 +616,13 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
     Acc={State#state.attribute_list,[],State#state.biggest_ino,[]},
 % Acc = {AttrDict,InodeList,CurrentSmallestAvailableInode,ChildrenKeylist}
     IEntries=State#state.inode_entries,
+    ?DEBL("  >appending {~p,~p} for {~p,~p} to the file system",[Name,Value,FName,FIno]),
     {NewAttr,NewAcc}=append_attribute({Name,Value},FIno,FName,IEntries,Stat,Acc),
     OldExtInfo=FEntry#inode_entry.ext_info,
+    ?DEB1("  >creting new ext info"),
     ExtInfo=lists:keymerge(1,[NewAttr],OldExtInfo),
     NewFEntry=FEntry#inode_entry{ext_info=ExtInfo,ext_io=ext_info_to_ext_io(ExtInfo)},
+    ?DEB1("   setting interimstate with new ext info"),
     NewState0=update_inode_entry(FIno,NewFEntry,State),
     {NewAttrDict,NewInodeList,NewBiggestIno,Children}=NewAcc,
     % The new attrdict replaces the old; 
@@ -625,17 +630,25 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
     % the biggest ino is replaced; 
     % the children are merged into the children for the inode for the attributes folder
     AttributesFolderIno=3,
-    AttrEntry=lookup_inode_entry(AttributesFolderIno,NewState0),
+    ?DEB1("   getting attribute folder inode entry"),
+    {value,AttrEntry}=lookup_inode_entry(AttributesFolderIno,NewState0),
+    ?DEB2("   merging old and new (~p) attribute folder children",Children),
     AttrChildren=lists:keymerge(1,AttrEntry#inode_entry.children,Children),
+    ?DEB1("   creating new inode entry"),
     NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
+    ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
+    ?DEB1("   updating state"),
     NewState1=update_inode_entry(3,NewAttrEntry,NewState0),
+    ?DEB1("   appending new attribute folder children inode entries to the file system"),
     NewInodeEntries=
         lists:foldl(
             fun({Inode,Entry}, InodeTree) -> 
-                gb_trees:insert(Inode,Entry,InodeTree) 
+                gb_trees:enter(Inode,Entry,InodeTree) % Why do I get entries here even when they do not need updating?
             end, 
-            State#state.inode_entries,
+            NewState1#state.inode_entries,
             NewInodeList),
+    ?DEB1("   updating state"),
+    ?DEB2("   final children list: ~p",(gb_trees:get(AttributesFolderIno,NewInodeEntries))#inode_entry.children),
     NewState1#state{
         attribute_list=NewAttrDict,
         biggest_ino=NewBiggestIno,
@@ -672,11 +685,14 @@ dir(Stat) ->
     Stat#stat{st_mode=NewMode}.
 
 generate_ext_info(Path) ->
+    ?DEB2("   generating ext info for ~p",Path),
     ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
     lists:flatten(ExtInfo0). % Going from a list of lists of tuples to a list of tuples.
 
 generate_ext_info_io(Path) ->
-    {ExtInfo}=generate_ext_info(Path),
+    ?DEB2("   generating ext info for ~p",Path),
+    ExtInfo=generate_ext_info(Path),
+    ?DEB2("   generating ext io for ~p",ExtInfo),
     ExtIo=ext_info_to_ext_io(ExtInfo),
     {ExtInfo,ExtIo}.
 
@@ -755,7 +771,7 @@ find(SearchFun,[Item|Items]) ->
 %% make_inode_list reads the contents of a dir, recursively, and produces a flat ordered list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict.
 
 make_inode_list({{Path,Name},InitialIno},NextIno) ->
-    ?DEB2("   reading file info for ~p:",Path),
+    ?DEBL("   reading file info for {~p,~p}:",[Path,Name]),
     {ok,FileInfo}=file:read_file_info(Path),
     {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
         directory ->
@@ -777,6 +793,7 @@ make_inode_list({{Path,Name},InitialIno},NextIno) ->
     % This is the only place where this function is to be used!
     % Using this function implies that we have not yet gotten an attribute inode list.
     % The output of this function is a {Name,Value} ExtInfo, instead of a {{Name,NInode},{Value,VInode}}
+    ?DEB2("    Generating ext info for ~p",Path),
     {ExtInfo,ExtIo}=generate_ext_info_io(Path), 
     ?DEB2("     ext info: ~p", ExtInfo),
     ?DEB1("    Generating entry"),

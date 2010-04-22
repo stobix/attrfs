@@ -62,10 +62,6 @@
 
 -type attribute_entries()::[name_tuple()|{inode,inode_number()}].
 
--record(inode_list,
-        {inode_entries% ::gb_trees{} of inode_entry
-        }).
-
 -record(state,
         {inode_entries% ::gb_trees{} of inode_entry with inode_number() keys
         ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
