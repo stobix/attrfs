@@ -19,7 +19,7 @@
 -type inode_number()::pos_integer().
 -type name_tuple()::{string(),inode_number()}.
 -type name_list()::[name_tuple()].
--type attrib_list()::[{name_tuple(), name_tuple()}].
+-type attrib_list()::[{string(), string()}].
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.
 
@@ -65,7 +65,6 @@
         {inode_entries% ::gb_trees{} of inode_entry with inode_number() keys
         ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
         ,attribute_list%:: indexed by {Attribute,Value}, containing attribute_entries()
-        ,biggest_ino::integer() % actually the smallest available inode number.
         }).
 
 -define (DIR (Stat), Stat#stat{ st_mode = (Stat#stat.st_mode band 8#777) bor ?S_IFDIR }).

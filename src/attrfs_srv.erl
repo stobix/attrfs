@@ -118,9 +118,12 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
+    RootIno=1=inode:get(root),
+    RealIno=inode:get("real"),
+    AttribIno=inode:get("attribs"),
     RootEntry=#inode_entry{
         name=root
-       ,children=[{"real",2},{"attribs",3}]
+       ,children=[{"real",RealIno},{"attribs",AttribIno}]
        ,type=internal_dir %XXX: Really ok to let this have the same type as attribute dirs?
        ,internal_file_info=#stat{
            st_mode=8#755 bor ?S_IFDIR
@@ -129,13 +132,12 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ,ext_info=[]
        ,ext_io=ext_info_to_ext_io([])
     },
-    {InodeList0,BiggestIno0}=make_inode_list({MirrorDir,2},4),
-    ?DEB2("   inode list made; smallest available inode: ~p",BiggestIno0),
-    {InodeList1,{AttributeDict,AttributeBranchList,BiggestIno,AttribChildren}}=
+    InodeList0=make_inode_list(MirrorDir),
+    {InodeList1,{AttributeDict,AttributeBranchList,AttribChildren}}=
         lists:mapfoldl
             (
                 fun(A,B) -> make_attribute_list(A,B) end, 
-                {dict:new(),[],BiggestIno0,[]},
+                {dict:new(),[],[]},
                 InodeList0
             ),
     AttributeEntry=#inode_entry{
@@ -154,10 +156,10 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     % AttributeBranchList are sorted, this will produce an ordered list.
     InodeList=InodeList1++AttributeBranchList,
     InodeTree0=gb_trees:from_orddict(InodeList),
-    InodeTree1=gb_trees:insert(1,RootEntry,InodeTree0),
-    InodeTree=gb_trees:insert(3,AttributeEntry,InodeTree1),
+    InodeTree1=gb_trees:insert(RootIno,RootEntry,InodeTree0),
+    InodeTree=gb_trees:insert(AttribIno,AttributeEntry,InodeTree1),
     ?DEB1("   inode tree made"),
-    State=#state{inode_entries=InodeTree,biggest_ino=BiggestIno,open_files=gb_trees:empty(),attribute_list=AttributeDict},
+    State=#state{inode_entries=InodeTree,open_files=gb_trees:empty(),attribute_list=AttributeDict},
     assert_started(fuserl),
     ?DEB1("   fuserl started, starting fuserlsrv"),
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
@@ -615,7 +617,7 @@ add_new_attribute(Path,Inode,Entry,{Name,Value},State) ->
 %Returns a State with the inode_entry list and the attribute list updated
 make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
     #inode_entry{internal_file_info=Stat,name=FName}=FEntry,
-    Acc={State#state.attribute_list,[],State#state.biggest_ino,[]},
+    Acc={State#state.attribute_list,[],[]},
 % Acc = {AttrDict,InodeList,CurrentSmallestAvailableInode,ChildrenKeylist}
     IEntries=State#state.inode_entries,
     ?DEBL("  >appending {~p,~p} for {~p,~p} to the file system",[Name,Value,FName,FIno]),
@@ -626,12 +628,12 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
     NewFEntry=FEntry#inode_entry{ext_info=ExtInfo,ext_io=ext_info_to_ext_io(ExtInfo)},
     ?DEB1("   setting interimstate with new ext info"),
     NewState0=update_inode_entry(FIno,NewFEntry,State),
-    {NewAttrDict,NewInodeList,NewBiggestIno,Children}=NewAcc,
+    {NewAttrDict,NewInodeList,Children}=NewAcc,
     % The new attrdict replaces the old; 
     % the new inode list should be sequentially inserted/merged into the gb_tree of inode entries; 
     % the biggest ino is replaced; 
     % the children are merged into the children for the inode for the attributes folder
-    AttributesFolderIno=3,
+    AttributesFolderIno=inode:get("attribs"),
     ?DEB1("   getting attribute folder inode entry"),
     {value,AttrEntry}=lookup_inode_entry(AttributesFolderIno,NewState0),
     ?DEB2("   merging old and new (~p) attribute folder children",Children),
@@ -640,7 +642,7 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
     NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
     ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
     ?DEB1("   updating state"),
-    NewState1=update_inode_entry(3,NewAttrEntry,NewState0),
+    NewState1=update_inode_entry(AttributesFolderIno,NewAttrEntry,NewState0),
     ?DEB1("   appending new attribute folder children inode entries to the file system"),
     NewInodeEntries=
         lists:foldl(
@@ -653,7 +655,6 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
     ?DEB2("   final children list: ~p",(gb_trees:get(AttributesFolderIno,NewInodeEntries))#inode_entry.children),
     NewState1#state{
         attribute_list=NewAttrDict,
-        biggest_ino=NewBiggestIno,
         inode_entries=NewInodeEntries
         }.
 
@@ -815,23 +816,23 @@ find(SearchFun,[Item|Items]) ->
 
 %% make_inode_list reads the contents of a dir, recursively, and produces a flat ordered list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict.
 
-make_inode_list({{Path,Name},InitialIno},NextIno) ->
+make_inode_list({Path,Name}) ->
     ?DEBL("   reading file info for {~p,~p}:",[Path,Name]),
     {ok,FileInfo}=file:read_file_info(Path),
-    {ok,Children,Type,NewIno} = case FileInfo#file_info.type of
+    {ok,Children,Type} = case FileInfo#file_info.type of
         directory ->
             ?DEB1("    directory"),
             {ok,ChildNames} = file:list_dir(Path),
             ?DEB2("     directory entries:~p",ChildNames),
-            {NameInodePairs,MyIno}=
+            NameInodePairs=
                 %make entries of type {Name,Ino}
-                lists:mapfoldl(
-                    fun(ChildName,Ino) -> {{ChildName,Ino},Ino+1} end, 
-                    NextIno, ChildNames),
-            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},MyIno};
+                lists:map(
+                    fun(ChildName) -> {ChildName,inode:get(ChildName)} end, 
+                    ChildNames),
+            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path}};
         regular ->
             ?DEB1("    regular"),
-            {ok,[],#external_file{external_file_info=FileInfo,path=Path},NextIno};
+            {ok,[],#external_file{external_file_info=FileInfo,path=Path}};
                 _ ->
             {error,not_supported} % for now
     end,
@@ -855,25 +856,24 @@ make_inode_list({{Path,Name},InitialIno},NextIno) ->
         ,type=Type
         ,internal_file_info=statify_file_info(
             FileInfo#file_info{
-                inode=InitialIno
+                inode=inode:get(Name)
                ,atime=EpochAtime
                ,ctime=EpochCtime
                ,mtime=EpochMtime
                    })
         ,ext_info=ExtInfo
         ,ext_io=ExtIo},
-    {ChildInodeEntries,FinalIno} = 
+    {ChildInodeEntries} = 
         lists:mapfoldl
             (
-                fun({A,AA},B)->make_inode_list({{Path++"/"++A,A},AA},B) end
-                ,NewIno
+                fun({A,AA})->make_inode_list({{Path++"/"++A,A},AA}) end
                 ,Children
             ),
     % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
-    {lists:keysort(1,lists:flatten([{InitialIno,InodePath},ChildInodeEntries])),FinalIno};
+    {lists:keysort(1,lists:flatten([{inode:get(Name),InodePath},ChildInodeEntries]))};
 
-make_inode_list({Entry,InitialIno},NextIno) ->
-    make_inode_list({{Entry,Entry},InitialIno},NextIno).
+make_inode_list(Entry) ->
+    make_inode_list({Entry,Entry}).
 
 %%%% TODO: Baka in allt i en mapfoldl över inodelistan.
 
@@ -907,14 +907,15 @@ append_attribute_child(Child,{_Dict,_List,_Ino,Children}) ->
     {_Dict,_List,_Ino,lists:keymerge(1,Children,[Child])}.
 
 % TODO: Change the IList to a gb_trees(Inode,#inode_entry{})
-append_attribute_dir(AttrDir,ChildName,ChildIno,IEntries,Stat,{AttrDict,IList,CurrIno,Children}) ->
+append_attribute_dir(AttrDir,ChildName,ChildIno,IEntries,Stat,{AttrDict,IList,Children}) ->
+    MyInode=inode:get(AttrDir),
     case dict:find(AttrDir,AttrDict) of
         % No entry found, creating new attribute entry.
         error ->
-            {CurrIno,
+            {MyInode,
                 {
-                dict:store(AttrDir,[{inode,CurrIno},{ChildName,ChildIno}],AttrDict),
-                lists:keymerge(1,IList,[{CurrIno,
+                dict:store(AttrDir,[{inode,MyInode},{ChildName,ChildIno}],AttrDict),
+                lists:keymerge(1,IList,[{MyInode,
                     #inode_entry{
                         type=attribute_dir,
                         name=AttrDir,
@@ -923,17 +924,15 @@ append_attribute_dir(AttrDir,ChildName,ChildIno,IEntries,Stat,{AttrDict,IList,Cu
                         ext_info=[],
                         ext_io=ext_info_to_ext_io([])
                     }}]),
-                CurrIno+1,
                 Children
             }};
-        {ok,TupleList} ->
-            {inode,MyIno}=lists:keyfind(inode,1,TupleList),
+        {ok,_TupleList} ->
             %XXX: This will break if I use this when net all inodes are in the IList.
             {_,OldEntry}=
-                case lists:keyfind(MyIno,1,IList) of
+                case lists:keyfind(MyInode,1,IList) of
                     % The attribute is in attrdir, but the inode is not in ilist. Thus, it must be in the state.
                     false ->
-                        gb_trees:lookup(MyIno,IEntries);
+                        gb_trees:lookup(MyInode,IEntries);
                     Entry -> Entry
                 end,
 
@@ -941,11 +940,10 @@ append_attribute_dir(AttrDir,ChildName,ChildIno,IEntries,Stat,{AttrDict,IList,Cu
                 children=
                     [{ChildName,ChildIno}|OldEntry#inode_entry.children]
                     },
-            {MyIno,
+            {MyInode,
                 {
                 dict:append(AttrDir,{ChildName,ChildIno},AttrDict),
-                lists:keymerge(1,[{MyIno,NewEntry}],IList),
-                CurrIno,
+                lists:keymerge(1,[{MyInode,NewEntry}],IList),
                 Children
             }}
     end.
