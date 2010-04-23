@@ -747,9 +747,6 @@ make_inode_list({Path,Name}) ->
                 _ ->
             {error,not_supported} % for now
     end,
-    % This is the only place where this function is to be used!
-    % Using this function implies that we have not yet gotten an attribute inode list.
-    % The output of this function is a {Name,Value} ExtInfo, instead of a {{Name,NInode},{Value,VInode}}
     ?DEB2("    Generating ext info for ~p",Path),
     {ExtInfo,ExtIo}=generate_ext_info_io(Path), 
     ?DEB2("     ext info: ~p", ExtInfo),
@@ -777,13 +774,13 @@ make_inode_list({Path,Name}) ->
         ,ext_io=ExtIo},
     tree_srv:enter(inode:get(Name),InodeEntry,inodes),
     lists:foreach(fun(Attr) -> append_attribute(Attr,Name,MyStat) end,ExtInfo),
-    lists:foreach(fun({ChildName,Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children).
+    lists:foreach(fun({ChildName,_Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children).
 
 append_attribute({Key,Val},Name,Stat) ->
-    ?DEBL("    appending ~p/~p",[Val,Name]),
-    append_attribute_dir({Key,Val},Name,Stat),
+    ?DEBL("    appending ~p/~p",[{Key,Val},Name]),
+    append_value_dir(Key,Val,Name,Stat),
     ?DEBL("    appending ~p/~p",[Key,Val]),
-    append_attribute_dir(Key,Val,Stat),
+    append_key_dir(Key,Val,Stat),
     tree_srv:enter(Key,inode:get(Key),keys),
     AttributesFolderIno=inode:get("attribs"),
     ?DEB1("   getting attribute folder inode entry"),
@@ -794,15 +791,37 @@ append_attribute({Key,Val},Name,Stat) ->
     ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
     tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
 
-append_attribute_dir(AttrDir,ChildName,Stat) ->
-    ChildIno=inode:get(ChildName),
-    MyInode=inode:get(AttrDir),
+append_key_dir(KeyDir,ValDir,Stat) ->
+    ChildIno=inode:get({KeyDir,ValDir}),
+    MyInode=inode:get(KeyDir),
     NewEntry=case tree_srv:lookup(MyInode,inodes) of
         % No entry found, creating new attribute entry.
         none ->
                 #inode_entry{
                     type=attribute_dir,
-                    name=AttrDir,
+                    name=KeyDir,
+                    children=[{ValDir,ChildIno}],
+                    internal_file_info=dir(Stat),
+                    ext_info=[],
+                    ext_io=ext_info_to_ext_io([])
+                };
+        {value,OldEntry} ->
+            OldEntry#inode_entry{
+                children=
+                    [{ValDir,ChildIno}|OldEntry#inode_entry.children]
+                }
+    end,
+    tree_srv:enter(MyInode,NewEntry,inodes).
+
+append_value_dir(Key,Value,ChildName,Stat) ->
+    ChildIno=inode:get(ChildName),
+    MyInode=inode:get({Key,Value}),
+    NewEntry=case tree_srv:lookup(MyInode,inodes) of
+        % No entry found, creating new attribute entry.
+        none ->
+                #inode_entry{
+                    type=attribute_dir,
+                    name=Value,
                     children=[{ChildName,ChildIno}],
                     internal_file_info=dir(Stat),
                     ext_info=[],
