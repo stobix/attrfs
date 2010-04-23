@@ -1,0 +1,1 @@
+{'src/attrfs*',[{outdir,'ebin'}]}.

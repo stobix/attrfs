@@ -1,4 +1,4 @@
--module(erlfilsystem).
+-module(attrfs_srv).
 
 %%%=========================================================================
 %%%=========================================================================
@@ -83,7 +83,7 @@
 -include_lib("fuserl/include/fuserl.hrl").
 -include_lib("kernel/include/file.hrl").
 
--include("../include/erlfilsystem.hrl").
+-include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
 %%%=========================================================================
@@ -114,6 +114,7 @@ start_link(MountDir,LinkedIn,MountOpts) ->
 
 start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     Options=[],
+    assert_started(inode),
     ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
@@ -258,7 +259,7 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
     ?DEBL("~s",["link!"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (inCLUDING Null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
+%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     ?DEB2(">listxattr inode:~p",Inode),
     {value,Entry}=lookup_inode_entry(Inode,State),
@@ -277,17 +278,17 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
-%    ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
+    ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
     case lookup_children(ParentInode,State) of
         {value,Children} ->
-%            ?DEB2("   Got children for ~p",ParentInode),
+            ?DEB2("   Got children for ~p",ParentInode),
             case lists:keysearch(Child,1,Children) of
                 {value,{_,Inode}} ->
-%                    ?DEB2("   Found child ~p",Child),
+                    ?DEB2("   Found child ~p",Child),
                     {value,Entry} = lookup_inode_entry(Inode,State),
-%                    ?DEB1("   Got child inode entry"),
+                    ?DEB1("   Got child inode entry"),
                     Stat=Entry#inode_entry.internal_file_info,
-%                    ?DEB1("   Got child inode entry stat file info, returning"),
+                    ?DEB1("   Got child inode entry stat file info, returning"),
                     Param=#fuse_entry_param{
                         ino=Inode,
                         generation=1, %for now.
@@ -297,11 +298,11 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                             },
                     {#fuse_reply_entry{fuse_entry_param=Param},State};
                 false ->
-%                    ?DEB1("   Child nonexistent!"),
+                    ?DEB1("   Child nonexistent!"),
                     {#fuse_reply_err{err=enoent},State} % child nonexistent.
             end;
         none -> 
-%            ?DEB1("   Parent nonexistent!"),
+            ?DEB1("   Parent nonexistent!"),
             {#fuse_reply_err{err=enoent},State} %no parent
     end.
 
@@ -520,7 +521,7 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%% Helper functions
 %%%=========================================================================
 
-%% lookup_tuple takes a key, and a [{Key,Value}] and returns {value,Value} or none. Being deprecated in favor of lists:keyfind, I think.
+%% lookup_attr_value takes a key, and a [{{Key,_},{Value,_}}] and returns {value,Value} or none. 
 lookup_attr_value(_,[]) -> none;
 
 lookup_attr_value(Name,[{{Key,_},{Value,_}}|Attribs]) ->

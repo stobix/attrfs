@@ -1,6 +1,9 @@
 Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
     Copy or only link?
-Make a real app of the main app.
+
+Make the app terminate when fusermount -u mountdir
+
+make closedir do something useful.
 
 Include support for "deep attributes":
     % attr -s "Foo/Bar" -V "Etaoin,Shrdlu" Baz
@@ -9,5 +12,7 @@ Include support for "deep attributes":
     Etaoin/Baz
     Shrdlu/Baz
 
+
+Include a server to handle inodes.
 
 Apparently, linux calls open before calling setattr. What to do with open?
