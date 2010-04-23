@@ -62,9 +62,8 @@
 -type attribute_entries()::[name_tuple()|{inode,inode_number()}].
 
 -record(state,
-        {inode_entries% ::gb_trees{} of inode_entry with inode_number() keys
-        ,open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
-        ,attribute_list%:: indexed by {Attribute,Value}, containing attribute_entries()
+        {
+        open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
         }).
 
 -define (DIR (Stat), Stat#stat{ st_mode = (Stat#stat.st_mode band 8#777) bor ?S_IFDIR }).

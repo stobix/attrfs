@@ -72,7 +72,6 @@
 %%% debug function exports
 %%%=========================================================================
 
--export([get_dir_hier/2]).
 
 %%%=========================================================================
 %%% Includes and behaviour
@@ -100,6 +99,7 @@ code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
 
 %% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
 start_link({MountDir,MirrorDir}) ->
+    ?DEB1("Starting attrfs server..."),
     start_link(MountDir,false,"",MirrorDir);
 
 start_link(Dir) ->
@@ -118,9 +118,15 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
-    RootIno=1=inode:get(root),
+    tree_srv:new(inodes),
+    tree_srv:new(keys),
+    ?DEB1("   created inode and key trees"),
+    inode:reset(),
+    RootIno=inode:get(root),
     RealIno=inode:get("real"),
     AttribIno=inode:get("attribs"),
+    ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
+    ?DEB1("   creating root entry"),
     RootEntry=#inode_entry{
         name=root
        ,children=[{"real",RealIno},{"attribs",AttribIno}]
@@ -132,34 +138,26 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ,ext_info=[]
        ,ext_io=ext_info_to_ext_io([])
     },
-    InodeList0=make_inode_list(MirrorDir),
-    {InodeList1,{AttributeDict,AttributeBranchList,AttribChildren}}=
-        lists:mapfoldl
-            (
-                fun(A,B) -> make_attribute_list(A,B) end, 
-                {dict:new(),[],[]},
-                InodeList0
-            ),
+    ?DEB1("   updating root inode entry"),
+    tree_srv:enter(RootIno,RootEntry,inodes),
+    ?DEB2("   making inode entries for ~p",MirrorDir),
+    make_inode_list({MirrorDir,"real"}),
     AttributeEntry=#inode_entry{
-        name="attribs"
-       ,children=AttribChildren
-       ,type=internal_dir
-       ,internal_file_info=#stat{
-            st_mode=8#755 bor ?S_IFDIR
-           ,st_ino=3
-        }
-       ,ext_info=[]
-       ,ext_io=ext_info_to_ext_io([])
+        name="attribs",
+       children=tree_srv:to_list(keys),
+       type=internal_dir,
+       internal_file_info=#stat{
+            st_mode=8#755 bor ?S_IFDIR,
+            st_ino=3
+        },
+       ext_info=[],
+       ext_io=ext_info_to_ext_io([])
     },
+    tree_srv:enter(AttribIno,AttributeEntry,inodes),
     ?DEB1("   attribute inode list made"),
     % Since InodeList1 is created first, and both InodeList1 and 
     % AttributeBranchList are sorted, this will produce an ordered list.
-    InodeList=InodeList1++AttributeBranchList,
-    InodeTree0=gb_trees:from_orddict(InodeList),
-    InodeTree1=gb_trees:insert(RootIno,RootEntry,InodeTree0),
-    InodeTree=gb_trees:insert(AttribIno,AttributeEntry,InodeTree1),
-    ?DEB1("   inode tree made"),
-    State=#state{inode_entries=InodeTree,open_files=gb_trees:empty(),attribute_list=AttributeDict},
+    State=#state{open_files=gb_trees:empty()},
     assert_started(fuserl),
     ?DEB1("   fuserl started, starting fuserlsrv"),
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
@@ -176,7 +174,7 @@ init(State=#state{}) ->
 %%Check file access permissions. Mask is a bitmask consisting of ?F_OK, ?X_OK, ?W_OK, and ?R_OK, which are portably defined in fuserl.hrl . #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type access_async_reply ().
 access(Ctx,Inode,Mask,_Continuation,State) ->
     ?DEBL(">access inode: ~p, mask: ~p, context: ~p",[Inode,Mask,Ctx]),
-    Reply=test_access(Inode,Mask,Ctx,State),
+    Reply=test_access(Inode,Mask,Ctx),
     {#fuse_reply_err{err=Reply},State}.
 
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
@@ -201,12 +199,13 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
     
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
     ?DEBL(">getattr inode:~p",[Inode]),
-    spawn(fun() -> getattr_internal(Inode,Continuation,State) end),
+    % I must do this by spawning, lest fuserl hangs erl and fuse!!!
+    spawn(fun() -> getattr_internal(Inode,Continuation) end),
     {noreply,State}.
 
-getattr_internal(Inode,Continuation,State) ->
+getattr_internal(Inode,Continuation) ->
     ?DEB2("  >getattr_internal inode:~p",Inode),
-    case lookup_inode_entry(Inode,State) of
+    case tree_srv:lookup(Inode,inodes) of
         none ->
             ?DEB1("   Non-existent file"),
             Reply=#fuse_reply_err{err=enoent};
@@ -232,12 +231,12 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 getxattr(_Ctx,Inode,Name,Size,_Continuation,State) ->
     ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[Name,Size,Inode]),
-    {value,Entry}=lookup_inode_entry(Inode,State),
+    {value,Entry}=tree_srv:lookup(Inode,inodes),
     ?DEB1("   Got inode entry"),
     ExtInfo=Entry#inode_entry.ext_info,
     ?DEB1("   Got extinfo"),
-    Reply=case lookup_attr_value(binary_to_list(Name),ExtInfo) of
-        {value,ExtInfoValue} ->
+    Reply=case lists:keyfind(binary_to_list(Name),1,ExtInfo) of
+        {Name,ExtInfoValue} ->
             ?DEB1("   Got attribute value"),
             ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
             ExtSize=length(ExtAttrib),
@@ -250,8 +249,8 @@ getxattr(_Ctx,Inode,Name,Size,_Continuation,State) ->
                         false -> ?DEB1("   All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
                     end
             end;
-        none ->
-            ?DEB1("   Argument nonexistant, returning error"),
+        false ->
+            ?DEB1("   Argument nonexistent, returning error"),
             #fuse_reply_err{err=enodata}
     end,
     {Reply,State}.
@@ -264,7 +263,7 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
 %%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     ?DEB2(">listxattr inode:~p",Inode),
-    {value,Entry}=lookup_inode_entry(Inode,State),
+    {value,Entry}=tree_srv:lookup(Inode,inodes),
     ?DEB1("   got inode entry."),
     {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
     ?DEBL("   got attributes and size (~p,~p)",[ExtAttribs,ExtSize]),
@@ -281,13 +280,13 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
     ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
-    case lookup_children(ParentInode,State) of
+    case lookup_children(ParentInode) of
         {value,Children} ->
             ?DEB2("   Got children for ~p",ParentInode),
             case lists:keysearch(Child,1,Children) of
                 {value,{_,Inode}} ->
                     ?DEB2("   Found child ~p",Child),
-                    {value,Entry} = lookup_inode_entry(Inode,State),
+                    {value,Entry} = tree_srv:lookup(Inode,inodes),
                     ?DEB1("   Got child inode entry"),
                     Stat=Entry#inode_entry.internal_file_info,
                     ?DEB1("   Got child inode entry stat file info, returning"),
@@ -328,10 +327,9 @@ opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_
     ?DEB2("   KeepCache ~p",_KeepCache),
     ?DEB2("   FileHandle ~p",_Fh),
     ?DEB2("  Getting inode entries for ~p",Inode),
-    Entries=get_inode_entries(State),
     ?DEB1("  Creating directory entries from inode entries"),
     % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
-    NewState=set_open_file(State,Inode,direntries(Inode,Entries)),
+    NewState=set_open_file(State,Inode,direntries(Inode)),
     {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
 
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
@@ -383,12 +381,12 @@ releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
     Name=binary_to_list(BName),
     ?DEBL(">removexattr inode: ~p name: ~p",[Inode,Name]),
-    {value,Entry} = lookup_inode_entry(Inode,State),
+    {value,Entry} = tree_srv:lookup(Inode,inodes),
     case Entry#inode_entry.type of
         #external_file{ path=Path } ->
-            NewState=remove_old_attribute(Path,Inode,Entry,Name,State),
+            remove_old_attribute(Path,Inode,Entry,Name),
             ?DEB1("   Removed attribute, if any, from database and inode entry"),
-            {#fuse_reply_err{err=ok},NewState};
+            {#fuse_reply_err{err=ok},State};
         _ ->
             ?DEB1("   Non-supported inode type"),
             {#fuse_reply_err{err=enosup},State}
@@ -407,7 +405,7 @@ rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
 setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
-    {value,Entry}=lookup_inode_entry(Inode,State),
+    {value,Entry}=tree_srv:lookup(Inode,inodes),
     Stat=Entry#inode_entry.internal_file_info,
     NewStat=Stat#stat{
         st_uid=
@@ -465,8 +463,8 @@ setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
                 Stat#stat.st_size
             end
                 },
-    NewState=update_inode_entry(Inode,Entry#inode_entry{internal_file_info=NewStat},State),
-    {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=100000},NewState}.
+    tree_srv:enter(Inode,Entry#inode_entry{internal_file_info=NewStat}),
+    {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=100000},State}.
 
 
 
@@ -479,19 +477,15 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
 setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
     ?DEBL("setxattr inode:~p name:~p value:~p flags: ~p",[Inode,BName,BValue,_Flags]),
     ?DEB1("   getting inode entry"),
-    {value,Entry} = lookup_inode_entry(Inode,State),
+    {value,Entry} = tree_srv:lookup(Inode,inodes),
     ?DEB1("   transforming input data"),
     Name=binary_to_list(BName),
     Value=binary_to_list(BValue),
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
-            ?DEBL("   removing attribute ~p for file ~p from database",[Name,Path]), %% Maybe I shouldn't do this?  Depends on how I deal with attribute sub folders.
-            % The state returned here is ignored, since add_new_attributes merges old and new data.
-            % remove_old_attribute is here used only because of its database side effect.
-            %remove_old_attribute(Path,Inode,Entry,Name,State), 
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Name,Value,Path]),
-            NewState=add_new_attribute(Path,Inode,Entry,{Name,Value},State),
-            {#fuse_reply_err{err=ok},NewState};
+            add_new_attribute(Path,Inode,Entry,{Name,Value}),
+            {#fuse_reply_err{err=ok},State};
         _ ->
             ?DEB1("   entry not an external file, skipping..."),
             {#fuse_reply_err{err=enotsup},State}
@@ -523,21 +517,6 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%% Helper functions
 %%%=========================================================================
 
-%% lookup_attr_value takes a key, and a [{{Key,_},{Value,_}}] and returns {value,Value} or none. 
-lookup_attr_value(_,[]) -> none;
-
-lookup_attr_value(Name,[{{Key,_},{Value,_}}|Attribs]) ->
-    case Name == Key of
-        true -> {value,Value};
-        false -> lookup_attr_value(Name,Attribs)
-    end.
-
-update_inode_entry(Inode,Entry,State) ->
-    ?DEBL("   updating state for {~p,~p}",[Inode,Entry#inode_entry.name]),
-    Entries=State#state.inode_entries,
-    NewEntries=gb_trees:update(Inode,Entry,Entries),
-    State#state{inode_entries=NewEntries}.
-
 %% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
 datetime_to_epoch(DateTime) ->
     calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
@@ -561,19 +540,10 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
          ,st_ctime=datetime_to_epoch(Ctime)
          }.
 
-%% get_inode_entries returns the inode entries for a state.
-get_inode_entries(State) ->
-    State#state.inode_entries.
-
-%% lookup_inode_entry gets the inode entry from the state corresponding to
-%% the inode provided. Returns like gb_trees:lookup.
-lookup_inode_entry(Inode,State) ->
-    gb_trees:lookup(Inode,get_inode_entries(State)).
-
 %% lookup_children returns the children for the inode, if the inode is 
 %% present. Returns like gb_trees:lookup
-lookup_children(Inode,State) ->
-    case lookup_inode_entry(Inode,State) of
+lookup_children(Inode) ->
+    case tree_srv:lookup(Inode,inodes) of
         {value, Entry} -> {value,Entry#inode_entry.children};
         none -> none
     end.
@@ -599,64 +569,20 @@ set_open_file(State,Inode,FileContents) ->
     set_open_files(State,NewOpenFiles).
 
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
-add_new_attribute(Path,Inode,Entry,{Name,Value},State) ->
+add_new_attribute(Path,FIno,FEntry,Attr) ->
     ?DEB1("  >add_new_attribute"),
     % Add the new attribute pair, if non-existent.
-    ?DEBL("   inserting (~p){~p,~p} into database, if nonexistent",[Path,Name,Value]),
-    length(dets:match(?ATTR_DB,{Path,{Name,Value}}))==0 andalso
-        (ok=dets:insert(?ATTR_DB,{Path,{Name,Value}})),
-        % I need a function here that checks whether the attribute in question exists.
-        % If it does not exist, it needs to be added, to the file system attributes/Name/Value folder, with an
-        % {Inode,Entry#inode_entry.name} child.
-        % In any case, the {Inode,Entry#inode_entry.name} needs to be added to the attribute list under Name,Value
-        % Maybe return the new file system and the new attribute list?
-        % sounds reasonable.
-    make_attribute_list_but({Name,Value},{Entry,Inode},State).
-
-
-%Returns a State with the inode_entry list and the attribute list updated
-make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
+    ?DEBL("   inserting (~p)~p into database, if nonexistent",[Path,Attr]),
+    length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
+        (ok=dets:insert(?ATTR_DB,{Path,Attr})),
     #inode_entry{internal_file_info=Stat,name=FName}=FEntry,
-    Acc={State#state.attribute_list,[],[]},
-% Acc = {AttrDict,InodeList,CurrentSmallestAvailableInode,ChildrenKeylist}
-    IEntries=State#state.inode_entries,
-    ?DEBL("  >appending {~p,~p} for {~p,~p} to the file system",[Name,Value,FName,FIno]),
-    {NewAttr,NewAcc}=append_attribute({Name,Value},FIno,FName,IEntries,Stat,Acc),
+    ?DEBL("  >appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+    append_attribute(Attr,FName,Stat),
     OldExtInfo=FEntry#inode_entry.ext_info,
-    ?DEB1("  >creting new ext info"),
-    ExtInfo=lists:keymerge(1,[NewAttr],OldExtInfo),
+    ?DEB1("  >creating new ext info"),
+    ExtInfo=lists:keymerge(1,[Attr],OldExtInfo),
     NewFEntry=FEntry#inode_entry{ext_info=ExtInfo,ext_io=ext_info_to_ext_io(ExtInfo)},
-    ?DEB1("   setting interimstate with new ext info"),
-    NewState0=update_inode_entry(FIno,NewFEntry,State),
-    {NewAttrDict,NewInodeList,Children}=NewAcc,
-    % The new attrdict replaces the old; 
-    % the new inode list should be sequentially inserted/merged into the gb_tree of inode entries; 
-    % the biggest ino is replaced; 
-    % the children are merged into the children for the inode for the attributes folder
-    AttributesFolderIno=inode:get("attribs"),
-    ?DEB1("   getting attribute folder inode entry"),
-    {value,AttrEntry}=lookup_inode_entry(AttributesFolderIno,NewState0),
-    ?DEB2("   merging old and new (~p) attribute folder children",Children),
-    AttrChildren=lists:keymerge(1,AttrEntry#inode_entry.children,Children),
-    ?DEB1("   creating new inode entry"),
-    NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
-    ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
-    ?DEB1("   updating state"),
-    NewState1=update_inode_entry(AttributesFolderIno,NewAttrEntry,NewState0),
-    ?DEB1("   appending new attribute folder children inode entries to the file system"),
-    NewInodeEntries=
-        lists:foldl(
-            fun({Inode,Entry}, InodeTree) -> 
-                gb_trees:enter(Inode,Entry,InodeTree) % Why do I get entries here even when they do not need updating?
-            end, 
-            NewState1#state.inode_entries,
-            NewInodeList),
-    ?DEB1("   updating state"),
-    ?DEB2("   final children list: ~p",(gb_trees:get(AttributesFolderIno,NewInodeEntries))#inode_entry.children),
-    NewState1#state{
-        attribute_list=NewAttrDict,
-        inode_entries=NewInodeEntries
-        }.
+    tree_srv:enter(FIno,NewFEntry,inodes).
 
 
 
@@ -668,7 +594,7 @@ make_attribute_list_but({Name,Value},{FEntry,FIno},State) ->
 %%  * removes the attribute from the file entry
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
 
-remove_old_attribute(Path,Inode,Entry,AName,State) ->
+remove_old_attribute(Path,Inode,Entry,AName) ->
     ?DEBL("    deleting ~p from ~p",[AName,Path]),
     Matches=dets:match(?ATTR_DB,{Path,{AName,'$1'}}),
     case length(Matches)>0 of
@@ -683,7 +609,7 @@ remove_old_attribute(Path,Inode,Entry,AName,State) ->
     % Filters out the attribute to be deleted from the rest of the children for the file whose attribute is to be deleted.
     case lists:foldl
         (
-        fun(Deleted={{DName,_DNameIno},{_DValue,_DValueIno}},{_Empty,Acc}) when DName==AName ->
+        fun(Deleted={DName,_DValue},{_Empty,Acc}) when DName==AName ->
                {Deleted,Acc};
            (OtherKey,{Deleted,Acc0}) ->
                {Deleted,[OtherKey|Acc0]}
@@ -693,36 +619,25 @@ remove_old_attribute(Path,Inode,Entry,AName,State) ->
         ) 
     of
         {none,_ExtInfo} ->
-            ?DEB1("    Got no attribute to delete!"),
-            State;
+            ?DEB1("    Got no attribute to delete!");
+
         % This ExtInfo does no longer contain InfoToDelete
-        {_InfoToDelete={{AName,_ANinode},{AValue,AVinode}},ExtInfo} ->
+        {_InfoToDelete={AName,AValue},ExtInfo} ->
             FName=Entry#inode_entry.name,
             ?DEBL("    Going to delete ~p from ~p",[_InfoToDelete,FName]),
 
             % Updating ext io using the filtered ext info
             ExtIo=ext_info_to_ext_io(ExtInfo),
             NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
-            NewState0=update_inode_entry(Inode,NewEntry,State),
+            tree_srv:enter(Inode,NewEntry,inodes),
 
             % removing file child from attribute folder entry
-            {value,AVEntry}=lookup_inode_entry(AVinode,State),
+            AVInode=inode:get({AName,AValue}),
+            {value,AVEntry}=tree_srv:lookup(AVInode,inodes),
             Children=AVEntry#inode_entry.children,
             NewChildren=lists:keydelete(FName,1,Children),
             NewAVEntry=AVEntry#inode_entry{children=NewChildren},
-            NewState1=update_inode_entry(AVinode,NewAVEntry,NewState0),
-
-            % Removing {file,ino} from attribute list attribute entry
-            ADict=State#state.attribute_list,
-            AChildList=dict:fetch({AName,AValue},ADict),
-            ?DEBL("    attribute children before: ~p",[AChildList]),
-            NewAChildList=lists:keydelete(FName,1,AChildList),
-            ?DEBL("    attribute children after: ~p",[NewAChildList]),
-            NewADict=dict:store({AName,AValue},NewAChildList,ADict),
-            NewState=NewState1#state{attribute_list=NewADict},
-
-            % Returning the changed state.
-            NewState
+            tree_srv:enter(AVInode,NewAVEntry,inodes)
     end.
 
 dir(Stat) ->
@@ -767,24 +682,22 @@ ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
 %% TODO: rebuild this with lookup_children?
 %% Gets the children for the inode from the inode list, and runs direntrify
 %% on it.
-direntries(Inode,InodeList) ->
+direntries(Inode) ->
     ?DEB1("    Creating direntries"),
-    ?DEB1("     Getting entries"),
-    InodeEntry=gb_trees:get(Inode,InodeList),
-    ?DEB1("     Getting children"),
-    Children=InodeEntry#inode_entry.children,
+    ?DEB1("     Getting child entries"),
+    {value,Children}=lookup_children(Inode),
     ?DEB1("     Converting children"),
-    direntrify(Children,InodeList).
+    direntrify(Children).
 
 
 %% direntrify takes a [{Name,Inode}] and returns a [fuserl:#{direntry}]
-direntrify([],_) -> 
+direntrify([]) -> 
     ?DEB1("    Done converting children"),
     [];
 
-direntrify([{Name,Inode}|Children],InodeList) ->
+direntrify([{Name,Inode}|Children]) ->
     ?DEB2("    Getting inode for child ~p",{Name,Inode}),
-    Child=gb_trees:get(Inode,InodeList),
+    {value,Child}=tree_srv:lookup(Inode,inodes),
     ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
     ChildStats=Child#inode_entry.internal_file_info,
     ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
@@ -792,7 +705,7 @@ direntrify([{Name,Inode}|Children],InodeList) ->
     ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
     Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
     ?DEB2("    Appending child ~p to list",{Name,Inode}),
-    [Direntry1|direntrify(Children,InodeList)].
+    [Direntry1|direntrify(Children)].
 
 assert_started(Application) ->
     case find(
@@ -814,7 +727,6 @@ find(SearchFun,[Item|Items]) ->
         _ -> find(SearchFun,Items)
     end.
 
-%% make_inode_list reads the contents of a dir, recursively, and produces a flat ordered list of {Inode,#inode_entry{}}'s, which can be sent to gb_trees:from_orddict.
 
 make_inode_list({Path,Name}) ->
     ?DEBL("   reading file info for {~p,~p}:",[Path,Name]),
@@ -825,7 +737,6 @@ make_inode_list({Path,Name}) ->
             {ok,ChildNames} = file:list_dir(Path),
             ?DEB2("     directory entries:~p",ChildNames),
             NameInodePairs=
-                %make entries of type {Name,Ino}
                 lists:map(
                     fun(ChildName) -> {ChildName,inode:get(ChildName)} end, 
                     ChildNames),
@@ -842,7 +753,6 @@ make_inode_list({Path,Name}) ->
     ?DEB2("    Generating ext info for ~p",Path),
     {ExtInfo,ExtIo}=generate_ext_info_io(Path), 
     ?DEB2("     ext info: ~p", ExtInfo),
-    ?DEB1("    Generating entry"),
     % XXX: This will break if provided with a local date and time that does not
     % exist. Shouldn't be much of a problem.
     EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
@@ -850,104 +760,61 @@ make_inode_list({Path,Name}) ->
     EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
         
     ?DEBL("\tatime:~p~n\t\t\tctime:~p~n\t\t\tmtime:~p",[EpochAtime,EpochCtime,EpochMtime]),
-    InodePath=#inode_entry{ 
-        name=Name
-        ,children=Children
-        ,type=Type
-        ,internal_file_info=statify_file_info(
+    MyStat=statify_file_info(
             FileInfo#file_info{
                 inode=inode:get(Name)
                ,atime=EpochAtime
                ,ctime=EpochCtime
                ,mtime=EpochMtime
-                   })
+                   }),
+
+    InodeEntry=#inode_entry{ 
+        name=Name
+        ,children=Children
+        ,type=Type
+        ,internal_file_info=MyStat
         ,ext_info=ExtInfo
         ,ext_io=ExtIo},
-    {ChildInodeEntries} = 
-        lists:mapfoldl
-            (
-                fun({A,AA})->make_inode_list({{Path++"/"++A,A},AA}) end
-                ,Children
-            ),
-    % A list needs to be flat and ordered to be used by gb_trees:from_orddict/1
-    {lists:keysort(1,lists:flatten([{inode:get(Name),InodePath},ChildInodeEntries]))};
+    tree_srv:enter(inode:get(Name),InodeEntry,inodes),
+    lists:foreach(fun(Attr) -> append_attribute(Attr,Name,MyStat) end,ExtInfo),
+    lists:foreach(fun({ChildName,Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children).
 
-make_inode_list(Entry) ->
-    make_inode_list({Entry,Entry}).
+append_attribute({Key,Val},Name,Stat) ->
+    ?DEBL("    appending ~p/~p",[Val,Name]),
+    append_attribute_dir({Key,Val},Name,Stat),
+    ?DEBL("    appending ~p/~p",[Key,Val]),
+    append_attribute_dir(Key,Val,Stat),
+    tree_srv:enter(Key,inode:get(Key),keys),
+    AttributesFolderIno=inode:get("attribs"),
+    ?DEB1("   getting attribute folder inode entry"),
+    {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
+    AttrChildren=tree_srv:to_list(keys), 
+    ?DEB1("   creating new inode entry"),
+    NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
+    ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
+    tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
 
-%%%% TODO: Baka in allt i en mapfoldl över inodelistan.
-
-%% returns {{Inode,NewEntry},{AL,AIL,BI}}
-make_attribute_list({Ino,Entry},Acc) ->
-    #inode_entry{ext_info=EInfo,internal_file_info=Stat,name=Name}=Entry,
-    ?DEBL("   making attribute list for {~p,~p}",[Ino,Name]),
-    {NewEInfo,NewAcc={_,_,_Ino,_}}=lists:mapfoldl(
-        fun({Attr,Val},Acc) ->
-            append_attribute({Attr,Val},Ino,Name,gb_trees:empty(),Stat,Acc) % The gb_trees:empty() is the inode tree we do not yet have.
-        end,
-        Acc,
-        EInfo),
-        ?DEB2("   new smallest avail inode: ~p",_Ino),
-    {{Ino,Entry#inode_entry{ext_info=NewEInfo}},NewAcc}.
-
-% Acc = {AttrDict,InodeList,CurrentSmallestAvailableInode,ChildrenKeylist}
-% Appends the nonexistant parts of [{{Attr,Val},[{inode,ValIno},{Name,Ino}]},{Attr,[{inode,AttrIno},{Val,ValIno}}]] to AttrDict;
-% Appends [{AttrIno,AttrEntry},{ValIno,ValEntry}] to InodeList;
-% Updates CurrentSmallestAvailableInode accordingly
-% Appends {Attr,AttrIno} to ChildrenKeylist
-append_attribute({Attr,Val},Ino,Name,IEntries,Stat,Acc) ->
-    ?DEBL("    appending ~p/{~p,~p}",[Val,Ino,Name]),
-    {ValIno,Acc0}=append_attribute_dir({Attr,Val},Name,Ino,IEntries,Stat,Acc),
-    ?DEBL("    appending ~p/{~p,~p}",[Attr,ValIno,Val]),
-    {AttrIno,Acc1}=append_attribute_dir(Attr,Val,ValIno,IEntries,Stat,Acc0),
-    Acc2=append_attribute_child({Attr,AttrIno},Acc1),
-    {{{Attr,AttrIno},{Val,ValIno}},Acc2}.
-
-append_attribute_child(Child,{_Dict,_List,_Ino,Children}) ->
-    {_Dict,_List,_Ino,lists:keymerge(1,Children,[Child])}.
-
-% TODO: Change the IList to a gb_trees(Inode,#inode_entry{})
-append_attribute_dir(AttrDir,ChildName,ChildIno,IEntries,Stat,{AttrDict,IList,Children}) ->
+append_attribute_dir(AttrDir,ChildName,Stat) ->
+    ChildIno=inode:get(ChildName),
     MyInode=inode:get(AttrDir),
-    case dict:find(AttrDir,AttrDict) of
+    NewEntry=case tree_srv:lookup(MyInode,inodes) of
         % No entry found, creating new attribute entry.
-        error ->
-            {MyInode,
-                {
-                dict:store(AttrDir,[{inode,MyInode},{ChildName,ChildIno}],AttrDict),
-                lists:keymerge(1,IList,[{MyInode,
-                    #inode_entry{
-                        type=attribute_dir,
-                        name=AttrDir,
-                        children=[{ChildName,ChildIno}],
-                        internal_file_info=dir(Stat),
-                        ext_info=[],
-                        ext_io=ext_info_to_ext_io([])
-                    }}]),
-                Children
-            }};
-        {ok,_TupleList} ->
-            %XXX: This will break if I use this when net all inodes are in the IList.
-            {_,OldEntry}=
-                case lists:keyfind(MyInode,1,IList) of
-                    % The attribute is in attrdir, but the inode is not in ilist. Thus, it must be in the state.
-                    false ->
-                        gb_trees:lookup(MyInode,IEntries);
-                    Entry -> Entry
-                end,
-
-            NewEntry=OldEntry#inode_entry{
+        none ->
+                #inode_entry{
+                    type=attribute_dir,
+                    name=AttrDir,
+                    children=[{ChildName,ChildIno}],
+                    internal_file_info=dir(Stat),
+                    ext_info=[],
+                    ext_io=ext_info_to_ext_io([])
+                };
+        {value,OldEntry} ->
+            OldEntry#inode_entry{
                 children=
                     [{ChildName,ChildIno}|OldEntry#inode_entry.children]
-                    },
-            {MyInode,
-                {
-                dict:append(AttrDir,{ChildName,ChildIno},AttrDict),
-                lists:keymerge(1,[{MyInode,NewEntry}],IList),
-                Children
-            }}
-    end.
-
+                }
+    end,
+    tree_srv:enter(MyInode,NewEntry,inodes).
 
 %% (This one I stole from fuserlproc.)
 %% this take_while runs the function F until it returns stop
@@ -978,9 +845,9 @@ transmogrify(TrueOrFalse,NewTrue,NewFalse) ->
             NewFalse
     end.
 
-test_access(Inode,Mask,Ctx,State) ->
+test_access(Inode,Mask,Ctx) ->
     ?DEB1("   checking access..."),
-    case lookup_inode_entry(Inode,State) of
+    case tree_srv:lookup(Inode,inodes) of
         {value, Entry} ->
             % Can I use the mask like this?
             case Mask of
@@ -1013,12 +880,3 @@ has_user_perms(Mode,Mask) ->
 %%%=========================================================================
 %%% Debug functions
 %%%=========================================================================
-
-get_dir_hier(InodeNo,InodeEntries) ->
-    InodeEntry=gb_trees:get(InodeNo,InodeEntries),
-    case InodeEntry#inode_entry.children of
-        [] -> [];
-        Children -> 
-            lists:map(fun({Child,No}) -> {Child,get_dir_hier(No,InodeEntries)} end, Children)
-    end.
-
