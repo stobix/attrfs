@@ -2,6 +2,11 @@ Make it possible to copy files between folders. (Which will mostly be the same a
     Copy or only link?
 
 Make the app terminate when fusermount -u mountdir
+make empty attribute dirs dissapear on file system unmount
+
+include support for mkdir, rmdir, move and others to change attributes.
+
+include support for reading files!
 
 make closedir do something useful.
 
