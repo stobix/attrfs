@@ -307,9 +307,55 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
             {#fuse_reply_err{err=enoent},State} %no parent
     end.
 
-mkdir(_Ctx,_ParentInode,_Name,_Mode,_Continuation,State) ->
-    ?DEBL("~s",["mkdir!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+%% This will have different meanings depending on parent type:
+%% * #external_dir{}
+%%   creating dirs in the real file system not yet supported.
+%% * attr_dir where name is a string
+%%   this will create an attribute value with name {attr_dir name, value name}
+%% * attr_dir where name is a {string,string}
+%%   creating a dir inside a value dir will not be supported as long as I don't support deep attributes.
+%% * internal_dir
+%%   this means we try to create a directory inside either /, /real or /attribs, 
+%%   that is, either we try to create a new directory universe (not allowed),
+%%   a new real dir (maybe supported later) or a new attribute (certainly allowed)
+
+mkdir(_Ctx,ParentInode,_Name,_Mode,_Continuation,State) ->
+    ?DEBL(">mkdir",[]),
+    case tree_srv:lookup(ParentInode,inodes) of
+        none -> {#fuse_reply_err{err=enoent},State}; % FIXME: Should I treat this error elsewhere?
+        {value,Parent} ->
+            case Parent#inode_entry.type of
+                #external_dir{} ->
+                    ?DEB1("   external dir, not supported"),
+                    {#fuse_reply_err{err=enotsup},State};
+                attr_dir ->
+                    case Parent#inode_entry.name of
+                        Attribute={Key,Val} ->
+                            ?DEB1("   creating a subvalue dir"),
+                            %this is where I create a subvalue dir, when these are supported.
+                            % subvalue dir name {{Key,Val},Name}, I guess.
+                            {#fuse_reply_err{err=enotsup},State};
+                        Key ->
+                            ?DEB1("   creating an attribute value dir"),
+                            % create value directory here.
+                            {#fuse_reply_err{err=enotsup},State}
+                    end;
+                internal_dir ->
+                    ParentName=inode:is_named(ParentInode),
+                    case ParentName of
+                        root ->
+                            ?DEB1("   creating of new directory type not supported"),
+                            {#fuse_reply_err{err=enotsup},State};
+                        "real" ->
+                            ?DEB1("   creating of external dirs not supported"),
+                            {#fuse_reply_err{err=enotsup},State};
+                        "attribs" ->
+                            % This is where I add an attribute key folder.
+                            ?DEB1("   creating an attribute key dir"),
+                            {#fuse_reply_err{err=enotsup},State}
+                    end
+            end
+    end.
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
     ?DEBL("~s",["mknod!"]),
@@ -393,8 +439,14 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
     end.
 
 
+%% This will have different meanings depending on parent type:
+%% {Parent,NewParent}
+%% allowed:
+%% {#external_dir{},attribute_dir}
+%%  create an attribute key or value and 
+
 rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
-    ?DEBL("~s",["rename!"]),
+    ?DEBL(">rename",[]),
     {#fuse_reply_err{err=enotsup},State}.
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
