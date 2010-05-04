@@ -444,10 +444,17 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %% {Parent,NewParent}
 %% allowed:
 %% {#external_dir{},attribute_dir}
-%%  create an attribute key or value and 
+%%   append attribute, and possibly (always?) value (possibly empty?) to the file. Add File to the external dir.
+%% {AttributeDir,AttributeDir2}:
+%%   append attribute and value to File from AttributeDir2 
+%% {InternalDir,_} 
+%%   Not allowed.
+%% New name is ignored, I think. Either that, or I update my inode module to include support for multiple inode bindings.
 
-rename(_Ctx,_Parent,_Name,_NewParent,_NewName,_Continuation,State) ->
-    ?DEBL(">rename",[]),
+rename(_Ctx,Parent,BName,NewParent,_NewName,_Continuation,State) ->
+    ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[Parent,BName,NewParent]),
+    Name=binary_to_list(BName),
+    Inode=inode:get(Name),
     {#fuse_reply_err{err=enotsup},State}.
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
