@@ -72,6 +72,7 @@
 %%% debug function exports
 %%%=========================================================================
 
+-export([keymergeunique/2]).
 
 %%%=========================================================================
 %%% Includes and behaviour
@@ -627,12 +628,13 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     ?DEBL("   inserting (~p)~p into database, if nonexistent",[Path,Attr]),
     length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
         (ok=dets:insert(?ATTR_DB,{Path,Attr})),
+    ?DEBL("   new database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
     #inode_entry{internal_file_info=Stat,name=FName}=FEntry,
-    ?DEBL("  >appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+    ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
     append_attribute(Attr,FName,Stat),
     OldExtInfo=FEntry#inode_entry.ext_info,
-    ?DEB1("  >creating new ext info"),
-    ExtInfo=lists:keymerge(1,[Attr],OldExtInfo),
+    ?DEB1("   creating new ext info"),
+    ExtInfo=keymergeunique(Attr,OldExtInfo),
     NewFEntry=FEntry#inode_entry{ext_info=ExtInfo,ext_io=ext_info_to_ext_io(ExtInfo)},
     tree_srv:enter(FIno,NewFEntry,inodes).
 
@@ -720,16 +722,14 @@ ext_info_to_ext_io([],B) ->
     ?DEBL("   Final string: \"~p\", size: ~p",[B0,B0len]),
     {B0len,B0};
 
-ext_info_to_ext_io([{{Name,_},_}|InternalExtInfoTupleList],String) ->
+ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     ?DEB2("    Adding zero to end of name ~p",Name),
     Name0=Name++"\0",
     ?DEB1("    Appending name to namelist"),
     NewString=String++Name0,
     ?DEB1("    Recursion"),
-    ext_info_to_ext_io(InternalExtInfoTupleList,NewString);
+    ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
-ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
-    ext_info_to_ext_io([{{Name,bogus},bogus}|InternalExtInfoTupleList],String).
 
 %% TODO: rebuild this with lookup_children?
 %% Gets the children for the inode from the inode list, and runs direntrify
@@ -781,8 +781,9 @@ find(SearchFun,[Item|Items]) ->
 
 
 make_inode_list({Path,Name}) ->
-    ?DEBL("   reading file info for {~p,~p}:",[Path,Name]),
+    ?DEBL("   reading file info for ~p into ~p",[Path,Name]),
     {ok,FileInfo}=file:read_file_info(Path),
+    ?DEB1("   got file info"),
     {ok,Children,Type} = case FileInfo#file_info.type of
         directory ->
             ?DEB1("    directory"),
@@ -858,9 +859,10 @@ append_key_dir(KeyDir,ValDir,Stat) ->
                     ext_io=ext_info_to_ext_io([])
                 };
         {value,OldEntry} ->
+        ?DEBL("   merging ~p into ~p",[{ValDir,ChildIno},OldEntry#inode_entry.children]),
             OldEntry#inode_entry{
                 children=
-                    [{ValDir,ChildIno}|OldEntry#inode_entry.children]
+                    keymergeunique({ValDir,ChildIno},OldEntry#inode_entry.children)
                 }
     end,
     tree_srv:enter(MyInode,NewEntry,inodes).
@@ -880,12 +882,27 @@ append_value_dir(Key,Value,ChildName,Stat) ->
                     ext_io=ext_info_to_ext_io([])
                 };
         {value,OldEntry} ->
+        ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
             OldEntry#inode_entry{
                 children=
-                    [{ChildName,ChildIno}|OldEntry#inode_entry.children]
+                    keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children)
                 }
     end,
+    ?DEB1("  entering new entry into server"),
     tree_srv:enter(MyInode,NewEntry,inodes).
+
+%seems like lists:keymerge won't do what I ask it, so I build my own...
+keymergeunique(Tuple,TupleList) ->
+    keymerge(Tuple,TupleList,[]).
+
+keymerge(Tuple,[],FilteredList) ->
+    [Tuple|FilteredList];
+
+keymerge(Tuple={Key,_Value},[{Key,_}|TupleList],FilteredList) ->
+    keymerge(Tuple,TupleList,FilteredList);
+
+keymerge(Tuple={_Key,_Value},[OtherTuple|TupleList],FilteredList) ->
+    keymerge(Tuple,TupleList,[OtherTuple|FilteredList]).
 
 %% (This one I stole from fuserlproc.)
 %% this take_while runs the function F until it returns stop

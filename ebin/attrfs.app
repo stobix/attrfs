@@ -5,6 +5,6 @@
      {applications,[kernel,stdlib,fuserl,inode,tree_app]},
      {registered,[attrfs]},
      {mod,{attrfs,[]}},
-     {env,[{to_dir,"/home/Volatile/programmering/erlang/lib/attrfs/test/testfs"},
-         {from_dir,"/home/Volatile/programmering/erlang/lib/attrfs/test/mirrorfs"}]}
+     {env,[{to_dir,"testfs"},
+         {from_dir,"mirrorfs"}]}
 ]}.
