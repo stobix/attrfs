@@ -323,66 +323,82 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 mkdir(Ctx,ParentInode,BName,Mode,_Continuation,State) ->
     Name=binary_to_list(BName),
     ?DEBL(">mkdir ctx: ~p pIno: ~p name: ~p mode: ~p ",[Ctx,ParentInode,Name,Mode]),
-    case tree_srv:lookup(ParentInode,inodes) of
-        none -> {#fuse_reply_err{err=enoent},State}; % FIXME: Should I treat this error elsewhere?
+    Reply=case tree_srv:lookup(ParentInode,inodes) of
+        none -> #fuse_reply_err{err=enoent}; % FIXME: Should I treat this error elsewhere?
         {value,Parent} ->
-            case Parent#inode_entry.type of
-                #external_dir{} ->
-                    ?DEB1("   external dir, not supported"),
-                    {#fuse_reply_err{err=enotsup},State};
-                attr_dir ->
-                    case Parent#inode_entry.name of
-                        Attribute={Key,Val} ->
-                            ?DEB1("   creating a subvalue dir"),
-                            %this is where I create a subvalue dir, when these are supported.
-                            % subvalue dir name {{Key,Val},Name}, I guess.
-                            % Inode=mkdir(Ctx,ParentInode,Name,Mode),
-                            {#fuse_reply_err{err=enotsup},State};
-                        Key ->
-                            ?DEB1("   creating an attribute value dir"),
-                            % create value directory here.
-                            {Inode,Stat}=mkdir(Ctx,ParentInode,{Key,Name},Mode,attribute_dir),
-                            ?DEB1("   returning new dir"),
-                            {#fuse_reply_entry{
-                                fuse_entry_param=
-                                    #fuse_entry_param{
-                                        ino=Inode,
-                                        generation=1,
-                                        attr=Stat,
-                                        attr_timeout_ms=1000,
-                                        entry_timeout_ms=1000
-                                    }
-                                }
-                            ,State}
-                    end;
-                internal_dir ->
-                    ParentName=inode:is_named(ParentInode),
-                    case ParentName of
-                        root ->
-                            ?DEB1("   creating of new directory type not supported"),
-                            {#fuse_reply_err{err=enotsup},State};
-                        "real" ->
-                            ?DEB1("   creating of external dirs not supported"),
-                            {#fuse_reply_err{err=enotsup},State};
-                        "attribs" ->
-                            % This is where I add an attribute key folder.
-                            ?DEB1("   creating an attribute key dir"),
-                            {Inode,Stat}=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
-                            ?DEB1("   returning new dir"),
-                            {#fuse_reply_entry{
-                                fuse_entry_param=
-                                    #fuse_entry_param{
-                                        ino=Inode,
-                                        generation=0,
-                                        attr=Stat,
-                                        attr_timeout_ms=1000,
-                                        entry_timeout_ms=1000
-                                    }
-                                }
-                            ,State}
-                    end
+            case tree_srv:lookup(inode:get(Name),State) of
+                {value,_} -> #fuse_reply_err{err=eexist};
+                none ->
+                    ParentName=Parent#inode_entry.name,
+                    ParentType=Parent#inode_entry.type,
+                    make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode)
             end
-    end.
+    end,
+    {Reply,State}.
+
+make_dir(_Ctx,_ParentInode,_ParentName,#external_dir{},_Name,_Mode) ->
+    ?DEB1("   external dir, not supported"),
+    #fuse_reply_err{err=enotsup};
+
+
+make_dir(Ctx,ParentInode,ParentName,attr_dir,Name,Mode) ->
+    make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
+
+
+make_dir(Ctx,ParentInode,ParentName,internal_dir,Name,Mode) ->
+    make_internal_child_dir(Ctx,ParentInode,ParentName,Name,Mode).
+
+make_attr_child_dir(_Ctx,_ParentInode,_Attribute={_Key,_Val},_Name,_Mode) ->
+    ?DEB1("   NOT creating a subvalue dir"),
+    %this is where I create a subvalue dir, when these are supported.
+    % subvalue dir name {{Key,Val},Name}, I guess.
+    % Inode=mkdir(Ctx,ParentInode,Name,Mode),
+    #fuse_reply_err{err=enotsup};
+
+make_attr_child_dir(Ctx,ParentInode,Key,Name,Mode) ->
+    ?DEB1("   creating an attribute value dir"),
+    % create value directory here.
+    {Inode,Stat}=mkdir(Ctx,ParentInode,{Key,Name},Mode,attribute_dir),
+    ?DEB1("   returning new dir"),
+    #fuse_reply_entry{
+        fuse_entry_param=
+            #fuse_entry_param{
+                ino=Inode,
+                generation=1,
+                attr=Stat,
+                attr_timeout_ms=1000,
+                entry_timeout_ms=1000
+            }
+    }.
+
+make_internal_child_dir(_Ctx,_ParentInode,root,_Name,_Mode) ->
+    ?DEB1("   creating of new directory type not supported"),
+    #fuse_reply_err{err=enotsup};
+
+make_internal_child_dir(_Ctx,_ParentInode,"real",_Name,_Mode) ->
+    ?DEB1("   creating of external dirs not supported"),
+    #fuse_reply_err{err=enotsup};
+
+make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
+    % This is where I add an attribute key folder.
+    ?DEB1("   creating an attribute key dir"),
+    {Inode,Stat}=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
+    ?DEB1("   returning new dir"),
+    #fuse_reply_entry{
+        fuse_entry_param=
+            #fuse_entry_param{
+                ino=Inode,
+                generation=0,
+                attr=Stat,
+                attr_timeout_ms=1000,
+                entry_timeout_ms=1000
+            }
+    };
+
+make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
+            #fuse_reply_err{err=enotsup}.
+
+
 
 mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
     ?DEBL("   creating new directory entry called ~p",[Name]),
@@ -517,7 +533,6 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 rename(_Ctx,ParentIno,BName,NewParentIno,_BNewName,_Continuation,State) ->
     ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,BName,NewParentIno]),
     Name=binary_to_list(BName),
-    Inode=inode:get(Name),
     Reply=make_rename_reply(ParentIno,NewParentIno,Name),
     {#fuse_reply_err{err=Reply},State}.
 
@@ -534,20 +549,19 @@ make_rename_reply(From,To,File) ->
 
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 make_rename_reply_append_attribute(NewAttribIno,File) ->
-    FileInode=inode:is_numbered(File),
+    FileInode=inode:get(File),
     {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
     Path=(FileEntry#inode_entry.type)#external_file.path,
     Attribute=inode:is_named(NewAttribIno),
     case Attribute of
-        {Key,Value} ->
+        {_Key,_Value} ->
             add_new_attribute(Path,FileInode,FileEntry,Attribute),
             ok;
-            Key ->
-                % Valueless attributes are not supported for now. 
-                % Takes some restructuring to get to work, I think.
-                enotsup 
+        _Key ->
+            % Valueless attributes are not supported for now. 
+            % Takes some restructuring to get to work, I think.
+            enotsup 
     end.
-
 
 
 
