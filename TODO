@@ -17,6 +17,12 @@ Include support for "deep attributes":
     Etaoin/Baz
     Shrdlu/Baz
 
+make setxattr unset old attribute value folders when adding new ones.
+
+make the dir functions context sensitive.
+make all applicable functions context sensitive.
+use CTX as an index for accessing attributes?
+have different attribute folders for different users? different groups? different users or group according to mode?
 
 Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
 
