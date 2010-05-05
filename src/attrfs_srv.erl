@@ -505,7 +505,7 @@ releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 
 %%Remove an extended attribute. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type removexattr_async_reply ().
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
-    Name=binary_to_list(BName),
+    Name=stringdelta(binary_to_list(BName),"user."),
     ?DEBL(">removexattr inode: ~p name: ~p",[Inode,Name]),
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     case Entry#inode_entry.type of
@@ -644,6 +644,7 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 %% Set file attributes. #fuse_reply_err{err = ok} indicates success. Flags is a bitmask consisting of ?XATTR_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setxattr_async_reply ().
+%% TODO: if attribute key already has a value for the current file, remove the file from the old value dir!
 setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     ?DEBL("setxattr inode:~p key:~p value:~p flags: ~p",[Inode,BKey,BValue,_Flags]),
     ?DEB1("   getting inode entry"),
