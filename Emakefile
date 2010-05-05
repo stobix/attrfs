@@ -1,1 +1,1 @@
-{'src/attrfs*',[{outdir,'ebin'},{d,debug}]}.
+{'src/attrfs*',[{outdir,'ebin'},{d,debug},{d,timestamp}]}.

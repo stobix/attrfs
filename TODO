@@ -18,6 +18,6 @@ Include support for "deep attributes":
     Shrdlu/Baz
 
 
-Include a server to handle inodes.
+Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
 
 Apparently, linux calls open before calling setattr. What to do with open?

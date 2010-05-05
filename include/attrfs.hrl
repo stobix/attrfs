@@ -51,8 +51,8 @@
         ,children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
         ,type::file_type()
-        % internal_file_info is the file info that the file has in my file system.
-        ,internal_file_info::#stat{} % fuserl:#stat{}
+        % stat is the file info that the file has in my file system.
+        ,stat::#stat{} % fuserl:#stat{}
         % ext_info contains a list of attribute - value pairs in xattr style, used to put files into virtual folders.
         ,ext_info::attrib_list()
         ,ext_io::ext_io_tuple()

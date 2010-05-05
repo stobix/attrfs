@@ -132,7 +132,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
         name=root
        ,children=[{"real",RealIno},{"attribs",AttribIno}]
        ,type=internal_dir %XXX: Really ok to let this have the same type as attribute dirs?
-       ,internal_file_info=#stat{
+       ,stat=#stat{
            st_mode=8#755 bor ?S_IFDIR
           ,st_ino=2
         }
@@ -147,7 +147,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
         name="attribs",
        children=tree_srv:to_list(keys),
        type=internal_dir,
-       internal_file_info=#stat{
+       stat=#stat{
             st_mode=8#755 bor ?S_IFDIR,
             st_ino=3
         },
@@ -213,7 +213,7 @@ getattr_internal(Inode,Continuation) ->
         {value,Entry} ->
             ?DEB1("   File exists, returning info"),
                 Reply=#fuse_reply_attr{
-                    attr=Entry#inode_entry.internal_file_info,
+                    attr=Entry#inode_entry.stat,
                     attr_timeout_ms=5
                 };
             _A -> 
@@ -289,7 +289,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                     ?DEB2("   Found child ~p",Child),
                     {value,Entry} = tree_srv:lookup(Inode,inodes),
                     ?DEB1("   Got child inode entry"),
-                    Stat=Entry#inode_entry.internal_file_info,
+                    Stat=Entry#inode_entry.stat,
                     ?DEB1("   Got child inode entry stat file info, returning"),
                     Param=#fuse_entry_param{
                         ino=Inode,
@@ -320,8 +320,9 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 %%   that is, either we try to create a new directory universe (not allowed),
 %%   a new real dir (maybe supported later) or a new attribute (certainly allowed)
 
-mkdir(_Ctx,ParentInode,_Name,_Mode,_Continuation,State) ->
-    ?DEBL(">mkdir",[]),
+mkdir(Ctx,ParentInode,BName,Mode,_Continuation,State) ->
+    Name=binary_to_list(BName),
+    ?DEBL(">mkdir ctx: ~p pIno: ~p name: ~p mode: ~p ",[Ctx,ParentInode,Name,Mode]),
     case tree_srv:lookup(ParentInode,inodes) of
         none -> {#fuse_reply_err{err=enoent},State}; % FIXME: Should I treat this error elsewhere?
         {value,Parent} ->
@@ -335,11 +336,24 @@ mkdir(_Ctx,ParentInode,_Name,_Mode,_Continuation,State) ->
                             ?DEB1("   creating a subvalue dir"),
                             %this is where I create a subvalue dir, when these are supported.
                             % subvalue dir name {{Key,Val},Name}, I guess.
+                            % Inode=mkdir(Ctx,ParentInode,Name,Mode),
                             {#fuse_reply_err{err=enotsup},State};
                         Key ->
                             ?DEB1("   creating an attribute value dir"),
                             % create value directory here.
-                            {#fuse_reply_err{err=enotsup},State}
+                            {Inode,Stat}=mkdir(Ctx,ParentInode,{Key,Name},Mode,attribute_dir),
+                            ?DEB1("   returning new dir"),
+                            {#fuse_reply_entry{
+                                fuse_entry_param=
+                                    #fuse_entry_param{
+                                        ino=Inode,
+                                        generation=1,
+                                        attr=Stat,
+                                        attr_timeout_ms=1000,
+                                        entry_timeout_ms=1000
+                                    }
+                                }
+                            ,State}
                     end;
                 internal_dir ->
                     ParentName=inode:is_named(ParentInode),
@@ -353,10 +367,58 @@ mkdir(_Ctx,ParentInode,_Name,_Mode,_Continuation,State) ->
                         "attribs" ->
                             % This is where I add an attribute key folder.
                             ?DEB1("   creating an attribute key dir"),
-                            {#fuse_reply_err{err=enotsup},State}
+                            {Inode,Stat}=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
+                            ?DEB1("   returning new dir"),
+                            {#fuse_reply_entry{
+                                fuse_entry_param=
+                                    #fuse_entry_param{
+                                        ino=Inode,
+                                        generation=0,
+                                        attr=Stat,
+                                        attr_timeout_ms=1000,
+                                        entry_timeout_ms=1000
+                                    }
+                                }
+                            ,State}
                     end
             end
     end.
+
+mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
+    ?DEBL("   creating new directory entry called ~p",[Name]),
+    {_,Now,_} = now(),
+    #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
+    DirStat=#stat{
+        st_mode=Mode,
+        st_nlink=1, % FIXME: Make this accurate.
+        st_uid=Uid,
+        st_gid=Gid,
+        st_atime=Now,
+        st_ctime=Now,
+        st_mtime=Now
+        },
+   DirEntry=#inode_entry{
+       name=Name,
+       stat=DirStat,
+       ext_info=[],
+       ext_io=ext_info_to_ext_io([]),
+       type=DirType,
+       children=[]
+       },
+   {insert_entry(ParentInode,DirEntry),DirStat}.
+
+
+%insert entry Entry with into the file system tree under ParentInode. Returns new inode.
+insert_entry(ParentInode,Entry) ->
+    ?DEBL("    inserting new entry as child for ~p",[ParentInode]),
+    Inode=inode:get(Entry#inode_entry.name),
+    {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
+    NewChildren=ParentEntry#inode_entry.children++{Entry#inode_entry.name,Inode},
+    tree_srv:enter(ParentInode,ParentEntry#inode_entry{children=NewChildren},inodes),
+    tree_srv:enter(Inode,Entry,inodes),
+    Inode.
+
+
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
     ?DEBL("~s",["mknod!"]),
@@ -421,7 +483,7 @@ release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">~s~n",["releasedir"]),
+    ?DEBL(">~s",["releasedir"]),
     {#fuse_reply_err{err=ok},State}.
 
 %%Remove an extended attribute. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type removexattr_async_reply ().
@@ -450,12 +512,45 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %% {InternalDir,_} 
 %%   Not allowed.
 %% New name is ignored, I think. Either that, or I update my inode module to include support for multiple inode bindings.
+%% If i include virtual files, I need to filter them out here as well.
 
-rename(_Ctx,Parent,BName,NewParent,_NewName,_Continuation,State) ->
-    ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[Parent,BName,NewParent]),
+rename(_Ctx,ParentIno,BName,NewParentIno,_BNewName,_Continuation,State) ->
+    ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,BName,NewParentIno]),
     Name=binary_to_list(BName),
     Inode=inode:get(Name),
-    {#fuse_reply_err{err=enotsup},State}.
+    Reply=make_rename_reply(ParentIno,NewParentIno,Name),
+    {#fuse_reply_err{err=Reply},State}.
+
+make_rename_reply(From,To,File) ->
+    FromEntry=tree_srv:lookup(From,inodes),
+    case FromEntry#inode_entry.type of
+        #external_dir{} ->
+            make_rename_reply_append_attribute(To,File);
+        attribute_dir ->
+            make_rename_reply_append_attribute(To,File);
+            _ ->
+                enotsup
+    end.
+
+%% Since the attribute folder already exists, things needn't get overly coplicated here...
+make_rename_reply_append_attribute(NewAttribIno,File) ->
+    FileInode=inode:is_numbered(File),
+    {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
+    Path=(FileEntry#inode_entry.type)#external_file.path,
+    Attribute=inode:is_named(NewAttribIno),
+    case Attribute of
+        {Key,Value} ->
+            add_new_attribute(Path,FileInode,FileEntry,Attribute),
+            ok;
+            Key ->
+                % Valueless attributes are not supported for now. 
+                % Takes some restructuring to get to work, I think.
+                enotsup 
+    end.
+
+
+
+
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["rmdir!"]),
@@ -466,7 +561,7 @@ rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
 setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
-    Stat=Entry#inode_entry.internal_file_info,
+    Stat=Entry#inode_entry.stat,
     NewStat=Stat#stat{
         st_uid=
             case (?FUSE_SET_ATTR_UID band _ToSet) == 0 of
@@ -523,7 +618,7 @@ setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
                 Stat#stat.st_size
             end
                 },
-    tree_srv:enter(Inode,Entry#inode_entry{internal_file_info=NewStat}),
+    tree_srv:enter(Inode,Entry#inode_entry{stat=NewStat}),
     {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=100000},State}.
 
 
@@ -534,17 +629,17 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 %% Set file attributes. #fuse_reply_err{err = ok} indicates success. Flags is a bitmask consisting of ?XATTR_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setxattr_async_reply ().
-setxattr(_Ctx,Inode,BName,BValue,_Flags,_Continuation,State) ->
-    ?DEBL("setxattr inode:~p name:~p value:~p flags: ~p",[Inode,BName,BValue,_Flags]),
+setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
+    ?DEBL("setxattr inode:~p key:~p value:~p flags: ~p",[Inode,BKey,BValue,_Flags]),
     ?DEB1("   getting inode entry"),
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     ?DEB1("   transforming input data"),
-    Name=binary_to_list(BName),
+    Key=binary_to_list(BKey),
     Value=binary_to_list(BValue),
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
-            ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Name,Value,Path]),
-            add_new_attribute(Path,Inode,Entry,{Name,Value}),
+            ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
+            add_new_attribute(Path,Inode,Entry,{Key,Value}),
             {#fuse_reply_err{err=ok},State};
         _ ->
             ?DEB1("   entry not an external file, skipping..."),
@@ -636,7 +731,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
         (ok=dets:insert(?ATTR_DB,{Path,Attr})),
     ?DEBL("   new database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
-    #inode_entry{internal_file_info=Stat,name=FName}=FEntry,
+    #inode_entry{stat=Stat,name=FName}=FEntry,
     ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
     append_attribute(Attr,FName,Stat),
     OldExtInfo=FEntry#inode_entry.ext_info,
@@ -758,7 +853,7 @@ direntrify([{Name,Inode}|Children]) ->
     ?DEB2("    Getting inode for child ~p",{Name,Inode}),
     {value,Child}=tree_srv:lookup(Inode,inodes),
     ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
-    ChildStats=Child#inode_entry.internal_file_info,
+    ChildStats=Child#inode_entry.stat,
     ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
     Direntry= #direntry{name=Name ,stat=ChildStats },
     ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
@@ -829,7 +924,7 @@ make_inode_list({Path,Name}) ->
         name=Name
         ,children=Children
         ,type=Type
-        ,internal_file_info=MyStat
+        ,stat=MyStat
         ,ext_info=ExtInfo
         ,ext_io=ExtIo},
     tree_srv:enter(inode:get(Name),InodeEntry,inodes),
@@ -861,7 +956,7 @@ append_key_dir(KeyDir,ValDir,Stat) ->
                     type=attribute_dir,
                     name=KeyDir,
                     children=[{ValDir,ChildIno}],
-                    internal_file_info=dir(Stat),
+                    stat=dir(Stat),
                     ext_info=[],
                     ext_io=ext_info_to_ext_io([])
                 };
@@ -884,7 +979,7 @@ append_value_dir(Key,Value,ChildName,Stat) ->
                     type=attribute_dir,
                     name=Value,
                     children=[{ChildName,ChildIno}],
-                    internal_file_info=dir(Stat),
+                    stat=dir(Stat),
                     ext_info=[],
                     ext_io=ext_info_to_ext_io([])
                 };
@@ -958,7 +1053,7 @@ test_access(Inode,Mask,Ctx) ->
     end.
 
 has_rwx_access(Entry,Mask,Ctx) ->
-    #stat{st_mode=Mode,st_uid=Uid,st_gid=Gid}=Entry#inode_entry.internal_file_info,
+    #stat{st_mode=Mode,st_uid=Uid,st_gid=Gid}=Entry#inode_entry.stat,
     has_other_perms(Mode,Mask)
         orelse Gid==Ctx#fuse_ctx.gid andalso has_group_perms(Mode,Mask)
         orelse Uid==Ctx#fuse_ctx.uid andalso has_user_perms(Mode,Mask).
