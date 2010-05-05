@@ -142,7 +142,6 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     ?DEB1("   updating root inode entry"),
     tree_srv:enter(RootIno,RootEntry,inodes),
     ?DEB2("   making inode entries for ~p",MirrorDir),
-    make_inode_list({MirrorDir,"real"}),
     AttributeEntry=#inode_entry{
         name="attribs",
        children=tree_srv:to_list(keys),
@@ -155,6 +154,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ext_io=ext_info_to_ext_io([])
     },
     tree_srv:enter(AttribIno,AttributeEntry,inodes),
+    make_inode_list({MirrorDir,"real"}),
     ?DEB1("   attribute inode list made"),
     % Since InodeList1 is created first, and both InodeList1 and 
     % AttributeBranchList are sorted, this will produce an ordered list.
@@ -327,7 +327,7 @@ mkdir(Ctx,ParentInode,BName,Mode,_Continuation,State) ->
     Reply=case tree_srv:lookup(ParentInode,inodes) of
         none -> #fuse_reply_err{err=enoent}; % FIXME: Should I treat this error elsewhere?
         {value,Parent} ->
-            case tree_srv:lookup(inode:get(Name),State) of
+            case tree_srv:lookup(inode:get(Name),inodes) of
                 {value,_} -> #fuse_reply_err{err=eexist};
                 none ->
                     ParentName=Parent#inode_entry.name,
@@ -957,6 +957,7 @@ append_attribute({Key,Val},Name,Stat) ->
     AttributesFolderIno=inode:get("attribs"),
     ?DEB1("   getting attribute folder inode entry"),
     {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
+    ?DEB1("   getting attribute folder children"),
     AttrChildren=tree_srv:to_list(keys), 
     ?DEB1("   creating new inode entry"),
     NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
