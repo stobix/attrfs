@@ -73,6 +73,7 @@
 %%%=========================================================================
 
 -export([keymergeunique/2]).
+-export([stringdelta/2]).
 
 %%%=========================================================================
 %%% Includes and behaviour
@@ -115,7 +116,6 @@ start_link(MountDir,LinkedIn,MountOpts) ->
 
 start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
     Options=[],
-    assert_started(inode),
     ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
@@ -230,13 +230,14 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 
 %% TODO: Do something with system.posix_acl_access and similar?
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
-getxattr(_Ctx,Inode,Name,Size,_Continuation,State) ->
+getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
+    Name=stringdelta(binary_to_list(BName),"user."),
     ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[Name,Size,Inode]),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     ?DEB1("   Got inode entry"),
     ExtInfo=Entry#inode_entry.ext_info,
     ?DEB1("   Got extinfo"),
-    Reply=case lists:keyfind(binary_to_list(Name),1,ExtInfo) of
+    Reply=case lists:keyfind(Name,1,ExtInfo) of
         {Name,ExtInfoValue} ->
             ?DEB1("   Got attribute value"),
             ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
@@ -653,7 +654,7 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
-            add_new_attribute(Path,Inode,Entry,{Key,Value}),
+            add_new_attribute(Path,Inode,Entry,{stringdelta(Key,"user."),Value}),
             {#fuse_reply_err{err=ok},State};
         _ ->
             ?DEB1("   entry not an external file, skipping..."),
@@ -839,8 +840,8 @@ ext_info_to_ext_io([],B) ->
     {B0len,B0};
 
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
-    ?DEB2("    Adding zero to end of name ~p",Name),
-    Name0=Name++"\0",
+    ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
+    Name0="user."++Name++"\0",
     ?DEB1("    Appending name to namelist"),
     NewString=String++Name0,
     ?DEB1("    Recursion"),
@@ -876,13 +877,14 @@ direntrify([{Name,Inode}|Children]) ->
     [Direntry1|direntrify(Children)].
 
 assert_started(Application) ->
+    ?DEB2("   Checking that ~p is loaded",Application),
     case find(
               fun({A,_,_}) when A==Application -> true;
                  (_) -> false 
               end,application:loaded_applications())
        of
-         true -> true;
-         false -> application:start(Application)
+         true -> ?DEB1("   loaded"),true;
+         false -> ?DEB1("   not loaded, starting"),application:start(Application)
     end.
 
 %% find runs SearchFun for one element at a time in the provided list,
@@ -1080,6 +1082,20 @@ has_group_perms(Mode,Mask) ->
 
 has_user_perms(Mode,Mask) ->
     Mode band ?S_IRWXU bsr 6 band Mask/=0.
+
+%% removes string2 from the beginning of string1, if applicable. Returns what was left of string1
+
+stringdelta(String1,[]) -> String1;
+
+stringdelta([],_String2) -> []; %String2;
+
+stringdelta([C1|String1],[C2|String2]) when C1 == C2 ->
+    stringdelta(String1,String2);
+
+stringdelta([C1|String1],[C2|_String2]) when C1 /= C2 ->
+    String1.
+
+
 
 %%%=========================================================================
 %%% Debug functions
