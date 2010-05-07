@@ -74,6 +74,7 @@
 
 -export([keymergeunique/2]).
 -export([stringdelta/2]).
+-export([dump_entries/1,dump_inodes/0,dump_inode_entries/0]).
 
 %%%=========================================================================
 %%% Includes and behaviour
@@ -228,7 +229,7 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
     ?DEBL("~s",["getlk!\n"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-%% TODO: Do something with system.posix_acl_access and similar?
+
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
     Name=stringdelta(binary_to_list(BName),"user."),
@@ -282,9 +283,9 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
     ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
-    case lookup_children(ParentInode) of
+    Reply=case lookup_children(ParentInode) of
         {value,Children} ->
-            ?DEB2("   Got children for ~p",ParentInode),
+            ?DEBL("   Got children for ~p: ~p",[ParentInode, Children]),
             case lists:keysearch(Child,1,Children) of
                 {value,{_,Inode}} ->
                     ?DEB2("   Found child ~p",Child),
@@ -299,15 +300,16 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                         attr_timeout_ms=1000,
                         entry_timeout_ms=1000
                             },
-                    {#fuse_reply_entry{fuse_entry_param=Param},State};
+                    #fuse_reply_entry{fuse_entry_param=Param};
                 false ->
                     ?DEB1("   Child nonexistent!"),
-                    {#fuse_reply_err{err=enoent},State} % child nonexistent.
+                    #fuse_reply_err{err=enoent} % child nonexistent.
             end;
         none -> 
             ?DEB1("   Parent nonexistent!"),
-            {#fuse_reply_err{err=enoent},State} %no parent
-    end.
+            #fuse_reply_err{err=enoent} %no parent
+    end,
+    {Reply,State}.
 
 %% This will have different meanings depending on parent type:
 %% * #external_dir{}
@@ -383,12 +385,12 @@ make_internal_child_dir(_Ctx,_ParentInode,"real",_Name,_Mode) ->
 make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
     % This is where I add an attribute key folder.
     ?DEB1("   creating an attribute key dir"),
-    {Inode,Stat}=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
+    Stat=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
     ?DEB1("   returning new dir"),
     #fuse_reply_entry{
         fuse_entry_param=
             #fuse_entry_param{
-                ino=Inode,
+                ino=inode:get(Name),
                 generation=0,
                 attr=Stat,
                 attr_timeout_ms=1000,
@@ -407,6 +409,7 @@ mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
     #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
     DirStat=#stat{
         st_mode=Mode,
+        st_ino=inode:get(Name),
         st_nlink=1, % FIXME: Make this accurate.
         st_uid=Uid,
         st_gid=Gid,
@@ -422,7 +425,8 @@ mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
        type=DirType,
        children=[]
        },
-   {insert_entry(ParentInode,DirEntry),DirStat}.
+   insert_entry(ParentInode,DirEntry),
+   DirStat.
 
 
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.
@@ -430,7 +434,7 @@ insert_entry(ParentInode,Entry) ->
     ?DEBL("    inserting new entry as child for ~p",[ParentInode]),
     Inode=inode:get(Entry#inode_entry.name),
     {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
-    NewChildren=ParentEntry#inode_entry.children++{Entry#inode_entry.name,Inode},
+    NewChildren=[{Entry#inode_entry.name,Inode}|ParentEntry#inode_entry.children],
     tree_srv:enter(ParentInode,ParentEntry#inode_entry{children=NewChildren},inodes),
     tree_srv:enter(Inode,Entry,inodes),
     Inode.
@@ -856,7 +860,7 @@ direntries(Inode) ->
     ?DEB1("    Creating direntries"),
     ?DEB1("     Getting child entries"),
     {value,Children}=lookup_children(Inode),
-    ?DEB1("     Converting children"),
+    ?DEBL("     Converting children ~p for ~p",[Children,Inode]),
     direntrify(Children).
 
 
@@ -876,6 +880,16 @@ direntrify([{Name,Inode}|Children]) ->
     Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
     ?DEB2("    Appending child ~p to list",{Name,Inode}),
     [Direntry1|direntrify(Children)].
+
+
+dump_inode_entries() ->
+    lists:map(fun({Inode,#inode_entry{name=Name,children=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
+
+dump_entries(Table) ->
+    tree_srv:to_list(Table).
+
+dump_inodes() ->
+    inode:list_bound().
 
 assert_started(Application) ->
     ?DEB2("   Checking that ~p is loaded",Application),
