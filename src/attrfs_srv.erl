@@ -323,9 +323,10 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 %%   that is, either we try to create a new directory universe (not allowed),
 %%   a new real dir (maybe supported later) or a new attribute (certainly allowed)
 
-mkdir(Ctx,ParentInode,BName,Mode,_Continuation,State) ->
+mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     Name=binary_to_list(BName),
-    ?DEBL(">mkdir ctx: ~p pIno: ~p name: ~p mode: ~p ",[Ctx,ParentInode,Name,Mode]),
+    ?DEBL(">mkdir ctx: ~p pIno: ~p name: ~p mode: ~p ",[Ctx,ParentInode,Name,MMode]),
+    Mode=MMode bor ?S_IFDIR,
     Reply=case tree_srv:lookup(ParentInode,inodes) of
         none -> #fuse_reply_err{err=enoent}; % FIXME: Should I treat this error elsewhere?
         {value,Parent} ->
@@ -388,7 +389,7 @@ make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
     Stat=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
     ?DEB1("   returning new dir"),
     Inode=inode:get(Name),
-    tree_srv:enter({Name,Inode},keys),
+    tree_srv:enter(Name,Inode,keys),
     #fuse_reply_entry{
         fuse_entry_param=
             #fuse_entry_param{
@@ -407,12 +408,14 @@ make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
 
 mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
     ?DEBL("   creating new directory entry called ~p",[Name]),
-    {_,Now,_} = now(),
+    {MegaNow,NormalNow,_} = now(),
+    Now=MegaNow*1000000+NormalNow,
+    ?DEBL("   atime etc: ~p",[Now]),
     #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
     DirStat=#stat{
         st_mode=Mode,
         st_ino=inode:get(Name),
-        st_nlink=1, % FIXME: Make this accurate.
+%        st_nlink=1, % FIXME: Make this accurate.
         st_uid=Uid,
         st_gid=Gid,
         st_atime=Now,
