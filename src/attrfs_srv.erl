@@ -345,7 +345,7 @@ make_dir(_Ctx,_ParentInode,_ParentName,#external_dir{},_Name,_Mode) ->
     #fuse_reply_err{err=enotsup};
 
 
-make_dir(Ctx,ParentInode,ParentName,attr_dir,Name,Mode) ->
+make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
     make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
 
 
@@ -362,12 +362,12 @@ make_attr_child_dir(_Ctx,_ParentInode,_Attribute={_Key,_Val},_Name,_Mode) ->
 make_attr_child_dir(Ctx,ParentInode,Key,Name,Mode) ->
     ?DEB1("   creating an attribute value dir"),
     % create value directory here.
-    {Inode,Stat}=mkdir(Ctx,ParentInode,{Key,Name},Mode,attribute_dir),
+    Stat=mkdir(Ctx,ParentInode,{Key,Name},Mode,attribute_dir),
     ?DEB1("   returning new dir"),
     #fuse_reply_entry{
         fuse_entry_param=
             #fuse_entry_param{
-                ino=Inode,
+                ino=inode:get({Key,Name}),
                 generation=1,
                 attr=Stat,
                 attr_timeout_ms=1000,
