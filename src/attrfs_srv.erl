@@ -531,30 +531,32 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %%   append attribute, and possibly (always?) value (possibly empty?) to the file. Add File to the external dir.
 %% {AttributeDir,AttributeDir2}:
 %%   append attribute and value to File from AttributeDir2 
+%% Not allowed:
 %% {InternalDir,_} 
-%%   Not allowed.
+%% {_,_}
 %% New name is ignored, I think. Either that, or I update my inode module to include support for multiple inode bindings.
 %% If i include virtual files, I need to filter them out here as well.
 
 rename(_Ctx,ParentIno,BName,NewParentIno,_BNewName,_Continuation,State) ->
-    ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,BName,NewParentIno]),
     Name=binary_to_list(BName),
-    Reply=make_rename_reply(ParentIno,NewParentIno,Name),
+    ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
+    {value,ParentInoEntry}=tree_srv:lookup(ParentIno,inodes),
+    % Since a rename only copies files, I only need the old parent to filter movability according to folder type.
+    Reply=make_rename_reply(ParentInoEntry#inode_entry.type,NewParentIno,Name),
     {#fuse_reply_err{err=Reply},State}.
 
-make_rename_reply(From,To,File) ->
-    FromEntry=tree_srv:lookup(From,inodes),
-    case FromEntry#inode_entry.type of
-        #external_dir{} ->
-            make_rename_reply_append_attribute(To,File);
-        #attribute_dir{} ->
-            make_rename_reply_append_attribute(To,File);
-            _ ->
-                enotsup
-    end.
+
+make_rename_reply(#external_dir{},NewAttribIno,File) ->
+    make_rename_reply_(NewAttribIno,File);
+
+make_rename_reply(#attribute_dir{},NewAttribIno,File) ->
+    make_rename_reply_(NewAttribIno,File);
+
+make_rename_reply(_DirType,_NewAttribIno,_File) ->
+    enotsup.
 
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
-make_rename_reply_append_attribute(NewAttribIno,File) ->
+make_rename_reply_(NewAttribIno,File) ->
     FileInode=inode:get(File),
     {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
     Path=(FileEntry#inode_entry.type)#external_file.path,
