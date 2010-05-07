@@ -135,7 +135,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        ,type=internal_dir %XXX: Really ok to let this have the same type as attribute dirs?
        ,stat=#stat{
            st_mode=8#755 bor ?S_IFDIR
-          ,st_ino=2
+          ,st_ino=inode:get(root)
         }
        ,ext_info=[]
        ,ext_io=ext_info_to_ext_io([])
@@ -149,7 +149,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        type=internal_dir,
        stat=#stat{
             st_mode=8#755 bor ?S_IFDIR,
-            st_ino=3
+            st_ino=inode:get("attribs")
         },
        ext_info=[],
        ext_io=ext_info_to_ext_io([])
@@ -387,10 +387,12 @@ make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
     ?DEB1("   creating an attribute key dir"),
     Stat=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
     ?DEB1("   returning new dir"),
+    Inode=inode:get(Name),
+    tree_srv:enter({Name,Inode},keys),
     #fuse_reply_entry{
         fuse_entry_param=
             #fuse_entry_param{
-                ino=inode:get(Name),
+                ino=Inode,
                 generation=0,
                 attr=Stat,
                 attr_timeout_ms=1000,
@@ -656,15 +658,16 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     ?DEB1("   transforming input data"),
     Key=binary_to_list(BKey),
     Value=binary_to_list(BValue),
-    case Entry#inode_entry.type of
+    Reply=case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
             add_new_attribute(Path,Inode,Entry,{stringdelta(Key,"user."),Value}),
-            {#fuse_reply_err{err=ok},State};
+            #fuse_reply_err{err=ok};
         _ ->
             ?DEB1("   entry not an external file, skipping..."),
-            {#fuse_reply_err{err=enotsup},State}
-    end.
+            #fuse_reply_err{err=enotsup}
+    end,
+    {Reply,State}.
 
 statfs(_Ctx,_Inode,_Continuation,State) ->
     ?DEBL("~s",["statfs!"]),
@@ -988,7 +991,7 @@ append_key_dir(KeyDir,ValDir,Stat) ->
                     type=attribute_dir,
                     name=KeyDir,
                     children=[{ValDir,ChildIno}],
-                    stat=dir(Stat),
+                    stat=dir(Stat#stat{st_ino=MyInode}),
                     ext_info=[],
                     ext_io=ext_info_to_ext_io([])
                 };
@@ -1011,7 +1014,7 @@ append_value_dir(Key,Value,ChildName,Stat) ->
                     type=attribute_dir,
                     name=Value,
                     children=[{ChildName,ChildIno}],
-                    stat=dir(Stat),
+                    stat=dir(Stat#stat{st_ino=MyInode}),
                     ext_info=[],
                     ext_io=ext_info_to_ext_io([])
                 };
