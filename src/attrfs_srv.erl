@@ -137,14 +137,18 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
         name="attribs",
        children=tree_srv:to_list(keys),
        type=internal_dir,
-       stat=#stat{
-            st_mode=8#755 bor ?S_IFDIR,
+       stat=#stat{ 
+               % For now I'll set all access here, and limit access on a per-user-basis.
+               % Maybe even make this folder "magic", so that different users think that they own it?
+               % More on this when I start using the Ctx structure everywhere.
+            st_mode=8#777 bor ?S_IFDIR,
             st_ino=AttribIno
         },
        ext_info=[],
        ext_io=ext_info_to_ext_io([])
     },
     tree_srv:enter(AttribIno,AttributeEntry,inodes),
+    % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder "real", adding attribute folders with appropriate files when a match between external file and internal database entry is found.
     make_inode_list({MirrorDir,"real"}),
     ?DEB1("   attribute inode list made"),
     % Since InodeList1 is created first, and both InodeList1 and 
@@ -528,6 +532,8 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %% {Parent,NewParent}
 %% allowed:
 %% {#external_dir{},#attribute_dir{}}
+%%   Since mv from an external filesystem does not mean a call to rename, this can only mean that the user tries to move a file
+%% from a real dir to an attribs dir
 %%   append attribute, and possibly (always?) value (possibly empty?) to the file. Add File to the external dir.
 %% {AttributeDir,AttributeDir2}:
 %%   append attribute and value to File from AttributeDir2 
