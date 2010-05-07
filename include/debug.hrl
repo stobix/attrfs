@@ -1,3 +1,5 @@
+-ifndef(debug_hrl).
+-define(debug_hrl,[]).
 -ifdef(debug).
 -ifdef(timestamp).
 -define(DEB1(X),io:format("[~2..0p:~2..0p:~2..0p] ~p:~p ~s~n",tuple_to_list(time())++[?MODULE,?LINE,X])).
@@ -12,4 +14,5 @@
 -define(DEB1(X),void).
 -define(DEB2(X,Y),void).
 -define(DEBL(X,Y),void).
+-endif.
 -endif.

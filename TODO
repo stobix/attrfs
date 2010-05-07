@@ -18,6 +18,8 @@ Include support for "deep attributes":
     Shrdlu/Baz
 
 
+change attribute_dir into #attribute_dir{keyparent,value}, where keyparent is nil for main key attribute dirs.
+
 Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
 
 Apparently, linux calls open before calling setattr. What to do with open?

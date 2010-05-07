@@ -86,6 +86,7 @@ get(Name) ->
     case is_numbered(Name) of
         false -> 
             Number=?MODULE:get(),
+            ?DEBL("   binding ~p to ~p",[Name,Number]),
             gen_server:cast(?MODULE,{register,Name,Number}),
             Number;
         Number -> Number

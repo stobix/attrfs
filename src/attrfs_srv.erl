@@ -29,7 +29,7 @@
 %%%=========================================================================
 -export([handle_info/2,init/1]).
 -export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
--export([start_link/1,start_link/2,start_link/3,start_link/4]).
+-export([start_link/1,start_link/5]).
 
 %%%=========================================================================
 %%% fuserl function exports
@@ -101,24 +101,14 @@ code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
     ok.
 
 %% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
-start_link({MountDir,MirrorDir}) ->
+start_link({MountDir,MirrorDir,DB}) ->
     ?DEB1("Starting attrfs server..."),
-    start_link(MountDir,false,"",MirrorDir);
+    start_link(MountDir,false,"",MirrorDir,DB).
 
-start_link(Dir) ->
-    start_link(Dir,false). % A true value for linked in "jeopardizes the erlang emulator stability" according to fuserlproc
-
-start_link(Dir,LinkedIn) ->
-%    start_link(Dir,LinkedIn,"debug").
-    start_link(Dir,LinkedIn,"").
-
-start_link(MountDir,LinkedIn,MountOpts) ->
-    start_link(MountDir,LinkedIn,MountOpts,MountDir). %TODO: make the last Dir mirror an arbitary directory, infusing its contents into the first Dir.
-
-start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
+start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     Options=[],
-    ?DEBL("   opening attribute database file ~p as ~p", [?ATTR_DB_FILE, ?ATTR_DB]),
-    {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,?ATTR_DB_FILE}]),
+    ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
+    {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
     tree_srv:new(inodes),
     tree_srv:new(keys),
@@ -149,7 +139,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir) ->
        type=internal_dir,
        stat=#stat{
             st_mode=8#755 bor ?S_IFDIR,
-            st_ino=inode:get("attribs")
+            st_ino=AttribIno
         },
        ext_info=[],
        ext_io=ext_info_to_ext_io([])
@@ -330,12 +320,12 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     Reply=case tree_srv:lookup(ParentInode,inodes) of
         none -> #fuse_reply_err{err=enoent}; % FIXME: Should I treat this error elsewhere?
         {value,Parent} ->
-            case tree_srv:lookup(inode:get(Name),inodes) of
-                {value,_} -> #fuse_reply_err{err=eexist};
+            case tree_srv:lookup(inode:is_numbered(Name),inodes) of
                 none ->
                     ParentName=Parent#inode_entry.name,
                     ParentType=Parent#inode_entry.type,
-                    make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode)
+                    make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode);
+                _ -> #fuse_reply_err{err=eexist}
             end
     end,
     {Reply,State}.
@@ -345,29 +335,30 @@ make_dir(_Ctx,_ParentInode,_ParentName,#external_dir{},_Name,_Mode) ->
     #fuse_reply_err{err=enotsup};
 
 
-make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
-    make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
+make_dir(Ctx,ParentInode,_ParentName,DirType=#attribute_dir{},Name,Mode) ->
+    make_attr_child_dir(Ctx,ParentInode,DirType,Name,Mode);
 
 
 make_dir(Ctx,ParentInode,ParentName,internal_dir,Name,Mode) ->
     make_internal_child_dir(Ctx,ParentInode,ParentName,Name,Mode).
 
-make_attr_child_dir(_Ctx,_ParentInode,_Attribute={_Key,_Val},_Name,_Mode) ->
+make_attr_child_dir(_Ctx,_ParentInode,#attribute_dir{type={value,_}},_Name,_Mode) ->
     ?DEB1("   NOT creating a subvalue dir"),
     %this is where I create a subvalue dir, when these are supported.
     % subvalue dir name {{Key,Val},Name}, I guess.
-    % Inode=mkdir(Ctx,ParentInode,Name,Mode),
+    % Inode=make_general_dir(Ctx,ParentInode,Name,Mode),
     #fuse_reply_err{err=enotsup};
 
-make_attr_child_dir(Ctx,ParentInode,Key,Name,Mode) ->
+make_attr_child_dir(Ctx,ParentInode,#attribute_dir{type={key,Key}},Name,Mode) ->
     ?DEB1("   creating an attribute value dir"),
     % create value directory here.
-    Stat=mkdir(Ctx,ParentInode,{Key,Name},Mode,attribute_dir),
+    MyInode=inode:get({Key,Name}),
+    Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,#attribute_dir{type={value,{Key,Name}}}),
     ?DEB1("   returning new dir"),
     #fuse_reply_entry{
         fuse_entry_param=
             #fuse_entry_param{
-                ino=inode:get({Key,Name}),
+                ino=MyInode,
                 generation=1,
                 attr=Stat,
                 attr_timeout_ms=1000,
@@ -386,14 +377,14 @@ make_internal_child_dir(_Ctx,_ParentInode,"real",_Name,_Mode) ->
 make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
     % This is where I add an attribute key folder.
     ?DEB1("   creating an attribute key dir"),
-    Stat=mkdir(Ctx,ParentInode,Name,Mode,attribute_dir),
+    MyInode=inode:get(Name),
+    Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,#attribute_dir{type={key,Name}}),
     ?DEB1("   returning new dir"),
-    Inode=inode:get(Name),
-    tree_srv:enter(Name,Inode,keys),
+    tree_srv:enter(Name,MyInode,keys),
     #fuse_reply_entry{
         fuse_entry_param=
             #fuse_entry_param{
-                ino=Inode,
+                ino=MyInode,
                 generation=0,
                 attr=Stat,
                 attr_timeout_ms=1000,
@@ -404,9 +395,7 @@ make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
 make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
             #fuse_reply_err{err=enotsup}.
 
-
-
-mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
+make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
     ?DEBL("   creating new directory entry called ~p",[Name]),
     {MegaNow,NormalNow,_} = now(),
     Now=MegaNow*1000000+NormalNow,
@@ -414,7 +403,7 @@ mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
     #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
     DirStat=#stat{
         st_mode=Mode,
-        st_ino=inode:get(Name),
+        st_ino=MyInode,
 %        st_nlink=1, % FIXME: Make this accurate.
         st_uid=Uid,
         st_gid=Gid,
@@ -437,8 +426,15 @@ mkdir(Ctx,ParentInode,Name,Mode,DirType) ->
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.
 insert_entry(ParentInode,Entry) ->
     ?DEBL("    inserting new entry as child for ~p",[ParentInode]),
-    Inode=inode:get(Entry#inode_entry.name),
     {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
+
+    Inode=case Entry#inode_entry.type of
+        #attribute_dir{type={_,ComplexName}} ->
+            inode:get(ComplexName);
+        _ ->
+            inode:get(Entry#inode_entry.name)
+    end,
+
     NewChildren=[{Entry#inode_entry.name,Inode}|ParentEntry#inode_entry.children],
     tree_srv:enter(ParentInode,ParentEntry#inode_entry{children=NewChildren},inodes),
     tree_srv:enter(Inode,Entry,inodes),
@@ -531,7 +527,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %% This will have different meanings depending on parent type:
 %% {Parent,NewParent}
 %% allowed:
-%% {#external_dir{},attribute_dir}
+%% {#external_dir{},#attribute_dir{}}
 %%   append attribute, and possibly (always?) value (possibly empty?) to the file. Add File to the external dir.
 %% {AttributeDir,AttributeDir2}:
 %%   append attribute and value to File from AttributeDir2 
@@ -551,7 +547,7 @@ make_rename_reply(From,To,File) ->
     case FromEntry#inode_entry.type of
         #external_dir{} ->
             make_rename_reply_append_attribute(To,File);
-        attribute_dir ->
+        #attribute_dir{} ->
             make_rename_reply_append_attribute(To,File);
             _ ->
                 enotsup
@@ -859,7 +855,6 @@ ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
 
-%% TODO: rebuild this with lookup_children?
 %% Gets the children for the inode from the inode list, and runs direntrify
 %% on it.
 direntries(Inode) ->
@@ -991,7 +986,7 @@ append_key_dir(KeyDir,ValDir,Stat) ->
         % No entry found, creating new attribute entry.
         none ->
                 #inode_entry{
-                    type=attribute_dir,
+                    type=#attribute_dir{type={key,KeyDir}},
                     name=KeyDir,
                     children=[{ValDir,ChildIno}],
                     stat=dir(Stat#stat{st_ino=MyInode}),
@@ -1014,7 +1009,7 @@ append_value_dir(Key,Value,ChildName,Stat) ->
         % No entry found, creating new attribute entry.
         none ->
                 #inode_entry{
-                    type=attribute_dir,
+                    type=#attribute_dir{type={value,{Key,Value}}},
                     name=Value,
                     children=[{ChildName,ChildIno}],
                     stat=dir(Stat#stat{st_ino=MyInode}),

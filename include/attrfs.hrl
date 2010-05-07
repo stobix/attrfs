@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------
 
 -define(ATTR_DB, attributes).
--define(ATTR_DB_FILE, attributes).
+-define(ATTR_DB_FILE, attrfs, attributes_db).
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
@@ -37,10 +37,17 @@
         ,external_file_info::#file_info{} % file:#file_info{}
        }).
 
+-type value_tuple()::{value_tuple()|string(),string()}.
+-type attribute_type()::{key,string()}|{value,value_tuple()}.
+
+-record(attribute_dir,
+       {type::attribute_type()
+       }).
+
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
--type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 -record(inode_entry,
