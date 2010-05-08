@@ -529,14 +529,18 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 
 
 %% This will have different meanings depending on parent type:
-%% {Parent,NewParent}
+%% {Parent,NewParent,Child}
 %% allowed:
-%% {#external_dir{},#attribute_dir{}}
+%% {#external_dir{},#attribute_dir{},File}
 %%   Since mv from an external filesystem does not mean a call to rename, this can only mean that the user tries to move a file
-%% from a real dir to an attribs dir
+%%   from a real dir to an attribs dir
 %%   append attribute, and possibly (always?) value (possibly empty?) to the file. Add File to the external dir.
-%% {AttributeDir,AttributeDir2}:
+%% {AttributeDir,AttributeDir2,File}:
 %%   append attribute and value to File from AttributeDir2 
+%% {AttributeDir,AttributeDir2,AttributeDir3}:
+%%   this is the only case where I'm actually moving something.
+%%   remove old attribute from applicable files, and add new one.
+%%   remove attribute folder from old parent and add it to the new one.
 %% Not allowed:
 %% {InternalDir,_} 
 %% {_,_}
@@ -553,16 +557,18 @@ rename(_Ctx,ParentIno,BName,NewParentIno,_BNewName,_Continuation,State) ->
 
 
 make_rename_reply(#external_dir{},NewAttribIno,File) ->
-    make_rename_reply_(NewAttribIno,File);
+    make_rename_file_reply(NewAttribIno,File);
 
 make_rename_reply(#attribute_dir{},NewAttribIno,File) ->
-    make_rename_reply_(NewAttribIno,File);
+    {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno),
+    case NewAttribEntry#inode:entry.type of
+    make_rename_file_reply(NewAttribIno,File);
 
 make_rename_reply(_DirType,_NewAttribIno,_File) ->
     enotsup.
 
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
-make_rename_reply_(NewAttribIno,File) ->
+make_rename_file_reply(NewAttribIno,File) ->
     FileInode=inode:get(File),
     {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
     Path=(FileEntry#inode_entry.type)#external_file.path,
@@ -577,6 +583,7 @@ make_rename_reply_(NewAttribIno,File) ->
             enotsup 
     end.
 
+make_rename_dir_reply(
 
 
 
