@@ -547,30 +547,51 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %% New name is ignored, I think. Either that, or I update my inode module to include support for multiple inode bindings.
 %% If i include virtual files, I need to filter them out here as well.
 
-rename(_Ctx,ParentIno,BName,NewParentIno,_BNewName,_Continuation,State) ->
+rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
     Name=binary_to_list(BName),
+    NewName=binary_to_list(BNewName),
     ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
     {value,ParentInoEntry}=tree_srv:lookup(ParentIno,inodes),
     % Since a rename only copies files, I only need the old parent to filter movability according to folder type.
-    Reply=make_rename_reply(ParentInoEntry#inode_entry.type,NewParentIno,Name),
+    Reply=make_rename_reply(ParentInoEntry#inode_entry.type,ParentInoEntry,NewParentIno,Name,NewName),
     {#fuse_reply_err{err=Reply},State}.
 
 
-make_rename_reply(#external_dir{},NewAttribIno,File) ->
-    make_rename_file_reply(NewAttribIno,File);
-
-make_rename_reply(#attribute_dir{},NewAttribIno,File) ->
+make_rename_reply(#external_dir{},_OldAttribEntry,NewAttribIno,File,NewValueName) ->
     {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno),
-    case NewAttribEntry#inode:entry.type of
-    make_rename_file_reply(NewAttribIno,File);
+    case NewAttribEntry#inode_entry.type of
+        #attribute_dir{type={value,Key}} ->
+            FileIno=inode:is_numbered({Key,File}),
+            {value,FileEntry}=tree_srv:lookup(FileIno),
+            case FileEntry#inode_entry.type of
+                #external_file{} ->
+                    make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
+                _ -> enotsup
+            end;
+        _ -> enotsup
+    end;
 
-make_rename_reply(_DirType,_NewAttribIno,_File) ->
+make_rename_reply(#attribute_dir{},OldAttribEntry,NewAttribIno,File,NewValueName) ->
+    {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno),
+    case NewAttribEntry#inode_entry.type of
+        #attribute_dir{type={value,Key}} ->
+            FileIno=inode:is_numbered({Key,File}),
+            {value,FileEntry}=tree_srv:lookup(FileIno),
+            case FileEntry#inode_entry.type of
+                #external_file{} ->
+                    make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
+                #attribute_dir{} ->
+                    make_rename_dir_reply(OldAttribEntry,NewAttribEntry,FileIno,FileEntry,NewValueName);
+                _ -> enotsup
+            end;
+        _ -> enotsup
+    end;
+
+make_rename_reply(_DirType,_OldAttribEntry,_NewAttribIno,_File,NewValueName) ->
     enotsup.
 
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
-make_rename_file_reply(NewAttribIno,File) ->
-    FileInode=inode:get(File),
-    {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
+make_rename_file_reply(NewAttribIno,FileInode,FileEntry) ->
     Path=(FileEntry#inode_entry.type)#external_file.path,
     Attribute=inode:is_named(NewAttribIno),
     case Attribute of
@@ -583,8 +604,21 @@ make_rename_file_reply(NewAttribIno,File) ->
             enotsup 
     end.
 
-make_rename_dir_reply(
-
+make_rename_dir_reply(OldAttribKeyEntry,NewAttribKeyEntry,ValueIno,OldValueEntry,NewValueName) -> 
+    #inode_entry{type={_,OldAttribName={OldKey,OldVal}}}=OldValueEntry,
+    #inode_entry{type={_,NewKey}}=NewAttribKeyEntry,
+    NewAttribName={NewKey,NewValueName},
+    lists:foreach(
+        fun({_FileName,FileInode}) ->
+            {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
+            FilePath=(FileEntry#inode_entry.type)#external_file.path,
+            % this will not be enough, since the folder will still be there!
+            % When I've built rmdir, I can use that here.
+            remove_old_attribute(FilePath,FileInode,FileEntry,OldAttribName),
+            add_new_attribute(FilePath,FileInode,FileEntry,NewAttribName)
+        end,
+        OldValueEntry#inode_entry.children),
+    ok.
 
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
