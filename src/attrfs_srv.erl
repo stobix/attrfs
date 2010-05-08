@@ -551,27 +551,44 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
     Name=binary_to_list(BName),
     NewName=binary_to_list(BNewName),
     ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
-    {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
-    {value,NewParentEntry}=tree_srv:lookup(NewParentIno,inodes),
-    {Name,ChildIno}=lists:keyfind(Name,1,ParentEntry#inode_entry.children),
-    {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
-    ParentType=ParentEntry#inode_entry.type,
-    NewParentType=NewParentEntry#inode_entry.type,
-    ChildType=ChildEntry#inode_entry.type,
-    FileFun=fun(A,B,C) -> make_rename_file_reply(A,B,C) end,
-    DirFun=fun(A,B,C,D) -> make_rename_dir_reply(A,B,C,D) end,
-    Reply=
-        branch({ParentType,NewParentType,ChildType},
-            fun() -> enotsup end,
-            [{{#external_dir{}, #attribute_dir{},#external_file{}},
-              FileFun,[NewParentIno,ChildIno,ChildEntry]},
-            {{#attribute_dir{},#attribute_dir{},#external_file{}},
-              FileFun,[NewParentIno,ChildIno,ChildEntry]},
-            {{#attribute_dir{},#attribute_dir{},#attribute_dir{}},
-              DirFun,
-               [NewParentEntry,ChildIno,ChildEntry,NewName]}
-            ]),
+    {value,ParentInoEntry}=tree_srv:lookup(ParentIno,inodes),
+    % Since a rename only copies files, I only need the old parent to filter movability according to folder type.
+    Reply=make_rename_reply(ParentInoEntry#inode_entry.type,ParentInoEntry,NewParentIno,Name,NewName),
     {#fuse_reply_err{err=Reply},State}.
+
+
+make_rename_reply(#external_dir{},_OldAttribEntry,NewAttribIno,File,NewValueName) ->
+    {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno),
+    case NewAttribEntry#inode_entry.type of
+        #attribute_dir{type={value,Key}} ->
+            FileIno=inode:is_numbered({Key,File}),
+            {value,FileEntry}=tree_srv:lookup(FileIno),
+            case FileEntry#inode_entry.type of
+                #external_file{} ->
+                    make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
+                _ -> enotsup
+            end;
+        _ -> enotsup
+    end;
+
+make_rename_reply(#attribute_dir{},OldAttribEntry,NewAttribIno,File,NewValueName) ->
+    {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno),
+    case NewAttribEntry#inode_entry.type of
+        #attribute_dir{type={value,Key}} ->
+            FileIno=inode:is_numbered({Key,File}),
+            {value,FileEntry}=tree_srv:lookup(FileIno),
+            case FileEntry#inode_entry.type of
+                #external_file{} ->
+                    make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
+                #attribute_dir{} ->
+                    make_rename_dir_reply(OldAttribEntry,NewAttribEntry,FileIno,FileEntry,NewValueName);
+                _ -> enotsup
+            end;
+        _ -> enotsup
+    end;
+
+make_rename_reply(_DirType,_OldAttribEntry,_NewAttribIno,_File,NewValueName) ->
+    enotsup.
 
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 make_rename_file_reply(NewAttribIno,FileInode,FileEntry) ->
@@ -587,9 +604,9 @@ make_rename_file_reply(NewAttribIno,FileInode,FileEntry) ->
             enotsup 
     end.
 
-make_rename_dir_reply(NewKeyEntry,ValueIno,OldValueEntry,NewValueName) -> 
+make_rename_dir_reply(OldAttribKeyEntry,NewAttribKeyEntry,ValueIno,OldValueEntry,NewValueName) -> 
     #inode_entry{type={_,OldAttribName={OldKey,OldVal}}}=OldValueEntry,
-    #inode_entry{type={_,NewKey}}=NewKeyEntry,
+    #inode_entry{type={_,NewKey}}=NewAttribKeyEntry,
     NewAttribName={NewKey,NewValueName},
     lists:foreach(
         fun({_FileName,FileInode}) ->
@@ -1144,32 +1161,7 @@ stringdelta([C1|String1],[C2|String2]) when C1 == C2 ->
 stringdelta([C1|String1],[C2|_String2]) when C1 /= C2 ->
     String1.
 
-%% @spec (atom(),fun(),[{atom(),Fun,Args}]) -> FunOutput
-%% @doc The function of the first atom in the list that the input atom matches is run. If no such atom exists, FunctionIfFalse/0 will be run instead.
-%% Example: transmogrify(is_foo(X),good,{error,no_foo}) will return either 
-%% good or {error, no_foo}, depending on whether is_foo(X) returns true or 
-%% false.
 
-branch(Input,FunctionIfNoMatch,[]) ->
-    case FunctionIfNoMatch of
-    {Module,Function} ->
-        apply(Module,Function,[]);
-    Function ->
-        apply(Function,[])
-    end;
-
-branch(Input,FunctionIfNoMatch,[{ValidInput,FunctionIfMatch,Args}|ValidInputs]) ->
-    case catch ValidInput=Input of
-        {'EXIT',{{badmatch,_},_}} ->
-            branch(Input,FunctionIfNoMatch,ValidInputs);
-        _Matches ->
-            case FunctionIfMatch of
-            {Module,Function} ->
-                apply(Module,Function,Args);
-            Function ->
-                apply(Function,Args)
-            end
-    end.
 
 %%%=========================================================================
 %%% Debug functions
