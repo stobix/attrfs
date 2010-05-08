@@ -396,7 +396,7 @@ make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
             }
     };
 
-make_internal_child_dir(_Ctx,_ParentInode,_ParentName,_Name,_Mode) ->
+make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
             #fuse_reply_err{err=enotsup}.
 
 make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
@@ -529,17 +529,14 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 
 
 %% This will have different meanings depending on parent type:
-%% {Parent,NewParent,Child}
+%% {Parent,NewParent}
 %% allowed:
-%% {#external_dir{},#attribute_dir{},file}
+%% {#external_dir{},#attribute_dir{}}
 %%   Since mv from an external filesystem does not mean a call to rename, this can only mean that the user tries to move a file
-%%   from a real dir to an attribs dir
+%% from a real dir to an attribs dir
 %%   append attribute, and possibly (always?) value (possibly empty?) to the file. Add File to the external dir.
-%% {AttributeDir,AttributeDir2,file}:
+%% {AttributeDir,AttributeDir2}:
 %%   append attribute and value to File from AttributeDir2 
-%% {AttributeDir,AttributeDir2,AttributeDir3}:
-%%   change the attribute name of all files in AttributeDir3 from Name to NewName,  updating keys if appropriate. 
-%%   Best done via calls to removeoldattribute and addnewattribute, I think.
 %% Not allowed:
 %% {InternalDir,_} 
 %% {_,_}
@@ -549,35 +546,25 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 rename(_Ctx,ParentIno,BName,NewParentIno,_BNewName,_Continuation,State) ->
     Name=binary_to_list(BName),
     ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
-    {Name,ChildIno}=lists:keyfind(Name,1,ParentEntry#inode_entry.children)
-    {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
-    {value,NewParentEntry}=tree_srv:lookup(NewParentIno,inodes),
-    {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
-    ParentType=ParentEntry#inode_entry.type,
-    NewParentType=NewParentEntry#inode_entry.type,
-    ChildType=ChildEntry#inode_entry.type,
-    FileFun=fun(A,B) -> make_rename_file_reply(A,B) end,
-    DirFun=fun(A,B) -> make_rename_dir_reply(A,B) end,
-    Reply=branch({ParentType,NewParentType,ChildType},
-                 fun() -> enotsup end,
-                 [{#external_dir{}, #attribute_dir{},#external_file{},FileFun,[NewParentIno,ChildEntry,ChildIno]},
-                  {#attribute_dir{},#attribute_dir{},#external_file{},FileFun,[NewParentIno,ChildEntry,ChildIno]},
-                  {#attribute_dir{},#attribute_dir{},#attribute_dir{},DirFun,[ParentIno,ParentEntry,NewParentIno,NewparentEntry,ChildIno,ChildEntry]}]),
-    %Reply=make_rename_reply(ParentInoEntry#inode_entry.type,NewParentIno,Name),
+    {value,ParentInoEntry}=tree_srv:lookup(ParentIno,inodes),
+    % Since a rename only copies files, I only need the old parent to filter movability according to folder type.
+    Reply=make_rename_reply(ParentInoEntry#inode_entry.type,NewParentIno,Name),
     {#fuse_reply_err{err=Reply},State}.
 
-%make_rename_reply(#external_dir{},NewAttribIno,File) ->
-%    make_rename_file_reply(NewAttribIno,File);
-%
-%make_rename_reply(#attribute_dir{type=Type},NewAttribIno,File) ->
-%    {_,Key} = Type,
-%    make_rename_file_reply(NewAttribIno,File);
-%
-%make_rename_reply(_DirType,_NewAttribIno,_File) ->
-%    enotsup.
 
-%% Since the attribute folder already exists, and file names correspond to inode numbers on a one to one basis, things needn't get overly coplicated here...
-make_rename_file_reply(NewAttribIno,FileEntry,FileInode) ->
+make_rename_reply(#external_dir{},NewAttribIno,File) ->
+    make_rename_reply_(NewAttribIno,File);
+
+make_rename_reply(#attribute_dir{},NewAttribIno,File) ->
+    make_rename_reply_(NewAttribIno,File);
+
+make_rename_reply(_DirType,_NewAttribIno,_File) ->
+    enotsup.
+
+%% Since the attribute folder already exists, things needn't get overly coplicated here...
+make_rename_reply_(NewAttribIno,File) ->
+    FileInode=inode:get(File),
+    {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
     Path=(FileEntry#inode_entry.type)#external_file.path,
     Attribute=inode:is_named(NewAttribIno),
     case Attribute of
@@ -590,41 +577,12 @@ make_rename_file_reply(NewAttribIno,FileEntry,FileInode) ->
             enotsup 
     end.
 
-make_rename_dir_reply(OldAttribIno,OldAttribEntry,NewAttribIno,NewAttribEntry,FileIno,FileEntry) ->
-    Path=(FileEntry#inode_entry.type)#external_file.path,
-    OldAttrChildren=OldAttribEntry#inode_entry.children,
-    OldAttribute=inode_is_named(OldAttribIno),
-    NewAttribute=inode:is_named(NewAttribIno),
-
 
 
 
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["rmdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
-
-branch(Input,Args,FunctionIfFalse,[]) ->
-    case FunctionIfFalse of
-    {Module,Function} ->
-        apply(Module,Function,Args);
-    Function ->
-        apply(Function,Args)
-    end;
-
-branch(Input,Args,FunctionIfNoMatch,[{ValidInput,FunctionIfMatch}|ValidInputs]) ->
-    case catch ValidInput=Input of
-        {'EXIT',{{badmatch,_},_}} ->
-            filter(Input,Args,FunctionIfTrue,FunctionIfFalse,ValidInputs);
-        _Matches ->
-            case FunctionIfMatch of
-            {Module,Function} ->
-                apply(Module,Function,Args);
-            Function ->
-                apply(Function,Args)
-            end
-    end.
-
-
 
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
@@ -795,9 +753,7 @@ set_open_file(State,Inode,FileContents) ->
     NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
     set_open_files(State,NewOpenFiles).
 
-
-
-%% Adds a new attribute to a file 
+%% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
 add_new_attribute(Path,FIno,FEntry,Attr) ->
     ?DEB1("  >add_new_attribute"),
     % Add the new attribute pair, if non-existent.
@@ -817,6 +773,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 
 
 
+%% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
 %% remove_old_attribute 
 %%  * removes the {path,attribute} entry from the attribute database;
 %%  * removes the file entry from the attributes/attrName/attrVal/ folder
