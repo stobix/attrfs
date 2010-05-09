@@ -5,7 +5,7 @@
      {applications,[kernel,stdlib,fuserl]}, %,inode,tree_app]},
      {registered,[attrfs]},
      {mod,{attrfs,[]}},
-     {env,[{to_dir,"testfs"},
-         {from_dir,"mirrorfs"},
-         {attributes_db,"attributes"}]}
+     {env,[{to_dir,"/home/Volatile/testfs"},
+         {from_dir,"/home/Volatile/mirrorfs"},
+         {attributes_db,"/home/Volatile/attributes"}]}
 ]}.

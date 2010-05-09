@@ -38,10 +38,11 @@
        }).
 
 -type value_tuple()::{value_tuple()|string(),string()}.
--type attribute_type()::{key,string()}|{value,value_tuple()}.
+%-type attribute_type()::{key,string()}|{value,value_tuple()}.
+-type attribute_type()::key|value.
 
 -record(attribute_dir,
-       {type::attribute_type()
+       {atype::attribute_type()
        }).
 
 %% An internal file is a file without an external representation.
