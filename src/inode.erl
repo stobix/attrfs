@@ -193,7 +193,7 @@ handle_cast({rename,OldName,NewName},Status={CurrentHighest,Frees,Reserved}) ->
     case lists:keytake(OldName,1,Reserved) of
         {value,{OldName,OldIno},NewReserved} ->
             ?DEBL("   ~p found. New list ~p.",[OldName,NewReserved]),
-            {noreply,{CurrentHighest,Frees,[{NewName,OldIno}|NewReserved}]};
+            {noreply,{CurrentHighest,Frees,[{NewName,OldIno}|NewReserved]}};
         false ->
             ?DEBL("   ~p not bound! Not binding ~p.",[OldName,NewName]),
             {noreply,Status}

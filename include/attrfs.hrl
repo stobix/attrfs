@@ -54,6 +54,10 @@
 -record(inode_entry,
         % This file system uses a one-to-one correspondence between names and inodes, so that move, link and copy can produce the same results.
         % TODO: Deal with the case that several files in external dirs have the same name.
+        % This is the unique name that the inode server wants, that is
+        % the name of the file, unless we have a value dir, in case it is
+        % {Key,ValueName}, where ValueName is the name shown to the fuse 
+        % file system server.
         {name::string()
         % children are the children of the file/dir
         ,children::name_list()
