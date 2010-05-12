@@ -755,20 +755,53 @@ make_rename_value_dir_reply(NewKeyEntry,ValueIno,OldValueEntry,NewValueName) ->
 
 % So, this will take an attribute directory, move it into a "key position" (as a direct child to "attribs"), and consequently change the attribute names of all subfolders and subfolder file attributes, unless this is done with subsequent calls to rename by the OS.
 make_rename_key_to_key_dir_reply(KeyIno,OldKeyEntry,NewKeyName) ->
-    ?DEBL("   moving key dir ~p to ~p",[OldKeyEntry#inode_entry.name,NewKeyName]),
+    OldKeyName=OldKeyEntry#inode_entry.name,
+    ?DEBL("   moving key dir ~p to ~p",[OldKeyName,NewKeyName]),
     NewKeyEntry=OldKeyEntry#inode_entry{name=NewKeyName},
+    Children=OldKeyEntry#inode_entry.children,
+    ?DEBL("    renaming child attribute key ~p to ~p for ~p",[OldKeyName,NewKeyName,Children]),
     lists:foreach(
         fun({AttribName,AttribInode}) ->
             {value,AttribEntry}=tree_srv:lookup(AttribInode,inodes),
             make_rename_value_dir_reply(NewKeyEntry,AttribInode,AttribEntry,AttribName)
         end,
-        OldKeyEntry#inode_entry.children),
+        Children),
+    ?DEB2("    removing ~p from attribute directory", OldKeyName),
+    AttrsIno=inode:is_numbered("attribs"),
+    remove_empty_dir(AttrsIno,OldKeyName),
+    ?DEB2("    adding ~p to inode tree and attribute directory", NewKeyName),
+    tree_srv:enter(KeyIno,NewKeyEntry,inodes),
+    append_child({NewKeyName,KeyIno},AttrsIno),
+    ?DEB1("    moving inode number"),
+    inode:rename(OldKeyName,NewKeyName),
     ok.
 
-
+%Remove a directory. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type rmdir_async_reply ().
 rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["rmdir!"]),
     {#fuse_reply_err{err=enotsup},State}.
+
+remove_empty_dir(ParentIno,DirName) ->
+    ?DEBL("   removing empty dir ~p from parent ~p",[DirName,ParentIno]),
+    {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
+    case lists:keytake(DirName,1,ParentEntry#inode_entry.children) of
+        {value,{DeletedChild,ChildIno},NewChildren} ->
+            NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
+            tree_srv:enter(ParentIno,NewParentEntry,inodes),
+            tree_srv:delete_any(ChildIno,inodes),
+            ok;
+        _ -> 
+            % Found no old entry; nothing needs to be done.
+            ?DEB1("   dir not a child of parent! not removing!!"),
+            enoent
+    end.
+
+append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
+    {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
+    Children=ParentEntry#inode_entry.children,
+    NewChildren=keymergeunique(NewChild,Children),
+    NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
+    tree_srv:enter(ParentIno,NewParentEntry,inodes).
 
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
@@ -956,7 +989,15 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     tree_srv:enter(FIno,NewFEntry,inodes).
 
 
-
+keypick(Item,List) ->
+    lists:foldl(
+        fun(Found={MyItem,_},{_Empty,Others}) when MyItem==Item ->
+           ({Found,Others});
+           (Other,{Found,Others}) ->
+               {Found,[Other|Others]}
+        end,
+        {none,[]},
+        List).
 
 %% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
 %% remove_old_attribute 
@@ -978,16 +1019,7 @@ remove_old_attribute_key(Path,Inode,Entry,AName) ->
     end,
     ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{AName,'$1'}})]),
     % Filters out the attribute to be deleted from the rest of the children for the file whose attribute is to be deleted.
-    case lists:foldl
-        (
-        fun(Deleted={DName,_DValue},{_Empty,Acc}) when DName==AName ->
-               {Deleted,Acc};
-           (OtherKey,{Deleted,Acc0}) ->
-               {Deleted,[OtherKey|Acc0]}
-        end,
-        {none,[]},
-        Entry#inode_entry.ext_info
-        ) 
+    case keypick(AName, Entry#inode_entry.ext_info)
     of
         {none,_ExtInfo} ->
             ?DEB1("    Got no attribute to delete!");

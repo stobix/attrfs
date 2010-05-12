@@ -15,7 +15,7 @@
 
 -behaviour(gen_server).
 
--export([enter/3,store/2,new/1,lookup/2,to_list/1,clear/1]).
+-export([enter/3,store/2,new/1,lookup/2,to_list/1,clear/1,delete_any/2]).
 
 
 -export([start_link/0,init/1]).
@@ -95,6 +95,9 @@ to_list(TreeID) ->
 clear(TreeID) ->
     gen_server:cast(?MODULE,{clear,TreeID}).
 
+delete_any(Key,TreeID) ->
+    gen_server:cast(?MODULE,{remove,Key,TreeID}).
+
 %%%=========================================================================
 %%% gen_server callback functions.
 %%%=========================================================================
@@ -122,6 +125,11 @@ handle_call({store_tree,TreeID,Tree},_From,Trees) ->
         true ->  {reply,{error,exists},Trees}
     end.
 
+handle_cast({remove,Key,TreeID},Trees) ->
+    {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+    NewTree=gb_trees:delete_any(Key,Tree),
+    NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
+    {noreply,NewTrees};
 
 handle_cast({clear,TreeID},Trees) ->
     case lists:keymember(TreeID,1,Trees) of

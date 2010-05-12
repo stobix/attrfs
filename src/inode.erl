@@ -18,6 +18,7 @@
 -export([get/0,release/1]).
 -export([get/1,is_named/1,is_numbered/1,is_used/1]).
 -export([reset/0,reset/1,list_bound/0]).
+-export([rename/2]).
 
 
 -export([start_link/0,start_link/1,init/1]).
@@ -99,6 +100,9 @@ get(Name) ->
 %%----------------------------------------------
 is_named(Number) ->
     gen_server:call(?MODULE,{is_named,Number}).
+
+rename(OldName,NewName) ->
+    gen_server:cast(?MODULE,{rename,OldName,NewName}).
 
 %%----------------------------------------------
 %% @doc Checks whether Name has a number associated with it. Returs either false, or the associated number.
@@ -185,6 +189,15 @@ handle_call(get,_From,{CurrentHighest,[Free|Frees],_Reserved}) ->
 
 
 
+handle_cast({rename,OldName,NewName},Status={CurrentHighest,Frees,Reserved}) ->
+    case lists:keytake(OldName,1,Reserved) of
+        {value,{OldName,OldIno},NewReserved} ->
+            ?DEBL("   ~p found. New list ~p.",[OldName,NewReserved]),
+            {noreply,{CurrentHighest,Frees,[{NewName,OldIno}|NewReserved}]};
+        false ->
+            ?DEBL("   ~p not bound! Not binding ~p.",[OldName,NewName]),
+            {noreply,Status}
+    end;
 
 handle_cast({reset,N},_) ->
     {noreply,{N,[],[]}};
