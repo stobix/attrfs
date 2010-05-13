@@ -103,7 +103,7 @@ code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
 %% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
 start_link({MountDir,MirrorDir,DB}) ->
     ?DEB1("Starting attrfs server..."),
-    start_link(MountDir,false,"",MirrorDir,DB).
+    start_link(MountDir,true,"",MirrorDir,DB).
 
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     Options=[],
@@ -456,26 +456,26 @@ open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["open!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
-opendir(_Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
-    ?DEB1(">opendir"),
+opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
+    ?DEBL(">opendir token:~p, file info:~p ",[{Ctx,Inode},_FI]),
     ?DEB2("   flags ~p",_Flags),
-    ?DEB2("   writepage ~p",_Writepage),
-    ?DEB2("   DirectIO ~p",_DirectIO),
-    ?DEB2("   KeepCache ~p",_KeepCache),
-    ?DEB2("   FileHandle ~p",_Fh),
+%    ?DEB2("   writepage ~p",_Writepage),
+%    ?DEB2("   DirectIO ~p",_DirectIO),
+%    ?DEB2("   KeepCache ~p",_KeepCache),
+%    ?DEB2("   FileHandle ~p",_Fh),
     ?DEB2("  Getting inode entries for ~p",Inode),
     ?DEB1("  Creating directory entries from inode entries"),
     % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
-    NewState=set_open_file(State,Inode,direntries(Inode)),
+    NewState=set_open_file(State,{Ctx,Inode},direntries(Inode)),
     {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
 
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">read",[]),
     {#fuse_reply_err{err=enotsup},State}.
 
-readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEBL(">readdir inode:~p offset:~p",[Inode,Offset]),
-  case lookup_open_file(State,Inode) of 
+readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
+  ?DEBL(">readdir token:~p offset:~p file info: ~p",[{Ctx,Inode},Offset,_Fuse_File_Info]),
+  case lookup_open_file(State,{Ctx,Inode}) of 
     {value, OpenFile} ->
         DirEntryList = 
         case Offset<length(OpenFile) of
@@ -498,7 +498,7 @@ readdir(_Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
          end,
           { #fuse_reply_direntrylist{ direntrylist = DirEntryList }, State };
     none ->
-        {#fuse_reply_err{err=ebadr},State} % XXX: What should this REALLY return when the file is not open for this user?
+        {#fuse_reply_err{err=enoent},State} % XXX: What should this REALLY return when the file is not open for this user?
   end.
 
 readlink(_Ctx,_Inode,_Continuation,State) ->
@@ -510,8 +510,9 @@ release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
-releasedir(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">~s",["releasedir"]),
+releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
+    ?DEBL(">releasedir token:~p file info:~p",[{Ctx,Inode},_Fuse_File_Info]),
+    remove_open_file(State,{Ctx,Inode}),
     {#fuse_reply_err{err=ok},State}.
 
 %%Remove an extended attribute. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type removexattr_async_reply ().
@@ -629,6 +630,7 @@ make_rename_reply(#attribute_dir{},_OldAttribName,OldAttribEntry,NewAttribIno,Ol
         internal_dir ->
             ?DEB1("   moving from attribute value folder to attribute key folder not yet supported"),
             enotsup;
+        % This will be supported either when I check for subdirs, or when I allow files attributes with empty values.
 %            case NewAttribEntry#inode_entry.name of
 %                "attribs" ->
 %                    FileIno=inode:is_numbered(File),
@@ -659,35 +661,7 @@ make_rename_reply(internal_dir,"attribs",OldAttribEntry,NewAttribIno,File,NewVal
     case NewAttribEntry#inode_entry.type of
         %% These will be supported when I make deep attributes.
 %        #attribute_dir{type=value}} ->
-%            ?DEB1("   new parent is a value dir"),
-%            FileIno=inode:is_numbered({Key,File}),
-%            {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-%            case FileEntry#inode_entry.type of
-%                #external_file{} ->
-%                    ?DEB1("   attribute dir, value dir, external file"),
-%                    ?DEB1("   copying"),
-%                    make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
-%                #attribute_dir{} ->
-%                    ?DEB1("   attribute dir, value dir, attribute dir"),
-%%                    ?DEB1("   moving"),
-%                    make_rename_value_dir_reply(OldAttribEntry,NewAttribEntry,FileIno,FileEntry,NewValueName);
-%                _ -> 
-%                    ?DEB1("   attribute dir, value dir, BOGUS"),
-%                    enotsup
-%            end;
 %        #attribute_dir{type=key} ->
-%            ?DEB1("   new parent is a key dir, preparing to copy."),
-%            FileIno=inode:is_numbered({Key,File}),
-%            {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-%            case FileEntry#inode_entry.type of
-%                #attribute_dir{} ->
-%                    ?DEB1("   attribute dir, key dir, attribute dir"),
-%                    ?DEB1("   moving"),
-%                    make_rename_value_dir_reply(OldAttribEntry,NewAttribEntry,FileIno,FileEntry,NewValueName);
-%                _ -> 
-%                    ?DEB1("   attribute dir, key dir, BOGUS"),
-%                    enotsup
-%            end;
         internal_dir ->
             case NewAttribEntry#inode_entry.name of
                 "attribs" ->
@@ -902,8 +876,24 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     {Reply,State}.
 
 statfs(_Ctx,_Inode,_Continuation,State) ->
-    ?DEBL("~s",["statfs!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+    ?DEBL(">statfs Ctx:~p Ino:~p",[_Ctx,_Inode]),
+    {#fuse_reply_statfs{
+        statvfs=#statvfs{
+            f_bsize=1024, % should be the same as the file system we're mirroring.
+            f_frsize=2048, % What does this do?
+            f_blocks=1234567890, % size = f_blocks*f_frsize
+            f_bfree=314159265,
+            f_bavail=271828182,
+            f_files=1000000000000000, % at least!
+            f_ffree=1000000000000000-inode:count_occupied(), % at least!
+            f_favail=1000000000000000-inode:count_occupied(), % at least!
+            f_fsid=0, % how to get this right?
+            f_flag=0, % Hm...
+            f_namemax=10000 % Or some other arbitary high value.
+        }},State}.
+
+
+%    {#fuse_reply_err{err=enotsup},State}.
 
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["symlink!"]),
@@ -973,9 +963,14 @@ lookup_open_file(State,Inode) ->
 
 %% set_open_file returns a state with the open file for the provided inode
 %% changed to the FileContents provided.
-set_open_file(State,Inode,FileContents) ->
+set_open_file(State,Token,FileContents) ->
     OpenFiles=get_open_files(State),
-    NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
+    NewOpenFiles=gb_trees:enter(Token,FileContents,OpenFiles),
+    set_open_files(State,NewOpenFiles).
+
+remove_open_file(State,Token) ->
+    OpenFiles=get_open_files(State),
+    NewOpenFiles=gb_trees:delete_any(Token,OpenFiles),
     set_open_files(State,NewOpenFiles).
 
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.

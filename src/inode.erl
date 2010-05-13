@@ -19,6 +19,7 @@
 -export([get/1,is_named/1,is_numbered/1,is_used/1]).
 -export([reset/0,reset/1,list_bound/0]).
 -export([rename/2]).
+-export([count_occupied/0]).
 
 
 -export([start_link/0,start_link/1,init/1]).
@@ -70,8 +71,15 @@ terminate(_Reason,_State) -> ok.
 %%%=========================================================================
 
 %%----------------------------------------------
+%% @doc counts the number of occupied inodes.
+%% @spec () -> non_neg_integer().
+%% @end
+%%----------------------------------------------
+count_occupied() ->
+    gen_server:call(?MODULE,count).
+%%----------------------------------------------
 %% @doc Returns an unused integer.
-%% @spec ()-> Number::unique_integer().
+%% @spec () -> Number::unique_integer().
 %% @end
 %%----------------------------------------------
 get() ->
@@ -156,6 +164,10 @@ list_bound() ->
 %%%=========================================================================
 %%% gen_server callback functions.
 %%%=========================================================================
+
+handle_call(count,_From,State={CurrHigh,Frees,Reserved}) ->
+    Reply=CurrHigh-length(Frees)+length(Reserved)-1,
+    {reply,Reply,State};
 
 handle_call(list,_From,State={_CurrHigh,_Frees,Reserved}) ->
     {reply,Reserved,State};
