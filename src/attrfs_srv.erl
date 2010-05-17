@@ -224,7 +224,9 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
     {#fuse_reply_err{err=enotsup},State}.
 
 
+%%--------------------------------------------------------------------------
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
+%%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
     Name=stringdelta(binary_to_list(BName),"user."),
     ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[Name,Size,Inode]),
@@ -253,11 +255,18 @@ getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
     {Reply,State}.
     
     
+%%--------------------------------------------------------------------------
+%% Create a hard link. Ino is the existing inode. If noreply is used, eventually fuserlsrv:reply/2 should be called with Cont as first argument and the second argument of type link_async_reply ().
+%%--------------------------------------------------------------------------
+%% On my system, the new name has to be the same as the old, and thus is ignored.
+%%--------------------------------------------------------------------------
 link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
     ?DEBL("~s",["link!"]),
     {#fuse_reply_err{err=enotsup},State}.
     
-%%List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
+%%--------------------------------------------------------------------------
+%% List extended attribute names. If Size is zero, the total size in bytes of the attribute name list (including null terminators) should be sent via #fuse_reply_xattr{}. If the Size is non-zero, and the null character separated and terminated attribute list is Size or less, the list should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent.
+%%--------------------------------------------------------------------------
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
     ?DEB2(">listxattr inode:~p",Inode),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
@@ -273,7 +282,9 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
             end
     end,
     {Reply,State}.
-
+%%--------------------------------------------------------------------------
+%% Lookup a directory entry by name and get its attributes. Returning an entry with inode zero means a negative entry which is cacheable, whereas an error of enoent is a negative entry which is not cacheable. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type lookup_async_reply ().
+%%--------------------------------------------------------------------------
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     Child=binary_to_list(BinaryChild),
     ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
@@ -305,6 +316,9 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
     end,
     {Reply,State}.
 
+%%--------------------------------------------------------------------------
+%% Make a directory. Mode is a mask composed of the ?S_XXXXX macros which are (portably) defined in fuserl.hrl. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type mkdir_async_reply ().
+%%--------------------------------------------------------------------------
 %% This will have different meanings depending on parent type:
 %% * #external_dir{}
 %%   creating dirs in the real file system not yet supported.
@@ -316,6 +330,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 %%   this means we try to create a directory inside either /, /real or /attribs, 
 %%   that is, either we try to create a new directory universe (not allowed),
 %%   a new real dir (maybe supported later) or a new attribute (certainly allowed)
+%%--------------------------------------------------------------------------
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     Name=binary_to_list(BName),
@@ -447,15 +462,24 @@ insert_entry(ParentInode,ChildEntry) ->
     ChildInode.
 
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
     ?DEBL("~s",["mknod!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["open!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
     ?DEBL(">opendir token:~p, file info:~p ",[{Ctx,Inode},_FI]),
     ?DEB2("   flags ~p",_Flags),
@@ -469,10 +493,16 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
     NewState=set_open_file(State,{Ctx,Inode},direntries(Inode)),
     {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">read",[]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
   ?DEBL(">readdir token:~p offset:~p file info: ~p",[{Ctx,Inode},Offset,_Fuse_File_Info]),
   case lookup_open_file(State,{Ctx,Inode}) of 
@@ -501,21 +531,35 @@ readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
         {#fuse_reply_err{err=enoent},State} % XXX: What should this REALLY return when the file is not open for this user?
   end.
 
+%%--------------------------------------------------------------------------
+%% Read the contents of a symbolic link. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readlink_async_reply ().
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 readlink(_Ctx,_Inode,_Continuation,State) ->
     ?DEBL("~s",["readlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
-
+%%--------------------------------------------------------------------------
+%% Called when there are no more references to a file. For every open call there is exactly one release call. Fi#fuse_file_info.fh will contain the descriptor set in open, if any. Fi#fuse_file_info.flags will contain the same flags as for open. #fuse_reply_err{err = ok} indicates success. Errors are not reported anywhere; use flush for that. If noreply is used, eventually fuserlsrv:reply/2 should be called with Cont as first argument and the second argument of type release_async_reply ().
+%%--------------------------------------------------------------------------
+%% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
+%%--------------------------------------------------------------------------
 release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["release!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
+%%--------------------------------------------------------------------------
 releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">releasedir token:~p file info:~p",[{Ctx,Inode},_Fuse_File_Info]),
     remove_open_file(State,{Ctx,Inode}),
     {#fuse_reply_err{err=ok},State}.
 
+%%--------------------------------------------------------------------------
 %%Remove an extended attribute. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type removexattr_async_reply ().
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
     Name=stringdelta(binary_to_list(BName),"user."),
     ?DEBL(">removexattr inode: ~p name: ~p",[Inode,Name]),
@@ -531,6 +575,8 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
     end.
 
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 %% This will have different meanings depending on parent type:
 %% {Parent,NewParent,Child}
 %% allowed:
@@ -547,6 +593,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %% {InternalDirWhoseNameIsAttribs,AttributeDir2,AttributeDir3} 
 %% Not allowed:
 %% {_,_}
+%%--------------------------------------------------------------------------
 
 rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
     Name=binary_to_list(BName),
@@ -783,8 +830,11 @@ append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
     NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
     tree_srv:enter(ParentIno,NewParentEntry,inodes).
 
+%%--------------------------------------------------------------------------
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
+%%--------------------------------------------------------------------------
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
+%%--------------------------------------------------------------------------
 setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
@@ -855,8 +905,11 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
     ?DEBL("~s",["setlk!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
 %% Set file attributes. #fuse_reply_err{err = ok} indicates success. Flags is a bitmask consisting of ?XATTR_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setxattr_async_reply ().
+%%--------------------------------------------------------------------------
 %% TODO: if attribute key already has a value for the current file, remove the file from the old value dir!
+%%--------------------------------------------------------------------------
 setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     ?DEBL("setxattr inode:~p key:~p value:~p flags: ~p",[Inode,BKey,BValue,_Flags]),
     ?DEB1("   getting inode entry"),
@@ -875,6 +928,9 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     end,
     {Reply,State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 statfs(_Ctx,_Inode,_Continuation,State) ->
     ?DEBL(">statfs Ctx:~p Ino:~p",[_Ctx,_Inode]),
     {#fuse_reply_statfs{
@@ -895,19 +951,31 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
 
 %    {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
     ?DEBL("~s",["symlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
     ?DEBL(">terminate ~p",[_Reason]),
     ?DEB2("   Closing database \"~p\"",?ATTR_DB),
     dets:close(?ATTR_DB).
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 unlink(_Ctx,_Inode,_Name,_Cont,State) ->
     ?DEBL("~s",["unlink!"]),
     {#fuse_reply_err{err=enotsup},State}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL("~s",["write!"]),
     {#fuse_reply_err{err=enotsup},State}.
@@ -917,11 +985,15 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%% Helper functions
 %%%=========================================================================
 
+%%--------------------------------------------------------------------------
 %% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
+%%--------------------------------------------------------------------------
 datetime_to_epoch(DateTime) ->
     calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
 
+%%--------------------------------------------------------------------------
 %% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
+%%--------------------------------------------------------------------------
 statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
     ?DEBL("    converting file info for ~p to fuse stat info",[Inode]),
     #stat{
@@ -940,29 +1012,39 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
          ,st_ctime=datetime_to_epoch(Ctime)
          }.
 
+%%--------------------------------------------------------------------------
 %% lookup_children returns the children for the inode, if the inode is 
 %% present. Returns like gb_trees:lookup
+%%--------------------------------------------------------------------------
 lookup_children(Inode) ->
     case tree_srv:lookup(Inode,inodes) of
         {value, Entry} -> {value,Entry#inode_entry.children};
         none -> none
     end.
 
+%%--------------------------------------------------------------------------
 %% get_open_files returns the opened files for the state
+%%--------------------------------------------------------------------------
 get_open_files(State) ->
     State#state.open_files.
 
+%%--------------------------------------------------------------------------
 %% set_open_files returns a state with the open files updated
+%%--------------------------------------------------------------------------
 set_open_files(State,OpenFiles) ->
     State#state{open_files=OpenFiles}.
 
+%%--------------------------------------------------------------------------
 %% get_open_file gets the open file corresponding to the inode provided.
 %% returns like gb_trees:lookup
+%%--------------------------------------------------------------------------
 lookup_open_file(State,Inode) ->
     gb_trees:lookup(Inode,get_open_files(State)).
 
+%%--------------------------------------------------------------------------
 %% set_open_file returns a state with the open file for the provided inode
 %% changed to the FileContents provided.
+%%--------------------------------------------------------------------------
 set_open_file(State,Token,FileContents) ->
     OpenFiles=get_open_files(State),
     NewOpenFiles=gb_trees:enter(Token,FileContents,OpenFiles),
@@ -973,7 +1055,9 @@ remove_open_file(State,Token) ->
     NewOpenFiles=gb_trees:delete_any(Token,OpenFiles),
     set_open_files(State,NewOpenFiles).
 
+%%--------------------------------------------------------------------------
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
+%%--------------------------------------------------------------------------
 add_new_attribute(Path,FIno,FEntry,Attr) ->
     ?DEB1("  >add_new_attribute"),
     % Add the new attribute pair, if non-existent.
@@ -990,12 +1074,14 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     tree_srv:enter(FIno,NewFEntry,inodes).
 
 
+%%--------------------------------------------------------------------------
 %% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
 %% remove_old_attribute 
 %%  * removes the {path,attribute} entry from the attribute database;
 %%  * removes the file entry from the attributes/attrName/attrVal/ folder
 %%  * removes the attribute from the file entry
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
+%%--------------------------------------------------------------------------
 
 remove_old_attribute_key(Path,Inode,Entry,AName) ->
     ?DEBL("    deleting ~p from ~p",[AName,Path]),
@@ -1034,16 +1120,22 @@ remove_old_attribute_key(Path,Inode,Entry,AName) ->
             tree_srv:enter(AVInode,NewAVEntry,inodes)
     end.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 dir(Stat) ->
     NewMode=(Stat#stat.st_mode band 8#777) bor ?S_IFDIR,
     ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
     Stat#stat{st_mode=NewMode}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
     ?DEB2("   generating ext info for ~p",Path),
     ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
     lists:flatten(ExtInfo0). % Going from a list of lists of tuples to a list of tuples.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 generate_ext_info_io(Path) ->
     ?DEB2("   generating ext info for ~p",Path),
     ExtInfo=generate_ext_info(Path),
@@ -1051,10 +1143,14 @@ generate_ext_info_io(Path) ->
     ExtIo=ext_info_to_ext_io(ExtInfo),
     {ExtInfo,ExtIo}.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
     ?DEB1("   Creating ext_io"),
     ext_info_to_ext_io(InternalExtInfoTupleList,[]).
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 ext_info_to_ext_io([],B) -> 
     B0=B++"\0",
     B0len=length(B0),
@@ -1062,6 +1158,8 @@ ext_info_to_ext_io([],B) ->
     ?DEBL("   Final string: \"~p\", size: ~p",[B0,B0len]),
     {B0len,B0};
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
     Name0="user."++Name++"\0",
@@ -1071,8 +1169,10 @@ ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
 
+%%--------------------------------------------------------------------------
 %% Gets the children for the inode from the inode list, and runs direntrify
 %% on it.
+%%--------------------------------------------------------------------------
 direntries(Inode) ->
     ?DEB1("    Creating direntries"),
     ?DEB1("     Getting child entries"),
@@ -1081,7 +1181,9 @@ direntries(Inode) ->
     direntrify(Children).
 
 
+%%--------------------------------------------------------------------------
 %% direntrify takes a [{Name,Inode}] and returns a [fuserl:#{direntry}]
+%%--------------------------------------------------------------------------
 direntrify([]) -> 
     ?DEB1("    Done converting children"),
     [];
@@ -1099,14 +1201,6 @@ direntrify([{Name,Inode}|Children]) ->
     [Direntry1|direntrify(Children)].
 
 
-dump_inode_entries() ->
-    lists:map(fun({Inode,#inode_entry{name=Name,children=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
-
-dump_entries(Table) ->
-    tree_srv:to_list(Table).
-
-dump_inodes() ->
-    inode:list_bound().
 
 assert_started(Application) ->
     ?DEB2("   Checking that ~p is loaded",Application),
@@ -1341,3 +1435,19 @@ stringdelta([C1|String1],[C2|_String2]) when C1 /= C2 ->
 %%%=========================================================================
 %%% Debug functions
 %%%=========================================================================
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+dump_inode_entries() ->
+    lists:map(fun({Inode,#inode_entry{name=Name,children=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+dump_entries(Table) ->
+    tree_srv:to_list(Table).
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+dump_inodes() ->
+    inode:list_bound().
+
