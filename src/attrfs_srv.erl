@@ -143,6 +143,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEB2("   mirroring dir ~p",MirrorDir),
     tree_srv:new(inodes),
     tree_srv:new(keys),
+    tree_srv:new(open_files),
     ?DEB1("   created inode and key trees"),
     inode:reset(),
     RootIno=inode:get(root),
@@ -341,6 +342,7 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
             end
     end,
     {Reply,State}.
+
 %%--------------------------------------------------------------------------
 %% Lookup a directory entry by name and get its attributes. Returning an entry with inode zero means a negative entry which is cacheable, whereas an error of enoent is a negative entry which is not cacheable. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type lookup_async_reply ().
 %%--------------------------------------------------------------------------
@@ -385,11 +387,13 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 %% * attr_dir where name is a string
 %%   this will create an attribute value with name {attr_dir name, value name}
 %% * attr_dir where name is a {string,string}
-%%   creating a dir inside a value dir will not be supported as long as I don't support deep attributes.
+%%   creating a dir inside a value dir will not be supported as long as I don't 
+%%    support deep attributes.
 %% * internal_dir
 %%   this means we try to create a directory inside either /, /real or /attribs, 
-%%   that is, either we try to create a new directory universe (not allowed),
-%%   a new real dir (maybe supported later) or a new attribute (certainly allowed)
+%%    that is, either we try to create a new directory universe (not allowed),
+%%    a new real dir (maybe supported later) 
+%%    or a new attribute dir (certainly allowed)
 %%--------------------------------------------------------------------------
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
@@ -432,7 +436,7 @@ open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 %% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
+opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,_State) ->
     ?DEBL(">opendir token:~p, file info:~p ",[{Ctx,Inode},_FI]),
     ?DEB2("   flags ~p",_Flags),
 %    ?DEB2("   writepage ~p",_Writepage),
@@ -442,8 +446,8 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
     ?DEB2("  Getting inode entries for ~p",Inode),
     ?DEB1("  Creating directory entries from inode entries"),
     % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
-    NewState=set_open_file(State,{Ctx,Inode},direntries(Inode)),
-    {#fuse_reply_open{ fuse_file_info = _FI }, NewState}.
+    set_open_file({Ctx,Inode},direntries(Inode)),
+    {#fuse_reply_open{ fuse_file_info = _FI }, _State}.
 
 %%--------------------------------------------------------------------------
 %% Read Size bytes starting at offset Offset. The file descriptor and other flags are available in Fi. If noreply is used, eventually fuserlsrv:reply/2 should be called with Cont as first argument and the second argument of type read_async_reply ().
@@ -459,7 +463,7 @@ read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
   ?DEBL(">readdir token:~p offset:~p file info: ~p",[{Ctx,Inode},Offset,_Fuse_File_Info]),
-  Reply=case lookup_open_file(State,{Ctx,Inode}) of 
+  Reply=case lookup_open_file({Ctx,Inode}) of 
     {value, OpenFile} ->
         DirEntryList = 
         case Offset<length(OpenFile) of
@@ -510,7 +514,7 @@ release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEBL(">releasedir token:~p file info:~p",[{Ctx,Inode},_Fuse_File_Info]),
-    remove_open_file(State,{Ctx,Inode}),
+    remove_open_file({Ctx,Inode}),
     {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -577,8 +581,8 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %% Remove a directory. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type rmdir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-rmdir(_CTx,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["rmdir!"]),
+rmdir(_Ctx,_Inode,_Name,_Continuation,State) ->
+    ?DEBL("rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,_Inode,_Name]),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -787,7 +791,7 @@ make_dir(Ctx,ParentInode,ParentName,internal_dir,Name,Mode) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-make_attr_child_dir(_Ctx,_ParentInode,value,ValueParentName,_Name,_Mode) ->
+make_attr_child_dir(_Ctx,_ParentInode,value,_ValueParentName,_Name,_Mode) ->
     ?DEB1("   NOT creating a subvalue dir"),
     %this is where I create a subvalue dir, when these are supported.
     % subvalue dir name {{Key,Val},Name}, I guess.
@@ -879,7 +883,7 @@ make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-make_rename_reply(#external_dir{},_OldAttribName,_OldAttribEntry,NewAttribIno,File,NewValueName) ->
+make_rename_reply(#external_dir{},_OldAttribName,_OldAttribEntry,NewAttribIno,File,_NewValueName) ->
     ?DEB1("   old parent is an external dir"),
     {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno,inodes),
     ?DEB1("   got new attribute folder entry"),
@@ -967,7 +971,7 @@ make_rename_reply(#attribute_dir{},_OldAttribName,OldAttribEntry,NewAttribIno,Ol
             enotsup
     end;
 
-make_rename_reply(internal_dir,"attribs",OldAttribEntry,NewAttribIno,File,NewValueName) ->
+make_rename_reply(internal_dir,"attribs",_OldAttribEntry,NewAttribIno,File,NewValueName) ->
     ?DEB1("   old parent is an internal dir"),
     {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno,inodes),
     case NewAttribEntry#inode_entry.type of
@@ -998,7 +1002,7 @@ make_rename_reply(internal_dir,"attribs",OldAttribEntry,NewAttribIno,File,NewVal
             enotsup
     end;
 
-make_rename_reply(_DirType,_OldAttribName,_OldAttribEntry,_NewAttribIno,_File,NewValueName) ->
+make_rename_reply(_DirType,_OldAttribName,_OldAttribEntry,_NewAttribIno,_File,_NewValueName) ->
     ?DEB2("   ~p, _, _",_DirType),
     ?DEB1("   not allowed"),
     enotsup.
@@ -1100,7 +1104,7 @@ remove_empty_dir(ParentIno,DirName) ->
     ?DEBL("   removing empty dir ~p from parent ~p",[DirName,ParentIno]),
     {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
     case lists:keytake(DirName,1,ParentEntry#inode_entry.children) of
-        {value,{DeletedChild,ChildIno},NewChildren} ->
+        {value,{_DeletedChild,ChildIno},NewChildren} ->
             NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
             tree_srv:enter(ParentIno,NewParentEntry,inodes),
             tree_srv:delete_any(ChildIno,inodes),
@@ -1160,35 +1164,40 @@ lookup_children(Inode) ->
 %%--------------------------------------------------------------------------
 %% get_open_files returns the opened files for the state
 %%--------------------------------------------------------------------------
-get_open_files(State) ->
-    State#state.open_files.
+get_open_files({Ctx,_Inode}) ->
+    case tree-srv:lookup(Ctx,open_files) of
+        {value,OpenFiles} ->
+            OpenFiles;
+        _ -> gb_trees:empty()
+    end.
+%    State#state.open_files.
 
 %%--------------------------------------------------------------------------
 %% set_open_files returns a state with the open files updated
 %%--------------------------------------------------------------------------
-set_open_files(State,OpenFiles) ->
-    State#state{open_files=OpenFiles}.
+set_open_files({Ctx,_Inode},OpenFiles) ->
+    tree_srv:enter(Ctx,OpenFiles,open_files).
 
 %%--------------------------------------------------------------------------
 %% get_open_file gets the open file corresponding to the inode provided.
 %% returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
-lookup_open_file(State,Inode) ->
-    gb_trees:lookup(Inode,get_open_files(State)).
+lookup_open_file({_Ctx,Inode}=Token) ->
+    gb_trees:lookup(Inode,get_open_files(Token)).
 
 %%--------------------------------------------------------------------------
 %% set_open_file returns a state with the open file for the provided inode
 %% changed to the FileContents provided.
 %%--------------------------------------------------------------------------
-set_open_file(State,Token,FileContents) ->
-    OpenFiles=get_open_files(State),
-    NewOpenFiles=gb_trees:enter(Token,FileContents,OpenFiles),
-    set_open_files(State,NewOpenFiles).
+set_open_file({_Ctx,Inode}=Token,FileContents) ->
+    OpenFiles=get_open_files(Token),
+    NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
+    set_open_files(Token,NewOpenFiles).
 
-remove_open_file(State,Token) ->
-    OpenFiles=get_open_files(State),
-    NewOpenFiles=gb_trees:delete_any(Token,OpenFiles),
-    set_open_files(State,NewOpenFiles).
+remove_open_file({_Ctx,Inode}=Token) ->
+    OpenFiles=get_open_files(Token),
+    NewOpenFiles=gb_trees:delete_any(Inode,OpenFiles),
+    set_open_files(Token,NewOpenFiles).
 
 %%--------------------------------------------------------------------------
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
