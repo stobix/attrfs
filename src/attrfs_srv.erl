@@ -527,7 +527,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     case Entry#inode_entry.type of
         #external_file{ path=Path } ->
-            remove_old_attribute_key(Path,Inode,Entry,Name),
+            remove_old_attribute_key(Path,Inode,Name),
             ?DEB1("   Removed attribute, if any, from database and inode entry"),
             {#fuse_reply_err{err=ok},State};
         _ ->
@@ -722,10 +722,47 @@ symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Remove a file. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type unlink_async_reply ().
 %%--------------------------------------------------------------------------
+%% We need to check the dir type of the parent to know what to do when
+%% unlinking a file.
+%% For now, let's only support unlinking files residing in attribute dirs.
 %%--------------------------------------------------------------------------
-unlink(_Ctx,_Inode,_Name,_Cont,State) ->
-    ?DEBL("~s",["unlink!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+unlink(_Ctx,ParentInode,BName,_Cont,State) ->
+    ?DEBL("unlink ctx: ~p, parent inode:~p, name:~p",[_Ctx,ParentInode,BName]),
+    {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
+    PType=PEntry#inode_entry.type,
+    PName=PEntry#inode_entry.name,
+    ?DEBL("parent type ~p",[PType]),
+    Reply=case PType of
+        #attribute_dir{atype=value} ->
+            Name=binary_to_list(BName),
+            PChildren=PEntry#inode_entry.children,
+            case lists:keyfind(Name,1,PChildren) of
+                false -> 
+                    ?DEBL("~p not found in ~p",[Name,PChildren]),
+                    #fuse_reply_err{err=enoent};
+                {Name,Inode} ->
+                    ?DEB1("~p found"),
+                    %% Removing a file from an attribute folder is 
+                    %% ONLY ALMOST the same as removing the corresponding 
+                    %% attribute from the file; Removing a value subfolder
+                    %% is NOT the same as removing a whole attribute.
+                    %% Thus, I'm NOT calling removexattr here.
+                    {value,Entry}=tree_srv:lookup(Inode,inodes),
+                    Type=Entry#inode_entry.type,
+                    ?DEBL("child type ~p",[Type]),
+                    case Type of 
+                        #external_file{path=Path} ->
+                            ?DEBL("Removing ~p from ~p", [PEntry#inode_entry.name,Name]),
+                            remove_old_attribute_value(Path,Inode,PName),
+                            #fuse_reply_err{err=ok};
+                        _ ->
+                            #fuse_reply_err{err=enotsup}
+                    end
+            end;
+        _ ->
+            #fuse_reply_err{err=enotsup}
+    end,
+    {Reply,State}.
 
 %%--------------------------------------------------------------------------
 %% Write data to a file. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type write_async_reply ().
@@ -1034,7 +1071,7 @@ make_rename_value_to_value_dir_reply(NewKeyEntry,ValueIno,OldValueEntry,NewValue
         fun({_FileName,FileInode}) ->
             {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
             FilePath=(FileEntry#inode_entry.type)#external_file.path,
-            remove_old_attribute_key(FilePath,FileInode,FileEntry,OldKeyName),
+            remove_old_attribute_key(FilePath,FileInode,OldKeyName),
             add_new_attribute(FilePath,FileInode,FileEntry,NewAttribName)
         end,
         OldValueEntry#inode_entry.children),
@@ -1151,6 +1188,8 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
          ,st_ctime=datetime_to_epoch(Ctime)
          }.
 
+
+
 %%--------------------------------------------------------------------------
 %% lookup_children returns the children for the inode, if the inode is 
 %% present. Returns like gb_trees:lookup
@@ -1165,7 +1204,7 @@ lookup_children(Inode) ->
 %% get_open_files returns the opened files for the state
 %%--------------------------------------------------------------------------
 get_open_files({Ctx,_Inode}) ->
-    case tree-srv:lookup(Ctx,open_files) of
+    case tree_srv:lookup(Ctx,open_files) of
         {value,OpenFiles} ->
             OpenFiles;
         _ -> gb_trees:empty()
@@ -1213,22 +1252,59 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
     append_attribute(Attr,FName,Stat),
     ?DEB1("   creating new ext info"),
-    {ExtInfo,ExtIo}=generate_ext_info_io(Path),
-    NewFEntry=FEntry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
-    tree_srv:enter(FIno,NewFEntry,inodes).
+    rehash_ext_from_db(FIno,Path).
+
 
 
 %%--------------------------------------------------------------------------
-%% Later on, this function will not only remove the attribute for the file in the data base, but also remove files from appropriat attribute folders and (possibly) remove said folders if empty.
-%% remove_old_attribute 
+%% Updates 
+%%--------------------------------------------------------------------------
+rehash_ext_from_db(Inode,Path) ->
+    {ExtInfo,ExtIo}=generate_ext_info_io(Path),
+    {value,Entry}=tree_srv:lookup(Inode,inodes),
+    NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
+    tree_srv:enter(Inode,NewEntry,inodes).
+
+%%--------------------------------------------------------------------------
+%% remove_old_attribute_value
+%% Path: The external path for the file in the db.
+%% Inode: The internal inode of the file.
+%% Attribute: The {Key,Value} pair to be removed.
+%%--------------------------------------------------------------------------
+remove_old_attribute_value(Path,Inode,{_Key,_Value}=Attribute) ->
+    % Database handling
+    Matches=dets:match(?ATTR_DB,{Path,Attribute}),
+    case length(Matches)>0 of
+        true ->
+            ?DEBL("Removing ~p for ~p from database", [Attribute,Path]),
+            dets:match_delete(?ATTR_DB,{Path,Attribute});
+        false ->
+            ?DEB1("No data base entry to remove!")
+    end,
+    % File attribute handling
+    rehash_ext_from_db(Inode,Path),
+    % Attribute dir handling
+    remove_child_from_parent(inode:is_named(Inode),Attribute).
+
+
+remove_child_from_parent(ChildName,ParentName) ->
+    Inode=inode:get(ParentName),
+    {value,Entry}=tree_srv:lookup(Inode,inodes),
+    Children=Entry#inode_entry.children,
+    NewChildren=lists:keydelete(ChildName,1,Children),
+    NewEntry=Entry#inode_entry{children=NewChildren},
+    tree_srv:enter(Inode,NewEntry,inodes).
+%%--------------------------------------------------------------------------
+%% remove_old_attribute_key
 %%  * removes the {path,attribute} entry from the attribute database;
 %%  * removes the file entry from the attributes/attrName/attrVal/ folder
 %%  * removes the attribute from the file entry
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
 %%--------------------------------------------------------------------------
 
-remove_old_attribute_key(Path,Inode,Entry,AName) ->
+remove_old_attribute_key(Path,Inode,AName) ->
     ?DEBL("    deleting ~p from ~p",[AName,Path]),
+    % Database handling
     Matches=dets:match(?ATTR_DB,{Path,{AName,'$1'}}),
     case length(Matches)>0 of
         true -> 
@@ -1239,30 +1315,16 @@ remove_old_attribute_key(Path,Inode,Entry,AName) ->
             ok
     end,
     ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{AName,'$1'}})]),
-    % Filters out the attribute to be deleted from the rest of the children for the file whose attribute is to be deleted.
-    case lists:keytake(AName,1,Entry#inode_entry.ext_info)
-    of
-        false ->
-            ?DEB1("    Got no attribute to delete!");
+    % Updating ext io using the filtered ext info
+    rehash_ext_from_db(Inode,Path),
 
-        % This ExtInfo does no longer contain InfoToDelete
-        {value,_InfoToDelete={AName,AValue},ExtInfo} ->
-            FName=Entry#inode_entry.name,
-            ?DEBL("    Going to delete ~p from ~p",[_InfoToDelete,FName]),
-
-            % Updating ext io using the filtered ext info
-            ExtIo=ext_info_to_ext_io(ExtInfo),
-            NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
-            tree_srv:enter(Inode,NewEntry,inodes),
-
-            % removing file child from attribute folder entry
-            AVInode=inode:get({AName,AValue}),
-            {value,AVEntry}=tree_srv:lookup(AVInode,inodes),
-            Children=AVEntry#inode_entry.children,
-            NewChildren=lists:keydelete(FName,1,Children),
-            NewAVEntry=AVEntry#inode_entry{children=NewChildren},
-            tree_srv:enter(AVInode,NewAVEntry,inodes)
-    end.
+    % removing file child from attribute folder entry
+    FName=inode:is_named(Inode),
+    lists:foreach(
+        fun(AValue) -> 
+            remove_child_from_parent(FName,{AName,AValue})
+        end,
+        Matches).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
