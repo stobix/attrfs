@@ -580,6 +580,7 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Remove a directory. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type rmdir_async_reply ().
 %%--------------------------------------------------------------------------
+%% For now, only removing of attribute (key and/or value) dirs are supported.
 %%--------------------------------------------------------------------------
 rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
     ?DEBL(">rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,ParentInode,BName]),
@@ -626,7 +627,7 @@ setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
                     ?DEB1("    setting UID"),
                     _Attr#stat.st_uid;
                 true ->
-                    ?DEB1("    not setting atime"),
+                    ?DEB1("    not setting UID"),
                     Stat#stat.st_uid
             end
         ,st_gid=
@@ -635,7 +636,7 @@ setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
                     ?DEB1("    setting GID"),
                     _Attr#stat.st_gid;
                 true ->
-                    ?DEB1("    not setting atime"),
+                    ?DEB1("    not setting GID"),
                     Stat#stat.st_gid
             end
         ,st_atime=
