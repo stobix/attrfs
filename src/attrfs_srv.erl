@@ -147,13 +147,13 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEB1("   created inode and key trees"),
     inode:reset(),
     RootIno=inode:get(root),
-    RealIno=inode:get("real"),
-    AttribIno=inode:get("attribs"),
+    RealIno=inode:get(?REAL_FOLDR),
+    AttribIno=inode:get(?ATTR_FOLDR),
     ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
     ?DEB1("   creating root entry"),
     RootEntry=#inode_entry{
         name=root
-       ,children=[{"real",RealIno},{"attribs",AttribIno}]
+       ,children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR,AttribIno}]
        ,type=internal_dir %XXX: Really ok to let this have the same type as attribute dirs?
        ,stat=#stat{
            st_mode=8#755 bor ?S_IFDIR
@@ -166,7 +166,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     tree_srv:enter(RootIno,RootEntry,inodes),
     ?DEB2("   making inode entries for ~p",MirrorDir),
     AttributeEntry=#inode_entry{
-        name="attribs",
+        name=?ATTR_FOLDR,
        children=tree_srv:to_list(keys),
        type=internal_dir,
        stat=#stat{ 
@@ -180,8 +180,8 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
        ext_io=ext_info_to_ext_io([])
     },
     tree_srv:enter(AttribIno,AttributeEntry,inodes),
-    % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder "real", adding attribute folders with appropriate files when a match between external file and internal database entry is found.
-    make_inode_list({MirrorDir,"real"}),
+    % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
+    make_inode_list({MirrorDir,?REAL_FOLDR}),
     ?DEB1("   attribute inode list made"),
     % Since InodeList1 is created first, and both InodeList1 and 
     % AttributeBranchList are sorted, this will produce an ordered list.
@@ -582,16 +582,29 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
-    ?DEBL("rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,ParentInode,BName]),
+    ?DEBL(">rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,ParentInode,BName]),
     {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
     PType=PEntry#inode_entry.type,
     PName=PEntry#inode_entry.name,
-    ?DEBL("parent type ~p",[PType]),
+    ?DEBL("   parent type ~p",[PType]),
     Reply=case PType of
         #attribute_dir{} ->
             Name=binary_to_list(BName),
             remove_child_from_parent(Name,PName),
+            inode:release(inode:get(Name)),
             ok;
+        internal_dir ->
+            case PName of
+                ?ATTR_FOLDR ->
+                    Name=binary_to_list(BName),
+                    ?DEBL("   Removing attribute key folder ~p",[Name]),
+                    remove_child_from_parent(Name,PName),
+                    inode:release(inode:get(Name)),
+                    ok;
+                _ ->
+                    enotsup
+            end;
+                    
         _ ->
             enotsup
     end,
@@ -868,11 +881,11 @@ make_internal_child_dir(_Ctx,_ParentInode,root,_Name,_Mode) ->
     ?DEB1("   creating of new directory type not supported"),
     #fuse_reply_err{err=enotsup};
 
-make_internal_child_dir(_Ctx,_ParentInode,"real",_Name,_Mode) ->
+make_internal_child_dir(_Ctx,_ParentInode,?REAL_FOLDR,_Name,_Mode) ->
     ?DEB1("   creating of external dirs not supported"),
     #fuse_reply_err{err=enotsup};
 
-make_internal_child_dir(Ctx,ParentInode,"attribs",Name,Mode) ->
+make_internal_child_dir(Ctx,ParentInode,?ATTR_FOLDR,Name,Mode) ->
     % This is where I add an attribute key folder.
     ?DEB1("   creating an attribute key dir"),
     MyInode=inode:get(Name),
@@ -997,7 +1010,7 @@ make_rename_reply(#attribute_dir{},_OldAttribName,OldAttribEntry,NewAttribIno,Ol
             enotsup;
         % This will be supported either when I check for subdirs, or when I allow files attributes with empty values.
 %            case NewAttribEntry#inode_entry.name of
-%                "attribs" ->
+%                ?ATTR_FOLDR ->
 %                    FileIno=inode:is_numbered(File),
 %                    {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
 %                    case FileEntry#inode_entry.type of
@@ -1020,7 +1033,7 @@ make_rename_reply(#attribute_dir{},_OldAttribName,OldAttribEntry,NewAttribIno,Ol
             enotsup
     end;
 
-make_rename_reply(internal_dir,"attribs",_OldAttribEntry,NewAttribIno,File,NewValueName) ->
+make_rename_reply(internal_dir,?ATTR_FOLDR,_OldAttribEntry,NewAttribIno,File,NewValueName) ->
     ?DEB1("   old parent is an internal dir"),
     {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno,inodes),
     case NewAttribEntry#inode_entry.type of
@@ -1029,7 +1042,7 @@ make_rename_reply(internal_dir,"attribs",_OldAttribEntry,NewAttribIno,File,NewVa
 %        #attribute_dir{type=key} ->
         internal_dir ->
             case NewAttribEntry#inode_entry.name of
-                "attribs" ->
+                ?ATTR_FOLDR ->
                     FileIno=inode:is_numbered(File),
                     {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
                     case FileEntry#inode_entry.type of
@@ -1099,7 +1112,7 @@ make_rename_value_to_value_dir_reply(NewKeyEntry,ValueIno,OldValueEntry,NewValue
     ok.
 
 %%--------------------------------------------------------------------------
-%% So, this will take an attribute directory, move it into a "key position" (as a direct child to "attribs"), and consequently change the attribute names of all subfolders and subfolder file attributes, unless this is done with subsequent calls to rename by the OS.
+%% So, this will take an attribute directory, move it into a "key position" (as a direct child to ?ATTR_FOLDR), and consequently change the attribute names of all subfolders and subfolder file attributes, unless this is done with subsequent calls to rename by the OS.
 %%--------------------------------------------------------------------------
 make_rename_key_to_key_dir_reply(KeyIno,OldKeyEntry,NewKeyName) ->
     OldKeyName=OldKeyEntry#inode_entry.name,
@@ -1114,7 +1127,7 @@ make_rename_key_to_key_dir_reply(KeyIno,OldKeyEntry,NewKeyName) ->
         end,
         Children),
     ?DEB2("    removing ~p from attribute directory", OldKeyName),
-    AttrsIno=inode:is_numbered("attribs"),
+    AttrsIno=inode:is_numbered(?ATTR_FOLDR),
     remove_empty_dir(AttrsIno,OldKeyName),
     ?DEB2("    adding ~p to inode tree and attribute directory", NewKeyName),
     tree_srv:enter(KeyIno,NewKeyEntry,inodes),
@@ -1513,7 +1526,7 @@ append_attribute({Key,Val},Name,Stat) ->
     ?DEBL("    appending ~p/~p",[Key,Val]),
     append_key_dir(Key,Val,Stat),
     tree_srv:enter(Key,inode:get(Key),keys),
-    AttributesFolderIno=inode:get("attribs"),
+    AttributesFolderIno=inode:get(?ATTR_FOLDR),
     ?DEB1("   getting attribute folder inode entry"),
     {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
     ?DEB1("   getting attribute folder children"),

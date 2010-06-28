@@ -10,6 +10,10 @@
 -define(ATTR_DB, attributes).
 -define(ATTR_DB_FILE, attrfs, attributes_db).
 
+-define(ROOT_FOLDR, root).
+-define(REAL_FOLDR, "real").
+-define(ATTR_FOLDR, "attribs").
+
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
