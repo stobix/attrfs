@@ -581,9 +581,21 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %% Remove a directory. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type rmdir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-rmdir(_Ctx,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,_Inode,_Name]),
-    {#fuse_reply_err{err=enotsup},State}.
+rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
+    ?DEBL("rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,ParentInode,BName]),
+    {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
+    PType=PEntry#inode_entry.type,
+    PName=PEntry#inode_entry.name,
+    ?DEBL("parent type ~p",[PType]),
+    Reply=case PType of
+        #attribute_dir{} ->
+            Name=binary_to_list(BName),
+            remove_child_from_parent(Name,PName),
+            ok;
+        _ ->
+            enotsup
+    end,
+    {#fuse_reply_err{err=Reply},State}.
 
 %%--------------------------------------------------------------------------
 %% Set file attributes. ToSet is a bitmask which defines which elements of Attr are defined and should be modified. Possible values are defined as ?FUSE_SET_ATTR_XXXX in fuserl.hrl . Fi will be set if setattr is invoked from ftruncate under Linux 2.6.15 or later. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type setattr_async_reply ().
