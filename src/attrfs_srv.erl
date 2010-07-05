@@ -1,6 +1,27 @@
 -module(attrfs_srv).
 
 %%%=========================================================================
+%%%                                 LICENSE
+%%%=========================================================================
+%%%
+%%%  This program is free software; you can redistribute it and/or modify
+%%%  it under the terms of the GNU General Public License as published by
+%%%  the Free Software Foundation; either version 2 of the License, or
+%%%  (at your option) any later version.
+%%%
+%%%  This program is distributed in the hope that it will be useful,
+%%%  but WITHOUT ANY WARRANTY; without even the implied warranty of
+%%%  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%%%  GNU Library General Public License for more details.
+%%%
+%%%  You should have received a copy of the GNU General Public License
+%%%  along with this program; if not, write to the Free Software
+%%%  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+%%%
+%%%=========================================================================
+
+%%%=========================================================================
+%%%                                  META
 %%%=========================================================================
 %%% @author Joel Ericson <kasettbok@gmail.com>
 %%%
@@ -535,8 +556,8 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
 %%--------------------------------------------------------------------------
-release(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["release!"]),
+release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
+    ?DEBL(">release, Ctx: ~p Inode: ~p FI: ~p",[Ctx,Inode,Fuse_File_Info]),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
