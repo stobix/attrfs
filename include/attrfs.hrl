@@ -1,3 +1,23 @@
+%%%=========================================================================
+%%%                                 LICENSE
+%%%=========================================================================
+%%%
+%%%  This program is free software; you can redistribute it and/or modify
+%%%  it under the terms of the GNU General Public License as published by
+%%%  the Free Software Foundation; either version 2 of the License, or
+%%%  (at your option) any later version.
+%%%
+%%%  This program is distributed in the hope that it will be useful,
+%%%  but WITHOUT ANY WARRANTY; without even the implied warranty of
+%%%  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%%%  GNU Library General Public License for more details.
+%%%
+%%%  You should have received a copy of the GNU General Public License
+%%%  along with this program; if not, write to the Free Software
+%%%  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+%%%
+%%%=========================================================================
+
 %%%-------------------------------------------------------
 %%% @author Joel Ericson <kasettbok@gmail.com>
 %%%
@@ -75,15 +95,13 @@
         }).
 
 
--record(open_file,
-        % The inode of the file
-        {ino::non_neg_integer()
-        % A list of file contents, different for different contexts.
-        ,ctx_list::[{#fuse_ctx{},atom()}]
-        % A counter to see how many time this file has been opened without receiving a close.
-        % I guess that when the counter reaches 0, this open file is to be removed.
-        % Since closedir (and close?) do NOT give any useful context information, I think that I must wait until every reference to the file is released before removing the open_file entry.
-        ,counter::non_neg_integer() %
+-record(open_internal_dir,
+        {contents%::raw directory listing format
+        }).
+        
+
+-record(open_external_file,
+        {io_device::file:io_device()
         }).
 
 

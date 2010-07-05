@@ -4,10 +4,10 @@ Make it possible to copy files between folders. (Which will mostly be the same a
 Make the app terminate when fusermount -u mountdir
 
 include support for 
-    ☑mkdir, 
-    ☐rmdir, 
-    ☑rename 
-    ☐and others? to change attributes.
+    ☑ mkdir, 
+    ☑ rmdir, 
+    ☑ rename 
+    ☐ and others? to change attributes.
 
 
 Detect duplicates in the folder(s) to copy? 
@@ -19,31 +19,53 @@ include support for reading files!
 
 make closedir do something useful.
 
-Include support for "deep attributes":
+☐ Include support for "multi-valued attributes":
+    % attr -s "Foo" -V "Etaoin,Shrdlu" Baz
+    =>
+    % ls attribs/Foo -R
+    Etaoin/Baz
+    Shrdlu/Baz
+
+☐ Include support for "deep attributes":
+    % attr -s "Foo/Bar" -V "Etaoin" Baz
+    =>
+    % ls attribs/Foo/Bar/Etaoin -R
+    Baz
+
+    % attr -s "Bla" -V "" Baz
+    =>
+    % ls attribs/Bla
+    Baz
+
+☐ Include support for setting multiple attributes at once:
+    % attr -s "Foo,Bar" -V "Etaoin" Baz
+    =>
+    % ls attribs -R
+    Foo/Etaoin/Baz
+    Bar/Etaoin/Baz
+
+
+☐ The above combined:
     % attr -s "Foo/Bar" -V "Etaoin,Shrdlu" Baz
     =>
     % ls attribs/Foo/Bar -R
     Etaoin/Baz
     Shrdlu/Baz
 
-make setxattr unset old attribute value folders when adding new ones.
+☐ make setxattr unset old attribute value folders when adding new ones.
 
-make the dir functions context sensitive.
-make all applicable functions context sensitive.
+☐ make the dir functions context sensitive.
+☐ make all applicable functions context sensitive.
 
 
 have different attribute folders for different users? different groups? different users or group according to mode?
 
-Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
+☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
 
 Apparently, linux calls open before calling setattr. What to do with open?
 
-Nautilus creates a folder with the $NAMELESS_FOLDER name, and then renames it. Add support for really renaming attribute folders as long as they don't move folder? Why not support general moving of attribute folders? (This implies changing attributes on all files having the applicable folder attribute...)
-
-
-
-☐Use CTX as an index for accessing attributes?
+☐ Use CTX as an index for accessing attributes?
 
 To do later on:
 
-Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
+☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
