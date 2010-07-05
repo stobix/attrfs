@@ -217,7 +217,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 %% The analog to Module:init/1 in gen_server.
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-init(State=#state{}) ->
+init(State) ->
     {ok, State}.
 
 %%--------------------------------------------------------------------------
@@ -252,7 +252,10 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %% The possibility of making a .Trash in the root folder should be considered.
 %%--------------------------------------------------------------------------
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
-    ?DEBL("~s",["create!"]),
+    ?DEB2(">create Ctx: ~p",_Ctx),
+    ?DEB2(">       Parent: ~p",_Parent),
+    ?DEB2(">       Name: ~p",_Name),
+    ?DEB2(">       FI: ~p",_Fuse_File_Info),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -260,8 +263,9 @@ create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">flush! inode: ~p FI: ~p",[_Inode,_Fuse_File_Info]),
-    {#fuse_reply_err{err=enotsup},State}.
+    ?DEB2(">flush! inode: ~p ",_Inode),
+    ?DEB2(">       FI: ~p",_Fuse_File_Info),
+    {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
 %% Forget about an inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type forget_async_reply ().
@@ -454,20 +458,23 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">open ctx: ~p inode: ~p FI: ~p",[Ctx,Inode,Fuse_File_Info]),
+    ?DEB2(">open ctx: ~p",Ctx),
+    ?DEB2(">     inode: ~p ",Inode),
+    ?DEB2(">     FI: ~p",Fuse_File_Info),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     Name=Entry#inode_entry.name,
     ?DEBL("   Internal file name: ~p",[Name]),
     Reply=case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   External file path: ~p",[Path]),
-            case file:open(Path,[read,raw]) of
-                {ok,IoDevice} ->
-                    set_open_file({Ctx,Inode},#open_external_file{io_device=IoDevice}),
-                    #fuse_reply_open{fuse_file_info=Fuse_File_Info};
-                {error,Error} ->
-                    #fuse_reply_err{err=Error}
-            end;
+%            case file:open(Path,[read,raw]) of
+%                {ok,IoDevice} ->
+%                    set_open_file({Ctx,Inode},#open_external_file{io_device=IoDevice}),
+%                    #fuse_reply_open{fuse_file_info=Fuse_File_Info};
+%                {error,Error} ->
+%                    #fuse_reply_err{err=Error}
+%            end;
+            #fuse_reply_open{fuse_file_info=Fuse_File_Info};
         _ ->
             #fuse_reply_err{err=enotsup}
     end,
@@ -478,8 +485,10 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,_State) ->
-    ?DEBL(">opendir token:~p, file info:~p ",[{Ctx,Inode},_FI]),
-    ?DEB2("   flags ~p",_Flags),
+    ?DEB2(">opendir Ctx:~p",Ctx),
+    ?DEB2(">        inode: ~p ",Inode),
+    ?DEB2(">        FI: ~p", _FI),
+    ?DEB2(">        flags: ~p",_Flags),
 %    ?DEB2("   writepage ~p",_Writepage),
 %    ?DEB2("   DirectIO ~p",_DirectIO),
 %    ?DEB2("   KeepCache ~p",_KeepCache),
@@ -497,17 +506,24 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
 %% To read other internal files, I need to output the Right Kind Of Data somehow. A project to do later.
 %%--------------------------------------------------------------------------
 read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">read ctx: ~p inode: ~p size: ~p offset: ~p FI: ~p",[Ctx,Inode,Size,Offset, _Fuse_File_Info]),
-    {value,File}=lookup_open_file({Ctx,Inode}),
-    IoDevice=File#open_external_file.io_device,
-    Reply=case file:pread(IoDevice,Offset,Size) of
-        {ok, Data} ->
-            #fuse_reply_buf{buf=Data,size=Size};
-        eof ->
-            #fuse_reply_err{err=eof};
-        {error=Error} ->
-            #fuse_reply_err{err=Error}
-    end,
+    ?DEB2(">read ctx: ~p ",Ctx),
+    ?DEB2(">     inode: ~p ",Inode),
+    ?DEB2(">     size: ~p ",Size),
+    ?DEB2(">     offset: ~p",Offset),
+    ?DEB2(">     FI: ~p", _Fuse_File_Info),
+%    {value,File}=lookup_open_file({Ctx,Inode}),
+%    IoDevice=File#open_external_file.io_device,
+    Reply=
+%            #fuse_reply_err{err=eof},
+%    =case file:pread(IoDevice,Offset,Size) of
+%        {ok, Data} ->
+%            #fuse_reply_buf{buf=Data,size=Size};
+    #fuse_reply_buf{buf=list_to_binary("hej\n\0"),size=6},
+%        eof ->
+%            #fuse_reply_err{err=eof};
+%        {error=Error} ->
+%            #fuse_reply_err{err=Error}
+%    end,
     {Reply,State}.
 
 %%--------------------------------------------------------------------------
@@ -515,7 +531,9 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEBL(">readdir token:~p offset:~p file info: ~p",[{Ctx,Inode},Offset,_Fuse_File_Info]),
+  ?DEB2(">readdir token:~p",{Ctx,Inode}),
+  ?DEB2(">        offset:~p",Offset),
+  ?DEB2(">        file info: ~p",_Fuse_File_Info),
   Reply=case lookup_open_file({Ctx,Inode}) of 
     {value, OpenFile} ->
         DirEntryList = 
@@ -557,8 +575,10 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
 %%--------------------------------------------------------------------------
 release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">release, Ctx: ~p Inode: ~p FI: ~p",[Ctx,Inode,Fuse_File_Info]),
-    {#fuse_reply_err{err=enotsup},State}.
+    ?DEB2(">release Ctx: ~p ",Ctx),
+    ?DEB2(">        Inode: ~p ",Inode),
+    ?DEB2(">        FI: ~p",Fuse_File_Info),
+    {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
 % Called when there are no more references to a directory. For every opendir  call there is exactly one releasedir call. Fi#fuse_file_info.fh will contain the descriptor set in opendir, if any. Fi#fuse_file_info.flags will contain the same flags as for opendir. #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type releasedir_async_reply ().
@@ -566,7 +586,8 @@ release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 %%--------------------------------------------------------------------------
 releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">releasedir token:~p file info:~p",[{Ctx,Inode},_Fuse_File_Info]),
+  ?DEB2(">releasedir token:~p",{Ctx,Inode}),
+  ?DEB2(">           file info: ~p",_Fuse_File_Info),
     remove_open_file({Ctx,Inode}),
     {#fuse_reply_err{err=ok},State}.
 
