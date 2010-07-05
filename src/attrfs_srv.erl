@@ -128,7 +128,7 @@ code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
 %% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
 %%--------------------------------------------------------------------------
 start_link({MountDir,MirrorDir,DB}) ->
-    ?DEB1("Starting attrfs server..."),
+    ?DEB1(">Starting attrfs server..."),
     start_link(MountDir,true,"",MirrorDir,DB).
 
 %%--------------------------------------------------------------------------
@@ -138,6 +138,7 @@ start_link({MountDir,MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     Options=[],
+    ?DEB1(">start_link"),
     ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
@@ -185,7 +186,8 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEB1("   attribute inode list made"),
     % Since InodeList1 is created first, and both InodeList1 and 
     % AttributeBranchList are sorted, this will produce an ordered list.
-    State=#state{open_files=gb_trees:empty()},
+    %    State=#state{open_files=gb_trees:empty()},
+    State=ok,
     assert_started(fuserl),
     ?DEB1("   fuserl started, starting fuserlsrv"),
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
@@ -225,6 +227,8 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Create and open a file. Mode is a bitmask consisting of ?S_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type create_async_reply (). 
 %%--------------------------------------------------------------------------
+%% Where will I allow this? Creating new real files in the real branch? Creating imaginary files elsewhere?
+%% The possibility of making a .Trash in the root folder should be considered.
 %%--------------------------------------------------------------------------
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
     ?DEBL("~s",["create!"]),
@@ -235,7 +239,7 @@ create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["flush!"]),
+    ?DEBL(">flush! inode: ~p FI: ~p",[_Inode,_Fuse_File_Info]),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -428,9 +432,25 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %% Open an inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type open_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-open(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["open!"]),
-    {#fuse_reply_err{err=enotsup},State}.
+open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
+    ?DEBL(">open ctx: ~p inode: ~p FI: ~p",[Ctx,Inode,Fuse_File_Info]),
+    {value,Entry}=tree_srv:lookup(Inode,inodes),
+    Name=Entry#inode_entry.name,
+    ?DEBL("   Internal file name: ~p",[Name]),
+    Reply=case Entry#inode_entry.type of
+        #external_file{path=Path} ->
+            ?DEBL("   External file path: ~p",[Path]),
+            case file:open(Path,[read,raw]) of
+                {ok,IoDevice} ->
+                    set_open_file({Ctx,Inode},#open_external_file{io_device=IoDevice}),
+                    #fuse_reply_open{fuse_file_info=Fuse_File_Info};
+                {error,Error} ->
+                    #fuse_reply_err{err=Error}
+            end;
+        _ ->
+            #fuse_reply_err{err=enotsup}
+    end,
+    {Reply,State}.
 
 %%--------------------------------------------------------------------------
 %% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
@@ -452,10 +472,22 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
 %%--------------------------------------------------------------------------
 %% Read Size bytes starting at offset Offset. The file descriptor and other flags are available in Fi. If noreply is used, eventually fuserlsrv:reply/2 should be called with Cont as first argument and the second argument of type read_async_reply ().
 %%--------------------------------------------------------------------------
+%% To read an internal file that has an external counterpart, open the external file and forward the contents to the reader.
+%% To read other internal files, I need to output the Right Kind Of Data somehow. A project to do later.
 %%--------------------------------------------------------------------------
-read(_Ctx,_Inode,_Size,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">read",[]),
-    {#fuse_reply_err{err=enotsup},State}.
+read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
+    ?DEBL(">read ctx: ~p inode: ~p size: ~p offset: ~p FI: ~p",[Ctx,Inode,Size,Offset, _Fuse_File_Info]),
+    {value,File}=lookup_open_file({Ctx,Inode}),
+    IoDevice=File#open_external_file.io_device,
+    Reply=case file:pread(IoDevice,Offset,Size) of
+        {ok, Data} ->
+            #fuse_reply_buf{buf=Data,size=Size};
+        eof ->
+            #fuse_reply_err{err=eof};
+        {error=Error} ->
+            #fuse_reply_err{err=Error}
+    end,
+    {Reply,State}.
 
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().

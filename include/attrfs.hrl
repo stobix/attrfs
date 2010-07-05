@@ -75,15 +75,13 @@
         }).
 
 
--record(open_file,
-        % The inode of the file
-        {ino::non_neg_integer()
-        % A list of file contents, different for different contexts.
-        ,ctx_list::[{#fuse_ctx{},atom()}]
-        % A counter to see how many time this file has been opened without receiving a close.
-        % I guess that when the counter reaches 0, this open file is to be removed.
-        % Since closedir (and close?) do NOT give any useful context information, I think that I must wait until every reference to the file is released before removing the open_file entry.
-        ,counter::non_neg_integer() %
+-record(open_internal_dir,
+        {contents%::raw directory listing format
+        }).
+        
+
+-record(open_external_file,
+        {io_device::file:io_device()
         }).
 
 
