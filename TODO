@@ -10,7 +10,9 @@ include support for
     ☐and others? to change attributes.
 
 
-    
+Detect duplicates in the folder(s) to copy? 
+  note as folders under /duplicates
+  /duplicates/foo.file/paths.txt or something like it.
     
     
 include support for reading files!
