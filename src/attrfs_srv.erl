@@ -250,13 +250,26 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Where will I allow this? Creating new real files in the real branch? Creating imaginary files elsewhere?
 %% The possibility of making a .Trash in the root folder should be considered.
+%%
+%% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying" files possible.
 %%--------------------------------------------------------------------------
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
     ?DEB2(">create Ctx: ~p",_Ctx),
     ?DEB2(">       Parent: ~p",_Parent),
     ?DEB2(">       Name: ~p",_Name),
     ?DEB2(">       FI: ~p",_Fuse_File_Info),
-    {#fuse_reply_err{err=enotsup},State}.
+    Reply=case inode:is_numbered(binary_to_list(_Name)) of
+        false -> #fuse_reply_err{err=enotsup};
+        Inode -> 
+            {value,Entry}=tree_srv:lookup(Inode,inodes),
+            case Entry#inode_entry.type of
+                #external_file{} ->
+                    #fuse_reply_err{err=ok} ;
+                _ ->
+                    #fuse_reply_err{err=enotsup}
+            end
+    end,
+    {Reply,State}.
 
 %%--------------------------------------------------------------------------
 %% This is called on each close () of an opened file, possibly multiple times per open  call (due to dup () et. al.). Fi#fuse_file_info.fh will contain the descriptor set in open, if any. #fuse_reply_err{err = ok} indicates success. This return value is ultimately the return value of close () (unlike release). Does *not* necessarily imply an fsync. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type flush_async_reply ().
