@@ -57,6 +57,8 @@ make closedir do something useful.
 ☐ make the dir functions context sensitive.
 ☐ make all applicable functions context sensitive.
 
+☐ check if the OS tries to copy a file unto itself (from a real dir to an attribute dir). 
+  This copying is to be ignored. Touching or movin the file should be regarded as the same as copying in this FS.
 
 have different attribute folders for different users? different groups? different users or group according to mode?
 
