@@ -241,7 +241,9 @@ terminate(_Reason,_State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 access(Ctx,Inode,Mask,_Continuation,State) ->
-    ?DEBL(">access inode: ~p, mask: ~p, context: ~p",[Inode,Mask,Ctx]),
+    ?DEB2(">access inode: ~p, mask: ~p, context: ~p",Inode),
+    ?DEB2("|       mask: ~p ",Mask),
+    ?DEB2("|       Ctx: ~p ",Ctx),
     Reply=test_access(Inode,Mask,Ctx),
     {#fuse_reply_err{err=Reply},State}.
 
@@ -255,9 +257,9 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
     ?DEB2(">create Ctx: ~p",_Ctx),
-    ?DEB2(">       Parent: ~p",_Parent),
-    ?DEB2(">       Name: ~p",_Name),
-    ?DEB2(">       FI: ~p",_Fuse_File_Info),
+    ?DEB2("|       Parent: ~p",_Parent),
+    ?DEB2("|       Name: ~p",_Name),
+    ?DEB2("|       FI: ~p",_Fuse_File_Info),
     Reply=case inode:is_numbered(binary_to_list(_Name)) of
         false -> #fuse_reply_err{err=enotsup};
         Inode -> 
@@ -277,7 +279,7 @@ create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
 %%--------------------------------------------------------------------------
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEB2(">flush! inode: ~p ",_Inode),
-    ?DEB2(">       FI: ~p",_Fuse_File_Info),
+    ?DEB2("|       FI: ~p",_Fuse_File_Info),
     {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -440,7 +442,10 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     Name=binary_to_list(BName),
-    ?DEBL(">mkdir ctx: ~p pIno: ~p name: ~p mode: ~p ",[Ctx,ParentInode,Name,MMode]),
+    ?DEB2(">mkdir ctx: ~p",Ctx),
+    ?DEB2("|mkdir pIno: ~p",ParentInode),
+    ?DEB2("|mkdir name: ~p",Name),
+    ?DEB2("|mkdir mode: ~p",MMode),
     Mode=MMode bor ?S_IFDIR,
     Reply=case tree_srv:lookup(ParentInode,inodes) of
         none -> #fuse_reply_err{err=enoent}; 
@@ -472,8 +477,8 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
     ?DEB2(">open ctx: ~p",Ctx),
-    ?DEB2(">     inode: ~p ",Inode),
-    ?DEB2(">     FI: ~p",Fuse_File_Info),
+    ?DEB2("|     inode: ~p ",Inode),
+    ?DEB2("|     FI: ~p",Fuse_File_Info),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     Name=Entry#inode_entry.name,
     ?DEBL("   Internal file name: ~p",[Name]),
@@ -499,9 +504,9 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,_State) ->
     ?DEB2(">opendir Ctx:~p",Ctx),
-    ?DEB2(">        inode: ~p ",Inode),
-    ?DEB2(">        FI: ~p", _FI),
-    ?DEB2(">        flags: ~p",_Flags),
+    ?DEB2("|        inode: ~p ",Inode),
+    ?DEB2("|        FI: ~p", _FI),
+    ?DEB2("|        flags: ~p",_Flags),
 %    ?DEB2("   writepage ~p",_Writepage),
 %    ?DEB2("   DirectIO ~p",_DirectIO),
 %    ?DEB2("   KeepCache ~p",_KeepCache),
@@ -520,10 +525,10 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
 %%--------------------------------------------------------------------------
 read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEB2(">read ctx: ~p ",Ctx),
-    ?DEB2(">     inode: ~p ",Inode),
-    ?DEB2(">     size: ~p ",Size),
-    ?DEB2(">     offset: ~p",Offset),
-    ?DEB2(">     FI: ~p", _Fuse_File_Info),
+    ?DEB2("|     inode: ~p ",Inode),
+    ?DEB2("|     size: ~p ",Size),
+    ?DEB2("|     offset: ~p",Offset),
+    ?DEB2("|     FI: ~p", _Fuse_File_Info),
 %    {value,File}=lookup_open_file({Ctx,Inode}),
 %    IoDevice=File#open_external_file.io_device,
     Reply=
@@ -531,7 +536,7 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %    =case file:pread(IoDevice,Offset,Size) of
 %        {ok, Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
-    #fuse_reply_buf{buf=list_to_binary("hej\n\0"),size=6},
+    #fuse_reply_buf{buf=list_to_binary("hej\n\0"),size=16},
 %        eof ->
 %            #fuse_reply_err{err=eof};
 %        {error=Error} ->
@@ -545,8 +550,8 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
   ?DEB2(">readdir token:~p",{Ctx,Inode}),
-  ?DEB2(">        offset:~p",Offset),
-  ?DEB2(">        file info: ~p",_Fuse_File_Info),
+  ?DEB2("|        offset:~p",Offset),
+  ?DEB2("|        file info: ~p",_Fuse_File_Info),
   Reply=case lookup_open_file({Ctx,Inode}) of 
     {value, OpenFile} ->
         DirEntryList = 
@@ -589,8 +594,8 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
     ?DEB2(">release Ctx: ~p ",Ctx),
-    ?DEB2(">        Inode: ~p ",Inode),
-    ?DEB2(">        FI: ~p",Fuse_File_Info),
+    ?DEB2("|        Inode: ~p ",Inode),
+    ?DEB2("|        FI: ~p",Fuse_File_Info),
     {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -600,7 +605,7 @@ release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
   ?DEB2(">releasedir token:~p",{Ctx,Inode}),
-  ?DEB2(">           file info: ~p",_Fuse_File_Info),
+  ?DEB2("|           file info: ~p",_Fuse_File_Info),
     remove_open_file({Ctx,Inode}),
     {#fuse_reply_err{err=ok},State}.
 
@@ -704,7 +709,10 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
 %%--------------------------------------------------------------------------
 setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL(">setattr inode: ~p~n    attr: ~p~n    to_set: ~p~n    fuse_file_info: ~p",[Inode,_Attr,_ToSet,_Fuse_File_Info]),
+    ?DEB2(">setattr inode: ~p~n" ,Inode),
+    ?DEB2("|        to set: ~p ",_ToSet),
+    ?DEB2("|        attr: ~p ",_Attr),
+    ?DEB2("|        FI: ~p",_Fuse_File_Info),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     Stat=Entry#inode_entry.stat,
     NewStat=Stat#stat{
@@ -763,7 +771,7 @@ setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
                 Stat#stat.st_size
             end
                 },
-    tree_srv:enter(Inode,Entry#inode_entry{stat=NewStat}),
+    tree_srv:enter(Inode,Entry#inode_entry{stat=NewStat},inodes),
     {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=100000},State}.
 
 
@@ -1579,7 +1587,9 @@ make_inode_list({Path,Name}) ->
             EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
             EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
                 
-            ?DEBL("\tatime:~p~n\t\t\tctime:~p~n\t\t\tmtime:~p",[EpochAtime,EpochCtime,EpochMtime]),
+            ?DEB2("    atime:~p~n",EpochAtime),
+            ?DEB2("    ctime:~p~n",EpochCtime),
+            ?DEB2("    mtime:~p~n",EpochMtime),
             MyStat=statify_file_info(
                     FileInfo#file_info{
                         inode=inode:get(Name)
