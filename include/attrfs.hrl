@@ -115,6 +115,16 @@
 -define (DIR (Stat), Stat#stat{ st_mode = (Stat#stat.st_mode band 8#777) bor ?S_IFDIR }).
 %-define (DIR (Stat), Stat).
 
+-define (ENTRY2PARAM (Entry,Inode), 
+    #fuse_entry_param{ ino=Inode,
+                       generation=0,
+                       attr=Entry#inode_entry.stat,
+                       attr_timeout_ms=1000,
+                       entry_timeout_ms=1000}).
+
+                                                      
+            
+
 %these I stole from fuserlproc. Maybe they'll come in handy.
 -define (DIRATTR (X), #stat{ st_ino = (X), 
                              st_mode = ?S_IFDIR bor 8#0555, 

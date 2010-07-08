@@ -207,8 +207,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEB1("   attribute inode list made"),
     % Since InodeList1 is created first, and both InodeList1 and 
     % AttributeBranchList are sorted, this will produce an ordered list.
-    %    State=#state{open_files=gb_trees:empty()},
-    State=ok,
+    State=[],
     assert_started(fuserl),
     ?DEB1("   fuserl started, starting fuserlsrv"),
     fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
@@ -255,28 +254,42 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %%
 %% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying" files possible.
 %%--------------------------------------------------------------------------
-create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
+create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
     ?DEB1(">create"), 
-    ?DEB2("|  Ctx: ~p",_Ctx),
-    ?DEB2("|  Parent: ~p",_Parent),
-    ?DEB2("|  Name: ~p",_Name),
-    ?DEB2("|  FI: ~p",_Fuse_File_Info),
-    Reply=case inode:is_numbered(binary_to_list(_Name)) of
+    ?DEB2("|  Ctx: ~p",Ctx),
+    ?DEB2("|  ParentIno: ~p",ParentInode),
+    ?DEB2("|  Name: ~p",Name),
+    ?DEB2("|  FI: ~p",Fuse_File_Info),
+    Reply=case inode:is_numbered(binary_to_list(Name)) of
         false -> 
             ?DEB1("No real file with that name, not supported."),
             #fuse_reply_err{err=enotsup};
         Inode -> 
             {value,Entry}=tree_srv:lookup(Inode,inodes),
             case Entry#inode_entry.type of
-                #external_file{} ->
-                    ?DEB1("Filename linked to a real file, all is ok."),
-                    #fuse_reply_err{err=ok} ;
+                #external_file{path=Path} ->
+                    ?DEB1("Filename linked to a real file."),
+                    {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
+                    case ParentEntry#inode_entry.type of
+                        #attribute_dir{atype=value} ->
+                            ?DEB1("Parent is value dir. All is ok."),
+                            % Adding a new attribute is the same as creating an attribute folder file entry.
+                            add_new_attribute(Path,Inode,Entry,ParentEntry#inode_entry.name),
+                            {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
+                            #fuse_reply_create{
+                                fuse_file_info=FileInfo,
+                                fuse_entry_param=?ENTRY2PARAM(Entry,Inode)
+                            };
+                    _ ->
+                        #fuse_reply_err{err=enotsup}
+                    end;
                 _ ->
                     ?DEB1("The file with that name has the wrong type!"),
                     #fuse_reply_err{err=enotsup}
             end
     end,
     {Reply,State}.
+
 
 %%--------------------------------------------------------------------------
 %% This is called on each close () of an opened file, possibly multiple times per open  call (due to dup () et. al.). Fi#fuse_file_info.fh will contain the descriptor set in open, if any. #fuse_reply_err{err = ok} indicates success. This return value is ultimately the return value of close () (unlike release). Does *not* necessarily imply an fsync. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type flush_async_reply ().
@@ -473,7 +486,12 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
-    ?DEBL("~s",["mknod!"]),
+    ?DEB1(">mknod"),
+    ?DEB2("|  Ctx: ~p",_Ctx),
+    ?DEB2("|  ParentIno: ~p",_ParentInode),
+    ?DEB2("|  Name: ~p",_Name),
+    ?DEB2("|  Mode: ~p",_Mode),
+    ?DEB2("|  Dev: ~p",_Dev),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
