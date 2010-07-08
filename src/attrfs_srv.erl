@@ -224,7 +224,8 @@ init(State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
-    ?DEBL(">terminate ~p",[_Reason]),
+    ?DEB1(">terminate"),
+    ?DEB2("|  _Reason:",_Reason),
     ?DEB2("   Closing database \"~p\"",?ATTR_DB),
     dets:close(?ATTR_DB).
 
@@ -240,9 +241,10 @@ terminate(_Reason,_State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 access(Ctx,Inode,Mask,_Continuation,State) ->
-    ?DEB2(">access inode: ~p",Inode),
-    ?DEB2("|       mask: ~p ",Mask),
-    ?DEB2("|       Ctx: ~p ",Ctx),
+    ?DEB1(">access"),
+    ?DEB2("|  Ctx: ~p ",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  Mask: ~p ",Mask),
     Reply=test_access(Inode,Mask,Ctx),
     {#fuse_reply_err{err=Reply},State}.
 
@@ -295,9 +297,10 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
 %% This is called on each close () of an opened file, possibly multiple times per open  call (due to dup () et. al.). Fi#fuse_file_info.fh will contain the descriptor set in open, if any. #fuse_reply_err{err = ok} indicates success. This return value is ultimately the return value of close () (unlike release). Does *not* necessarily imply an fsync. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type flush_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-    ?DEB2(">flush! inode: ~p ",_Inode),
-    ?DEB2("|       FI: ~p",_Fuse_File_Info),
+flush(_Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
+    ?DEB1(">flush"),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  FI: ~p",_Fuse_File_Info),
     {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -460,10 +463,11 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     Name=binary_to_list(BName),
-    ?DEB2(">mkdir ctx: ~p",Ctx),
-    ?DEB2("|mkdir pIno: ~p",ParentInode),
-    ?DEB2("|mkdir name: ~p",Name),
-    ?DEB2("|mkdir mode: ~p",MMode),
+    ?DEB1(">mkdir"),
+    ?DEB2("|  Ctx:~p",Ctx),
+    ?DEB2("|  PIno: ~p",ParentInode),
+    ?DEB2("|  Name: ~p",Name),
+    ?DEB2("|  Mode: ~p",MMode),
     Mode=MMode bor ?S_IFDIR,
     Reply=case tree_srv:lookup(ParentInode,inodes) of
         none -> #fuse_reply_err{err=enoent}; 
@@ -499,9 +503,10 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
-    ?DEB2(">open ctx: ~p",Ctx),
-    ?DEB2("|     inode: ~p ",Inode),
-    ?DEB2("|     FI: ~p",Fuse_File_Info),
+    ?DEB1(">open"),
+    ?DEB2("|  Ctx: ~p",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  FI: ~p",Fuse_File_Info),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     Name=Entry#inode_entry.name,
     ?DEBL("   Internal file name: ~p",[Name]),
@@ -526,10 +531,11 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,_State) ->
-    ?DEB2(">opendir Ctx:~p",Ctx),
-    ?DEB2("|        inode: ~p ",Inode),
-    ?DEB2("|        FI: ~p", _FI),
-    ?DEB2("|        flags: ~p",_Flags),
+    ?DEB1(">opendir"),
+    ?DEB2("|  Ctx:~p",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  FI: ~p", _FI),
+    ?DEB2("|  flags: ~p",_Flags),
 %    ?DEB2("   writepage ~p",_Writepage),
 %    ?DEB2("   DirectIO ~p",_DirectIO),
 %    ?DEB2("   KeepCache ~p",_KeepCache),
@@ -547,11 +553,12 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
 %% To read other internal files, I need to output the Right Kind Of Data somehow. A project to do later.
 %%--------------------------------------------------------------------------
 read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEB2(">read ctx: ~p ",Ctx),
-    ?DEB2("|     inode: ~p ",Inode),
-    ?DEB2("|     size: ~p ",Size),
-    ?DEB2("|     offset: ~p",Offset),
-    ?DEB2("|     FI: ~p", _Fuse_File_Info),
+    ?DEB1(">read"),
+    ?DEB2("|  Ctx:~p",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  Size: ~p ",Size),
+    ?DEB2("|  Offset: ~p",Offset),
+    ?DEB2("|  FI: ~p", _Fuse_File_Info),
 %    {value,File}=lookup_open_file({Ctx,Inode}),
 %    IoDevice=File#open_external_file.io_device,
 %    Reply=
@@ -594,9 +601,11 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEB2(">readdir token:~p",{Ctx,Inode}),
-  ?DEB2("|        offset:~p",Offset),
-  ?DEB2("|        file info: ~p",_Fuse_File_Info),
+    ?DEB1(">readdir"),
+    ?DEB2("|  Ctx:~p",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  Offset:~p",Offset),
+    ?DEB2("|  FI: ~p",_Fuse_File_Info),
   Reply=case lookup_open_file({Ctx,Inode}) of 
     {value, OpenFile} ->
         DirEntryList = 
@@ -638,9 +647,10 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
 %%--------------------------------------------------------------------------
 release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
-    ?DEB2(">release Ctx: ~p ",Ctx),
-    ?DEB2("|        Inode: ~p ",Inode),
-    ?DEB2("|        FI: ~p",Fuse_File_Info),
+    ?DEB1(">release"),
+    ?DEB2("|  Ctx:~p",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  FI: ~p",Fuse_File_Info),
     {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -649,8 +659,10 @@ release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 %%--------------------------------------------------------------------------
 releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
-  ?DEB2(">releasedir token:~p",{Ctx,Inode}),
-  ?DEB2("|           file info: ~p",_Fuse_File_Info),
+    ?DEB1(">releasedir"),
+    ?DEB2("|  Ctx:~p",Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  FI: ~p",_Fuse_File_Info),
     remove_open_file({Ctx,Inode}),
     {#fuse_reply_err{err=ok},State}.
 
@@ -660,7 +672,10 @@ releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
     Name=stringdelta(binary_to_list(BName),"user."),
-    ?DEBL(">removexattr inode: ~p name: ~p",[Inode,Name]),
+    ?DEB1(">removexattr"),
+    ?DEB2("|  _Ctx:~p",_Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  Name: ~p",Name),
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     case Entry#inode_entry.type of
         #external_file{ path=Path } ->
@@ -720,7 +735,10 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %% For now, only removing of attribute (key and/or value) dirs are supported.
 %%--------------------------------------------------------------------------
 rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
-    ?DEBL(">rmdir, ctx: ~p, inode: ~p, name: ~p",[_Ctx,ParentInode,BName]),
+    ?DEB1(">rmdir"),
+    ?DEB2("|  Ctx:~p",_Ctx),
+    ?DEB2("|  PIno: ~p ",ParentInode),
+    ?DEB2("|  BName: ~p",BName),
     {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
     PType=PEntry#inode_entry.type,
     PName=PEntry#inode_entry.name,
@@ -753,64 +771,65 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
 %%--------------------------------------------------------------------------
-setattr(_Ctx,Inode,_Attr,_ToSet,_Fuse_File_Info,_Continuation,State) ->
-    ?DEB2(">setattr inode: ~p~n" ,Inode),
-    ?DEB2("|        to set: ~p ",_ToSet),
-    ?DEB2("|        attr: ~p ",_Attr),
-    ?DEB2("|        FI: ~p",_Fuse_File_Info),
+setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
+    ?DEB1(">setattr"),
+    ?DEB2("|  Inode: ~p ",Inode),
+    ?DEB2("|  To set: ~p ",ToSet),
+    ?DEB2("|  Attr: ~p ",Attr),
+    ?DEB2("|  _FI: ~p",_Fuse_File_Info),
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     Stat=Entry#inode_entry.stat,
     NewStat=Stat#stat{
         st_uid=
-            case (?FUSE_SET_ATTR_UID band _ToSet) == 0 of
+            case (?FUSE_SET_ATTR_UID band ToSet) == 0 of
                 false ->
                     ?DEB1("    setting UID"),
-                    _Attr#stat.st_uid;
+                    Attr#stat.st_uid;
                 true ->
                     ?DEB1("    not setting UID"),
                     Stat#stat.st_uid
             end
         ,st_gid=
-            case (?FUSE_SET_ATTR_GID band _ToSet) == 0 of
+            case (?FUSE_SET_ATTR_GID band ToSet) == 0 of
                 false ->
                     ?DEB1("    setting GID"),
-                    _Attr#stat.st_gid;
+                    Attr#stat.st_gid;
                 true ->
                     ?DEB1("    not setting GID"),
                     Stat#stat.st_gid
             end
         ,st_atime=
-            case (?FUSE_SET_ATTR_ATIME band _ToSet) == 0 of
+            case (?FUSE_SET_ATTR_ATIME band ToSet) == 0 of
                 false ->
                     ?DEB1("    setting atime"),
-                    _Attr#stat.st_atime;
+                    Attr#stat.st_atime;
                 true ->
                     ?DEB1("    not setting atime"),
                     Stat#stat.st_atime
             end
         ,st_mtime=
-            case (?FUSE_SET_ATTR_MTIME band _ToSet) == 0 of
+            case (?FUSE_SET_ATTR_MTIME band ToSet) == 0 of
                 false ->
                     ?DEB1("    setting mtime"),
-                _Attr#stat.st_mtime;
+                Attr#stat.st_mtime;
             true ->
                 ?DEB1("    not setting mtime"),
                 Stat#stat.st_mtime
             end
         ,st_mode=
-            case (?FUSE_SET_ATTR_MODE band _ToSet) == 0 of
+            case (?FUSE_SET_ATTR_MODE band ToSet) == 0 of
                 false ->
                     ?DEB1("    setting mode"),
-                _Attr#stat.st_mode;
+                Attr#stat.st_mode;
             true ->
                 ?DEB1("    not setting mode"),
                 Stat#stat.st_mode
             end
         ,st_size=
-            case (?FUSE_SET_ATTR_SIZE band _ToSet) == 0 of
+            case (?FUSE_SET_ATTR_SIZE band ToSet) == 0 of
                 false ->
                     ?DEB1("    setting size"),
-                _Attr#stat.st_size;
+                Attr#stat.st_size;
             true ->
                 ?DEB1("    not setting size"),
                 Stat#stat.st_size
@@ -836,12 +855,18 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
 %% TODO: if attribute key already has a value for the current file, remove the file from the old value dir!
 %%--------------------------------------------------------------------------
 setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
-    ?DEBL("setxattr inode:~p key:~p value:~p flags: ~p",[Inode,BKey,BValue,_Flags]),
+    ?DEB1(">setxattr"),
+    ?DEB2("|  _Ctx:~p",_Ctx),
+    ?DEB2("|  Inode: ~p ",Inode),
+    Key=binary_to_list(BKey),
+    Value=binary_to_list(BValue),
+    ?DEB2("|  Key: ~p ",Key),
+    ?DEB2("|  Value: ~p ",Value),
+    ?DEB2("|  _Flags: ~p ",_Flags),
+
     ?DEB1("   getting inode entry"),
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     ?DEB1("   transforming input data"),
-    Key=binary_to_list(BKey),
-    Value=binary_to_list(BValue),
     Reply=case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
@@ -858,7 +883,9 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 statfs(_Ctx,_Inode,_Continuation,State) ->
-    ?DEBL(">statfs Ctx:~p Ino:~p",[_Ctx,_Inode]),
+    ?DEB1(">statfs"),
+    ?DEB2("|  _Ctx:~p",_Ctx),
+    ?DEB2("|  _Inode: ~p ",_Inode),
     {#fuse_reply_statfs{
         statvfs=#statvfs{
             f_bsize=1024, % should be the same as the file system we're mirroring.
@@ -882,7 +909,7 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
-    ?DEBL("~s",["symlink!"]),
+    ?DEB1(">symlink (enotsup)"),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -893,7 +920,10 @@ symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
 %% For now, let's only support unlinking files residing in attribute dirs.
 %%--------------------------------------------------------------------------
 unlink(_Ctx,ParentInode,BName,_Cont,State) ->
-    ?DEBL("unlink ctx: ~p, parent inode:~p, name:~p",[_Ctx,ParentInode,BName]),
+    ?DEB1(">unlink"),
+    ?DEB2("|  _Ctx:~p",_Ctx),
+    ?DEB2("|  PIno: ~p ",ParentInode),
+    ?DEB2("|  BName: ~p",BName),
     {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
     PType=PEntry#inode_entry.type,
     PName=PEntry#inode_entry.name,
@@ -935,10 +965,10 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEB1(">write"),
-    ?DEB2("|   inode: ~p",_Inode),
-    ?DEB2("|   offset: ~p",_Offset),
-    ?DEB2("|   FI: ~p",_Fuse_File_Info),
+    ?DEB1(">write (enotsup)"),
+    ?DEB2("|  _Inode: ~p",_Inode),
+    ?DEB2("|  _Offset: ~p",_Offset),
+    ?DEB2("|  _FI: ~p",_Fuse_File_Info),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%%=========================================================================
