@@ -352,8 +352,12 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 %%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
-    Name=stringdelta(binary_to_list(BName),"user."),
-    ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[Name,Size,Inode]),
+    RawName=stringdelta(binary_to_list(BName),"user."),
+    ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[RawName,Size,Inode]),
+    Name=case string_begins_with(RawName,"system") of
+            true -> "."++RawName;
+            false -> RawName
+         end,
     {value,Entry}=tree_srv:lookup(Inode,inodes),
     ?DEB1("   Got inode entry"),
     ExtInfo=Entry#inode_entry.ext_info,
@@ -422,17 +426,8 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
                 {value,{_,Inode}} ->
                     ?DEB2("   Found child ~p",Child),
                     {value,Entry} = tree_srv:lookup(Inode,inodes),
-                    ?DEB1("   Got child inode entry"),
-                    Stat=Entry#inode_entry.stat,
-                    ?DEB1("   Got child inode entry stat file info, returning"),
-                    Param=#fuse_entry_param{
-                        ino=Inode,
-                        generation=1, %for now.
-                        attr=Stat,
-                        attr_timeout_ms=1000,
-                        entry_timeout_ms=1000
-                            },
-                    #fuse_reply_entry{fuse_entry_param=Param};
+                    ?DEB1("   Got child inode entry, returning..."),
+                    #fuse_reply_entry{fuse_entry_param=?ENTRY2PARAM(Entry,Inode)};
                 false ->
                     ?DEB1("   Child nonexistent!"),
                     #fuse_reply_err{err=enoent} % child nonexistent.
@@ -858,15 +853,19 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     ?DEB1(">setxattr"),
     ?DEB2("|  _Ctx:~p",_Ctx),
     ?DEB2("|  Inode: ~p ",Inode),
-    Key=binary_to_list(BKey),
+    RawKey=binary_to_list(BKey),
     Value=binary_to_list(BValue),
-    ?DEB2("|  Key: ~p ",Key),
+    ?DEB2("|  Key: ~p ",RawKey),
     ?DEB2("|  Value: ~p ",Value),
     ?DEB2("|  _Flags: ~p ",_Flags),
 
     ?DEB1("   getting inode entry"),
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     ?DEB1("   transforming input data"),
+    Key=case string_begins_with(RawKey,"system") of
+        true -> "."++RawKey;
+        false -> RawKey
+    end,
     Reply=case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
@@ -1566,8 +1565,15 @@ ext_info_to_ext_io([],B) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
-    ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
-    Name0="user."++Name++"\0",
+    Name0=
+        case string_begins_with(Name,"system") of
+            false ->
+                ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
+                "user."++Name++"\0";
+            true -> 
+                ?DEB2("    Adding zero to end of name ~p",Name),
+                Name++"\0"
+        end,
     ?DEB1("    Appending name to namelist"),
     NewString=String++Name0,
     ?DEB1("    Recursion"),
@@ -1864,8 +1870,22 @@ stringdelta([C1|String1],[C2|String2]) when C1 == C2 ->
     stringdelta(String1,String2);
 
 stringdelta([C1|String1],[C2|_String2]) when C1 /= C2 ->
-    String1.
+    [C1|String1].
 
+
+%%--------------------------------------------------------------------------
+%% Checks wether String1 begins with String2 or not. Returns a boolean.
+%%--------------------------------------------------------------------------
+
+string_begins_with(_String1,[]) -> true;
+
+string_begins_with([],_String2) -> false;
+
+string_begins_with([C1|String1],[C2|String2]) when C1 == C2 ->
+    string_begins_with(String1,String2);
+
+string_begins_with([C1|_String1],[C2|_String2]) when C1 /= C2 ->
+    false.
 
 
 %%%=========================================================================
