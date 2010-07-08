@@ -241,7 +241,7 @@ terminate(_Reason,_State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 access(Ctx,Inode,Mask,_Continuation,State) ->
-    ?DEB2(">access inode: ~p, mask: ~p, context: ~p",Inode),
+    ?DEB2(">access inode: ~p",Inode),
     ?DEB2("|       mask: ~p ",Mask),
     ?DEB2("|       Ctx: ~p ",Ctx),
     Reply=test_access(Inode,Mask,Ctx),
@@ -256,18 +256,23 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying" files possible.
 %%--------------------------------------------------------------------------
 create(_Ctx,_Parent,_Name,_Mode,_Fuse_File_Info,_Continuation, State) ->
-    ?DEB2(">create Ctx: ~p",_Ctx),
-    ?DEB2("|       Parent: ~p",_Parent),
-    ?DEB2("|       Name: ~p",_Name),
-    ?DEB2("|       FI: ~p",_Fuse_File_Info),
+    ?DEB1(">create"), 
+    ?DEB2("|  Ctx: ~p",_Ctx),
+    ?DEB2("|  Parent: ~p",_Parent),
+    ?DEB2("|  Name: ~p",_Name),
+    ?DEB2("|  FI: ~p",_Fuse_File_Info),
     Reply=case inode:is_numbered(binary_to_list(_Name)) of
-        false -> #fuse_reply_err{err=enotsup};
+        false -> 
+            ?DEB1("No real file with that name, not supported."),
+            #fuse_reply_err{err=enotsup};
         Inode -> 
             {value,Entry}=tree_srv:lookup(Inode,inodes),
             case Entry#inode_entry.type of
                 #external_file{} ->
+                    ?DEB1("Filename linked to a real file, all is ok."),
                     #fuse_reply_err{err=ok} ;
                 _ ->
+                    ?DEB1("The file with that name has the wrong type!"),
                     #fuse_reply_err{err=enotsup}
             end
     end,
@@ -347,7 +352,7 @@ getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
                 true -> ?DEB1("   They want to know our size."),#fuse_reply_xattr{count=ExtSize};
                 false -> 
                     case Size < ExtSize of
-                        true -> ?DEBL("   They are using a too small buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
+                        true -> ?DEBL("   They are using too small a buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
                         false -> ?DEB1("   All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
                     end
             end;
@@ -531,12 +536,34 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEB2("|     FI: ~p", _Fuse_File_Info),
 %    {value,File}=lookup_open_file({Ctx,Inode}),
 %    IoDevice=File#open_external_file.io_device,
-    Reply=
+%    Reply=
 %            #fuse_reply_err{err=eof},
 %    =case file:pread(IoDevice,Offset,Size) of
 %        {ok, Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
-    #fuse_reply_buf{buf=list_to_binary("hej\n\0"),size=16},
+    IoList = io_lib:format("Hej!\0",[]),
+    Len = erlang:iolist_size (IoList),
+
+    %% This section stolen from fuserlprocsrv.erl
+    if
+      Offset < Len ->
+        if
+          Offset + Size > Len ->
+            Take = Len - Offset,
+            <<_:Offset/binary, Data:Take/binary, _/binary>> = 
+              erlang:iolist_to_binary (IoList);
+          true ->
+            <<_:Offset/binary, Data:Size/binary, _/binary>> = 
+              erlang:iolist_to_binary (IoList)
+        end;
+      true ->
+        Data = <<>>
+    end,
+    %% end of stolen code.
+
+    ?DEB2("   replying with data: ~p",Data),
+    Reply=#fuse_reply_buf{ buf=Data,size=Size},
+%    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
 %        eof ->
 %            #fuse_reply_err{err=eof};
 %        {error=Error} ->
@@ -890,7 +917,10 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-    ?DEBL("~s",["write!"]),
+    ?DEB1(">write"),
+    ?DEB2("|   inode: ~p",_Inode),
+    ?DEB2("|   offset: ~p",_Offset),
+    ?DEB2("|   FI: ~p",_Fuse_File_Info),
     {#fuse_reply_err{err=enotsup},State}.
 
 %%%=========================================================================
