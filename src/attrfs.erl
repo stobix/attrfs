@@ -33,8 +33,12 @@ start(_dont,_care) ->
     ?DEB2("  dir_to: ~p",DirTo),
     {ok,DB}=application:get_env(?MODULE,attributes_db),
     ?DEB2("  database: ~p",DB),
+    {ok,LinkedIn}=application:get_env(?MODULE,linked_in),
+    ?DEB2("  linked in status: ~p", LinkedIn),
+    {ok,MountOpts}=application:get_env(?MODULE,mount_opts),
+    ?DEB2("   fuserl mount opts: ~p", MountOpts),
     ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
-    attrfs_sup:start_link(DirFrom,DirTo,DB).
+    attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn).
 
 stop(_State) -> ok.
 

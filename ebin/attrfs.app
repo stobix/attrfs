@@ -7,5 +7,7 @@
      {mod,{attrfs,[]}},
      {env,[{to_dir,"/home/Volatile/testfs"},
          {from_dir,"/home/Volatile/mirrorfs"},
-         {attributes_db,"/home/Volatile/attributes"}]}
+         {attributes_db,"/home/Volatile/attributes"},
+         {linked_in,false},
+         {mount_opts, "allow_other,default_permissions"}]}
 ]}.

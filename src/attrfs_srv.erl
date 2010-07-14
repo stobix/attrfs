@@ -42,8 +42,8 @@
 %%% @end
 %%%
 %%% Most functions in this module have two headers; the first is the header
-%%% taken from the fuserl API, the second any comments I make about the
-%%% function.
+%%% taken from the fuserl API callback function with the corresponding name,
+%%% the second any comments I make about the function.
 %%%=========================================================================
 %%%=========================================================================
 
@@ -57,7 +57,9 @@
 %%% server function exports
 %%%=========================================================================
 -export([handle_info/2,init/1]).
--export([code_change/3]). % TODO: Do something intelligent with this one. Returns "ok" now, totally ignoring its indata.
+% TODO: Do something intelligent with this one. 
+% Returns "ok" now, totally ignoring its indata.
+-export([code_change/3]). 
 -export([start_link/1,start_link/5]).
 
 %%%=========================================================================
@@ -561,7 +563,7 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %    =case file:pread(IoDevice,Offset,Size) of
 %        {ok, Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
-    Info="Hej",
+    Info=hej,
     Reply=make_read_reply(Info,Offset,Size),
 %    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
 %        eof ->
@@ -571,28 +573,6 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %    end,
     {Reply,State}.
 
-
-make_read_reply(Info,Offset,Size) ->
-    %% This section stolen from fuserlprocsrv.erl
-    IoList = io_lib:format("~p.~n",[ Info ]),
-    Len = erlang:iolist_size (IoList),
-    if
-      Offset < Len ->
-        if
-          Offset + Size > Len ->
-            Take = Len - Offset,
-            <<_:Offset/binary, Data:Take/binary, _/binary>> = 
-              erlang:iolist_to_binary (IoList);
-          true ->
-            <<_:Offset/binary, Data:Size/binary, _/binary>> = 
-              erlang:iolist_to_binary (IoList)
-        end;
-      true ->
-        Data = <<>>
-    end,
-    ?DEB2("   replying with data: ~p",Data),
-    #fuse_reply_buf{ buf=Data,size=erlang:size(Data)}.
-    %% end of stolen code.
 
 
 %%--------------------------------------------------------------------------
@@ -981,6 +961,30 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%%=========================================================================
 %%% Callback function internals
 %%%=========================================================================
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+make_read_reply(Info,Offset,Size) ->
+    %% This section stolen from fuserlprocsrv.erl It works there, Why doesn't it work here??
+    IoList = io_lib:format("~p.~n",[ Info ]),
+    Len = erlang:iolist_size (IoList),
+    if
+      Offset < Len ->
+        if
+          Offset + Size > Len ->
+            Take = Len - Offset,
+            <<_:Offset/binary, Data:Take/binary, _/binary>> = 
+              erlang:iolist_to_binary (IoList);
+          true ->
+            <<_:Offset/binary, Data:Size/binary, _/binary>> = 
+              erlang:iolist_to_binary (IoList)
+        end;
+      true ->
+        Data = <<>>
+    end,
+    ?DEB2("   replying with data: ~p",Data),
+    #fuse_reply_buf{ buf=Data,size=erlang:size(Data)}.
+    %% end of stolen code.
 
 
 %%--------------------------------------------------------------------------
