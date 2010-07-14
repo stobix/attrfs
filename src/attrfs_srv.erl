@@ -150,7 +150,7 @@ code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
 %%--------------------------------------------------------------------------
 start_link({MountDir,MirrorDir,DB}) ->
     ?DEB1(">Starting attrfs server..."),
-    start_link(MountDir,true,"",MirrorDir,DB).
+    start_link(MountDir,false,"",MirrorDir,DB).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
@@ -225,7 +225,7 @@ init(State) ->
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
     ?DEB1(">terminate"),
-    ?DEB2("|  _Reason:",_Reason),
+    ?DEB2("|  _Reason: ~p",_Reason),
     ?DEB2("   Closing database \"~p\"",?ATTR_DB),
     dets:close(?ATTR_DB).
 
@@ -525,12 +525,12 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,_State) ->
+opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
     ?DEB1(">opendir"),
     ?DEB2("|  Ctx:~p",Ctx),
     ?DEB2("|  Inode: ~p ",Inode),
-    ?DEB2("|  FI: ~p", _FI),
-    ?DEB2("|  flags: ~p",_Flags),
+    ?DEB2("|  FI: ~p", FI),
+    ?DEB2("|  _flags: ~p",_Flags),
 %    ?DEB2("   writepage ~p",_Writepage),
 %    ?DEB2("   DirectIO ~p",_DirectIO),
 %    ?DEB2("   KeepCache ~p",_KeepCache),
@@ -539,7 +539,7 @@ opendir(Ctx,Inode,_FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
     ?DEB1("  Creating directory entries from inode entries"),
     % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
     set_open_file({Ctx,Inode},direntries(Inode)),
-    {#fuse_reply_open{ fuse_file_info = _FI }, _State}.
+    {#fuse_reply_open{ fuse_file_info = FI }, State}.
 
 %%--------------------------------------------------------------------------
 %% Read Size bytes starting at offset Offset. The file descriptor and other flags are available in Fi. If noreply is used, eventually fuserlsrv:reply/2 should be called with Cont as first argument and the second argument of type read_async_reply ().
@@ -561,10 +561,21 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %    =case file:pread(IoDevice,Offset,Size) of
 %        {ok, Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
-    IoList = io_lib:format("Hej!\0",[]),
-    Len = erlang:iolist_size (IoList),
+    Info="Hej",
+    Reply=make_read_reply(Info,Offset,Size),
+%    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
+%        eof ->
+%            #fuse_reply_err{err=eof};
+%        {error=Error} ->
+%            #fuse_reply_err{err=Error}
+%    end,
+    {Reply,State}.
 
+
+make_read_reply(Info,Offset,Size) ->
     %% This section stolen from fuserlprocsrv.erl
+    IoList = io_lib:format("~p.~n",[ Info ]),
+    Len = erlang:iolist_size (IoList),
     if
       Offset < Len ->
         if
@@ -579,17 +590,10 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
       true ->
         Data = <<>>
     end,
+    ?DEB2("   replying with data: ~p",Data),
+    #fuse_reply_buf{ buf=Data,size=erlang:size(Data)}.
     %% end of stolen code.
 
-    ?DEB2("   replying with data: ~p",Data),
-    Reply=#fuse_reply_buf{ buf=Data,size=Size},
-%    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
-%        eof ->
-%            #fuse_reply_err{err=eof};
-%        {error=Error} ->
-%            #fuse_reply_err{err=Error}
-%    end,
-    {Reply,State}.
 
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
