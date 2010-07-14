@@ -92,7 +92,7 @@
          setattr/7,
          setlk/7,
          setxattr/7,
-         statfs/4,
+%         statfs/4,
          symlink/6,
          terminate/2,
          unlink/5,
@@ -112,7 +112,7 @@
 %%% Includes and behaviour
 %%%=========================================================================
 
--behaviour(fuserl).
+%-behaviour(fuserl).
 
 -include_lib("fuserl/include/fuserl.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -563,7 +563,8 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %    =case file:pread(IoDevice,Offset,Size) of
 %        {ok, Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
-    Info=hej,
+%    Info="hej\n\nhej\n",
+    Info=4,
     Reply=make_read_reply(Info,Offset,Size),
 %    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
 %        eof ->
@@ -871,16 +872,16 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
     ?DEB2("|  _Inode: ~p ",_Inode),
     {#fuse_reply_statfs{
         statvfs=#statvfs{
-            f_bsize=1024, % should be the same as the file system we're mirroring.
-            f_frsize=2048, % What does this do?
+            f_bsize=512, % should be the same as the file system we're mirroring.
+%            f_frsize=2048, % What does this do?
             f_blocks=1234567890, % size = f_blocks*f_frsize
             f_bfree=314159265,
             f_bavail=271828182,
             f_files=1000000000000000, % at least!
             f_ffree=1000000000000000-inode:count_occupied(), % at least!
             f_favail=1000000000000000-inode:count_occupied(), % at least!
-            f_fsid=0, % how to get this right?
-            f_flag=0, % Hm...
+%            f_fsid=0, % how to get this right?
+%            f_flag=0, % Hm...
             f_namemax=10000 % Or some other arbitary high value.
         }},State}.
 
@@ -965,7 +966,8 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 make_read_reply(Info,Offset,Size) ->
-    %% This section stolen from fuserlprocsrv.erl It works there, Why doesn't it work here??
+    %% This section I stole from fuserlprocsrv.erl. 
+    %% It works there, why doesn't it work here??
     IoList = io_lib:format("~p.~n",[ Info ]),
     Len = erlang:iolist_size (IoList),
     if
@@ -982,8 +984,9 @@ make_read_reply(Info,Offset,Size) ->
       true ->
         Data = <<>>
     end,
-    ?DEB2("   replying with data: ~p",Data),
-    #fuse_reply_buf{ buf=Data,size=erlang:size(Data)}.
+    ErlSize=erlang:size (Data),
+    ?DEBL("   replying with data: ~p and size ~p",[Data,ErlSize]),
+    #fuse_reply_buf{ buf=Data,size=ErlSize}.
     %% end of stolen code.
 
 
@@ -1318,7 +1321,7 @@ make_rename_key_to_key_dir_reply(KeyIno,OldKeyEntry,NewKeyName) ->
     ok.
 
 %%%=========================================================================
-%%% Shared utility functions
+%%%                       SHARED UTILITY FUNCTIONS
 %%%=========================================================================
 
 %%--------------------------------------------------------------------------
@@ -1897,7 +1900,7 @@ string_begins_with([C1|_String1],[C2|_String2]) when C1 /= C2 ->
 
 
 %%%=========================================================================
-%%% Debug functions
+%%%                         DEBUG FUNCTIONS
 %%%=========================================================================
 
 %%--------------------------------------------------------------------------
