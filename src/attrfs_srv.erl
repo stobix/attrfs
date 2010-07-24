@@ -104,9 +104,9 @@
 %%%=========================================================================
 
 -export([keymergeunique/2]).
--export([stringdelta/2]).
 -export([dump_entries/1,dump_inodes/0,dump_inode_entries/0]).
-
+%-export([remove_from_start/2]).
+-export([make_unduplicate_tree/1]).
 
 %%%=========================================================================
 %%% Includes and behaviour
@@ -301,6 +301,7 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
 %%--------------------------------------------------------------------------
 flush(_Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
     ?DEB1(">flush"),
+    ?DEB2("|  _Ctx:~p",_Ctx),
     ?DEB2("|  Inode: ~p ",Inode),
     ?DEB2("|  FI: ~p",_Fuse_File_Info),
     {#fuse_reply_err{err=ok},State}.
@@ -354,9 +355,9 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 %%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
-    RawName=stringdelta(binary_to_list(BName),"user."),
+    RawName=remove_from_start(binary_to_list(BName),"user."),
     ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[RawName,Size,Inode]),
-    Name=case string_begins_with(RawName,"system") of
+    Name=case string:str(RawName,"system")==1 of
             true -> "."++RawName;
             false -> RawName
          end,
@@ -651,7 +652,7 @@ releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
-    Name=stringdelta(binary_to_list(BName),"user."),
+    Name=remove_from_start(binary_to_list(BName),"user."),
     ?DEB1(">removexattr"),
     ?DEB2("|  _Ctx:~p",_Ctx),
     ?DEB2("|  Inode: ~p ",Inode),
@@ -839,28 +840,37 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     ?DEB2("|  _Ctx:~p",_Ctx),
     ?DEB2("|  Inode: ~p ",Inode),
     RawKey=binary_to_list(BKey),
-    Value=binary_to_list(BValue),
+    RawValue=binary_to_list(BValue),
     ?DEB2("|  Key: ~p ",RawKey),
-    ?DEB2("|  Value: ~p ",Value),
+    ?DEB2("|  Value: ~p ",RawValue),
     ?DEB2("|  _Flags: ~p ",_Flags),
 
     ?DEB1("   getting inode entry"),
     {value,Entry} = tree_srv:lookup(Inode,inodes),
     ?DEB1("   transforming input data"),
-    Key=case string_begins_with(RawKey,"system") of
+    Key=case string:str(RawKey,"system")==1 of
         true -> "."++RawKey;
         false -> RawKey
     end,
+
+    Values=string:tokens(RawValue,","),
+    ?DEB2("   got values: ~p",Values),
+
     Reply=case Entry#inode_entry.type of
         #external_file{path=Path} ->
+            lists:foreach(
+                fun(Value) -> 
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
-            add_new_attribute(Path,Inode,Entry,{stringdelta(Key,"user."),Value}),
+            add_new_attribute(Path,Inode,Entry,{remove_from_start(Key,"user."),Value})
+                end,
+                Values),
             #fuse_reply_err{err=ok};
         _ ->
             ?DEB1("   entry not an external file, skipping..."),
             #fuse_reply_err{err=enotsup}
     end,
     {Reply,State}.
+
 
 %%--------------------------------------------------------------------------
 %% Get file system statistics. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type statfs_async_reply ().
@@ -1547,7 +1557,46 @@ dir(Stat) ->
 generate_ext_info(Path) ->
     ?DEB2("   generating ext info for ~p",Path),
     ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
-    lists:flatten(ExtInfo0). % Going from a list of lists of tuples to a list of tuples.
+    merge_duplicates(lists:flatten(ExtInfo0)). % Going from a list of lists of tuples to a list of tuples.
+
+%%--------------------------------------------------------------------------
+%% Takes in a [{"foo","bar},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
+%%  a [{"foo","bar,baz"},{"etaoin","shrdlu"}]
+%%--------------------------------------------------------------------------
+%% Algorithm: enter each tuple into a gb_tree, merging if item exists. Finally convert to list and return.
+%% or enter each tuple into a dict, adding new values as I go along.
+%% or create a tree with my own insertion algorithm.
+
+merge_duplicates(List) ->
+    ?DEB2(" indata: ~p",List),
+    Tree=make_unduplicate_tree(List),
+    gb_trees:to_list(Tree).
+
+%make_duplicate_tree([],Tree) ->
+    %Tree;
+
+%make_duplicate_tree([Item|Items],{Item2,Low,High}) ->
+    %case string 
+
+%make_duplicate_tree([Item|Items]) ->
+    %make_duplicate_tree(Items,{Item,nil,nil}).
+
+make_unduplicate_tree(List) ->
+    make_unduplicate_tree(List,gb_trees:empty()).
+
+make_unduplicate_tree([],Tree) -> Tree;
+
+make_unduplicate_tree([{Key,Value}|Items],Tree) ->
+    Values=
+        case gb_trees:lookup(Key,Tree) of
+            {value,Vals} ->
+                Vals++","++Value;
+            none ->
+                Value
+        end,
+    NewTree=gb_trees:enter(Key,Values,Tree),
+    make_unduplicate_tree(Items,NewTree).
+
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
@@ -1577,7 +1626,7 @@ ext_info_to_ext_io([],B) ->
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
     Name0=
-        case string_begins_with(Name,"system") of
+        case string:str(Name,"system")==1 of
             false ->
                 ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
                 "user."++Name++"\0";
@@ -1812,6 +1861,16 @@ take_while (F, Acc, [ H | T ]) ->
     end.
 
 %%--------------------------------------------------------------------------
+%% removes string2 from the beginning of string1, if applicable. Returns what was left of string1
+%%--------------------------------------------------------------------------
+remove_from_start(String1,[]) -> String1;
+remove_from_start([],_String2) -> []; %String2;
+remove_from_start([C1|String1],[C2|String2]) when C1 == C2 ->
+    remove_from_start(String1,String2);
+remove_from_start([C1|String1],[C2|_String2]) when C1 /= C2 ->
+    [C1|String1].
+
+%%--------------------------------------------------------------------------
 %% @spec (boolean(),A,B) -> A|B.
 %% @doc Takes a boolean and redefines the meanings of true and false.
 %% Example: transmogrify(is_foo(X),good,{error,no_foo}) will return either 
@@ -1869,35 +1928,6 @@ has_group_perms(Mode,Mask) ->
 %%--------------------------------------------------------------------------
 has_user_perms(Mode,Mask) ->
     Mode band ?S_IRWXU bsr 6 band Mask/=0.
-
-%%--------------------------------------------------------------------------
-%% removes string2 from the beginning of string1, if applicable. Returns what was left of string1
-%%--------------------------------------------------------------------------
-stringdelta(String1,[]) -> String1;
-
-stringdelta([],_String2) -> []; %String2;
-
-stringdelta([C1|String1],[C2|String2]) when C1 == C2 ->
-    stringdelta(String1,String2);
-
-stringdelta([C1|String1],[C2|_String2]) when C1 /= C2 ->
-    [C1|String1].
-
-
-%%--------------------------------------------------------------------------
-%% Checks wether String1 begins with String2 or not. Returns a boolean.
-%%--------------------------------------------------------------------------
-
-string_begins_with(_String1,[]) -> true;
-
-string_begins_with([],_String2) -> false;
-
-string_begins_with([C1|String1],[C2|String2]) when C1 == C2 ->
-    string_begins_with(String1,String2);
-
-string_begins_with([C1|_String1],[C2|_String2]) when C1 /= C2 ->
-    false.
-
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS

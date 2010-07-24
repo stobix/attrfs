@@ -19,12 +19,14 @@ include support for reading files!
 
 make closedir do something useful.
 
-☐ Include support for "multi-valued attributes":
+☑ Include support for "multi-valued attributes":
     % attr -s "Foo" -V "Etaoin,Shrdlu" Baz
     =>
     % ls attribs/Foo -R
     Etaoin/Baz
     Shrdlu/Baz
+  Setting multi-valued arguments now fixed.
+  Getting multi-valued arguments fixed.
 
 ☐ Include support for "deep attributes":
     % attr -s "Foo/Bar" -V "Etaoin" Baz
