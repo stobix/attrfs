@@ -33,6 +33,7 @@
 -define(ROOT_FOLDR, root).
 -define(REAL_FOLDR, "real").
 -define(ATTR_FOLDR, "attribs").
+-define(SRCH_FOLDR, "search").
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
@@ -69,10 +70,28 @@
        {atype::attribute_type()
        }).
 
+-type parent()::string().
+
+-type logic_type()::lnot| % this only resides in the top-level attribute folder, for now. Another solution would be to let not include the parent dir and the parent parent dir, so {not, "and", "Foo"} would mean the same that andnot mean here below.
+                    % these are key-level conjunctions
+                    land|
+                    lor|
+                    landnot|
+                    lornot|
+                    % these are value-level conjunctions
+                    {land,parent()}|
+                    {lor,parent()}|
+                    {landnot,parent()}|
+                    {lornot,parent()}.
+
+-record(logic_dir,
+        {ltype::logic_type()
+        }).
+
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
--type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|#logic_dir{}.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 -record(inode_entry,
@@ -122,8 +141,6 @@
                        attr_timeout_ms=1000,
                        entry_timeout_ms=1000}).
 
-                                                      
-            
 
 %these I stole from fuserlproc. Maybe they'll come in handy.
 -define (DIRATTR (X), #stat{ st_ino = (X), 

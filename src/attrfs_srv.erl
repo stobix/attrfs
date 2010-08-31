@@ -557,6 +557,7 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
     ?DEB2("|  Size: ~p ",Size),
     ?DEB2("|  Offset: ~p",Offset),
     ?DEB2("|  FI: ~p", _Fuse_File_Info),
+%% XXX: THIS DOES NOT WORK, EVENTHOUGH I FOLLOW THE EXAMPLE FILE SYSTEM AND SEND EXACTLY THE SAME THING!
 %    {value,File}=lookup_open_file({Ctx,Inode}),
 %    IoDevice=File#open_external_file.io_device,
 %    Reply=
@@ -574,6 +575,7 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %            #fuse_reply_err{err=Error}
 %    end,
     {Reply,State}.
+
 
 
 
@@ -1750,7 +1752,11 @@ make_inode_list({Path,Name}) ->
                 ,ext_info=ExtInfo
                 ,ext_io=ExtIo},
             tree_srv:enter(inode:get(Name),InodeEntry,inodes),
-            lists:foreach(fun(Attr) -> append_attribute(Attr,Name,MyStat) end,ExtInfo),
+            ?DEB2("    looking up ext folders for ~p",Name),
+            ExtFolders=lists:flatten(dets:match(?ATTR_DB,{Path,'$1'})),
+            ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
+            lists:foreach(fun(Attr) -> append_attribute(Attr,Name,MyStat) end,ExtFolders),
+            ?DEB1("    recursing for all real subdirs"),
             lists:foreach(fun({ChildName,_Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children);
         E ->
             ?DEBL("   got ~p when trying to read ~p.",[E,Path]),

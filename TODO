@@ -54,6 +54,13 @@ make closedir do something useful.
     Etaoin/Baz
     Shrdlu/Baz
 
+☐ Include support for search directories:
+    ☐ Special directories AND, OR, NOT, AND<key folder> , AND NOT <key folder> etc for every value folder.
+    ☐ A new root directory tree for "search dirs" with special syntax:
+        ☐ (Foo:Bar & Foo:Baz) | (Etaoin:(Shrdlu & Foo)|Blah:*)
+        ☐ Regex?
+
+
 ☐ make setxattr unset old attribute value folders when adding new ones.
 
 ☐ make the dir functions context sensitive.
