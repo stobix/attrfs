@@ -118,6 +118,12 @@
     orfilter/2
         ]).
 
+-export([
+    lookup_open_file/1,
+    set_open_file/2,
+    remove_open_file/1
+        ]).
+
 
 %%%=========================================================================
 %%% Includes and behaviour
@@ -178,7 +184,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEB2("   mirroring dir ~p",MirrorDir),
     tree_srv:new(inodes), % contains inode entries
     tree_srv:new(keys), % contains a list of all keys with associated inodes
-    tree_srv:new(open_files), % contains a list of all open files for each Ctx
+    ets:new(open_files,[named_table,set,public]),
     tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
     ?DEB1("   created inode and key trees"),
     inode:reset(),
@@ -322,8 +328,9 @@ flush(_Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
 %% Forget about an inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type forget_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-forget(_Ctx,_Inode,_Nlookup,_Continuation,State) ->
-    ?DEBL(">forget inode: ~p ctx: ~p ",[_Inode,_Ctx]),
+forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
+    ?DEBL(">forget inode: ~p ctx: ~p ",[Inode,_Ctx]),
+    forget_open_file(Inode),
     {#fuse_reply_none{},State}.
 
 %%--------------------------------------------------------------------------
@@ -1434,42 +1441,30 @@ lookup_children(Inode) ->
     end.
 
 %%--------------------------------------------------------------------------
-%% get_open_files returns the opened files for the state
-%%--------------------------------------------------------------------------
-get_open_files({Ctx,_Inode}) ->
-    case tree_srv:lookup(Ctx,open_files) of
-        {value,OpenFiles} ->
-            OpenFiles;
-        _ -> gb_trees:empty()
-    end.
-%    State#state.open_files.
-
-%%--------------------------------------------------------------------------
-%% set_open_files returns a state with the open files updated
-%%--------------------------------------------------------------------------
-set_open_files({Ctx,_Inode},OpenFiles) ->
-    tree_srv:enter(Ctx,OpenFiles,open_files).
-
-%%--------------------------------------------------------------------------
 %% get_open_file gets the open file corresponding to the inode provided.
 %% returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
-lookup_open_file({_Ctx,Inode}=Token) ->
-    gb_trees:lookup(Inode,get_open_files(Token)).
+lookup_open_file({_Ctx,_Inode}=Token) ->
+    case ets:match(open_files,{Token,'$1'}) of
+        "" -> none;
+        [[File]] -> {value,File}
+    end.
 
 %%--------------------------------------------------------------------------
 %% set_open_file returns a state with the open file for the provided inode
 %% changed to the FileContents provided.
 %%--------------------------------------------------------------------------
-set_open_file({_Ctx,Inode}=Token,FileContents) ->
-    OpenFiles=get_open_files(Token),
-    NewOpenFiles=gb_trees:enter(Inode,FileContents,OpenFiles),
-    set_open_files(Token,NewOpenFiles).
+set_open_file({_Ctx,_Inode}=Token,FileContents) ->
+    ets:insert(open_files,{Token,FileContents}).
 
-remove_open_file({_Ctx,Inode}=Token) ->
-    OpenFiles=get_open_files(Token),
-    NewOpenFiles=gb_trees:delete_any(Inode,OpenFiles),
-    set_open_files(Token,NewOpenFiles).
+remove_open_file({_Ctx,_Inode}=Token) ->
+    ets:match_delete(open_files,{Token,'_'}).
+
+%%--------------------------------------------------------------------------
+%% forget_open_file removes an open file from the table, for all Ctx-es.
+%%--------------------------------------------------------------------------
+forget_open_file(Inode) ->
+    ets:match_delete(open_files,{{'_',Inode},'_'}).
 
 %%--------------------------------------------------------------------------
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
