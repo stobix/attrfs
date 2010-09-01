@@ -1444,17 +1444,17 @@ lookup_children(Inode) ->
           logic_dir ->
             % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
             case Entry#inode_entry.name of
-              {Parent,{p,Connective}} ->
+              {Parent,{p,_Connective}} ->
                 {value,ParentEntry} = tree_srv:lookup(inode:get(Parent),inodes),
                 ParentEntry;
-              {Parent,Connective} ->
-                {value,Attribsentry} = tree_srv:lookup(inode:get(?ATTR_FOLDR),
+              {_Parent,_Connective} ->
+                {value,Attribsentry} = tree_srv:lookup(inode:get(?ATTR_FOLDR)),
                 Attribsentry
-            end
+            end;
           _ ->
             Entry#inode_entry.children
         end,
-      {value,FinalEntry#inode_entry.children}
+      {value,FinalEntry#inode_entry.children};
     none -> none
   end.
 
