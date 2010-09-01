@@ -92,7 +92,7 @@
          setattr/7,
          setlk/7,
          setxattr/7,
-%         statfs/4,
+         statfs/4,
          symlink/6,
          terminate/2,
          unlink/5,
@@ -121,7 +121,8 @@
 -export([
     lookup_open_file/1,
     set_open_file/2,
-    remove_open_file/1
+    remove_open_file/1,
+    forget_open_file/1
         ]).
 
 
@@ -159,8 +160,9 @@ handle_info(_Msg,State) ->
 %% The analog to Module:code_change/3 in gen_server.
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-code_change(_,_,_) -> %XXX: Maybe do something more intelligent with this?
-    ?DEBL("~s",["code_change!"]),
+code_change(_,_,_) -> 
+    %XXX: Maybe do something more intelligent with this?
+    ?DEB1(">code_change: Doing nothing!"),
     ok.
 
 %%--------------------------------------------------------------------------
@@ -1435,10 +1437,26 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 %% present. Returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
 lookup_children(Inode) ->
-    case tree_srv:lookup(Inode,inodes) of
-        {value, Entry} -> {value,Entry#inode_entry.children};
-        none -> none
-    end.
+  case tree_srv:lookup(Inode,inodes) of
+    {value, Entry} -> 
+      FinalEntry=
+        case Entry#inode_entry.type of
+          logic_dir ->
+            % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
+            case Entry#inode_entry.name of
+              {Parent,{p,Connective}} ->
+                {value,ParentEntry} = tree_srv:lookup(inode:get(Parent),inodes),
+                ParentEntry;
+              {Parent,Connective} ->
+                {value,Attribsentry} = tree_srv:lookup(inode:get(?ATTR_FOLDR),
+                Attribsentry
+            end
+          _ ->
+            Entry#inode_entry.children
+        end,
+      {value,FinalEntry#inode_entry.children}
+    none -> none
+  end.
 
 %%--------------------------------------------------------------------------
 %% get_open_file gets the open file corresponding to the inode provided.
@@ -1457,6 +1475,9 @@ lookup_open_file({_Ctx,_Inode}=Token) ->
 set_open_file({_Ctx,_Inode}=Token,FileContents) ->
     ets:insert(open_files,{Token,FileContents}).
 
+%%--------------------------------------------------------------------------
+%% remove_open_file removes the file from the current context. Used for closedir.
+%%--------------------------------------------------------------------------
 remove_open_file({_Ctx,_Inode}=Token) ->
     ets:match_delete(open_files,{Token,'_'}).
 

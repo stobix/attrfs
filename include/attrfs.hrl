@@ -70,29 +70,38 @@
        {atype::attribute_type()
        }).
 
--type parent()::string().
 
--type logic_type()::lnot| % this only resides in the top-level attribute folder, for now. Another solution would be to let not include the parent dir and the parent parent dir, so {not, "and", "Foo"} would mean the same that andnot mean here below.
+
+
+
+-type ltype()::lnot| % this only resides in the top-level attribute folder, for now. Another solution would be to let not include the parent dir and the parent parent dir, so {not, "and", "Foo"} would mean the same that andnot mean here below.
                     % these are key-level conjunctions
                     land|
                     lor|
                     landnot|
                     lornot|
                     % these are value-level conjunctions
-                    {land,parent()}|
-                    {lor,parent()}|
-                    {landnot,parent()}|
-                    {lornot,parent()}.
+                    {p,land}|
+                    {p,lor}|
+                    {p,landnot}|
+                    {p,lornot}.
 
--record(logic_dir,
-        {ltype::logic_type()
-        }).
+%-record(logic_dir,
+        %{ltype::logic_type()
+        %}).
 
+-type parent()::name().
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
--type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|#logic_dir{}.
+%% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|logic_dir.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
+
+
+%% The name slot in the inode_entry record is normally a string, but is a {parentname,childname} for value dirs, and a {grandparentname,parentname,childname} for logical dirs.
+-type inode_entry_name()::string()|{inode_entry_name(),inode_entry_name()}|{parent(),parent(),ltype()}.
+
 
 -record(inode_entry,
         % This file system uses a one-to-one correspondence between names and inodes, so that move, link and copy can produce the same results.
@@ -101,7 +110,7 @@
         % the name of the file, unless we have a value dir, in case it is
         % {Key,ValueName}, where ValueName is the name shown to the fuse 
         % file system server.
-        {name::string()
+        {name::inode_entry_name()
         % children are the children of the file/dir
         ,children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
