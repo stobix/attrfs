@@ -1,8 +1,7 @@
-multiple attribute folders with same name when multiple files have same attribute.
+☐ multiple attribute folders with same name when multiple files have same attribute.
 
-something is still wrong with directory creating
+☐ Read won't work!! The return value is somehow discarded.
 
-Read won't work!! The return value is somehow discarded.
+☐ DO SOMETHING ABOUT RÄTTIGHETERNA PÅ KATALOGERNA FFS~~!!! OMG !!11
 
-DO SOMETHING ABOUT RÄTTIGHETERNA PÅ KATALOGERNA FFS~~!!!
-OMG !!11
+☑ Crashes when moving from a value dir to a value dir.

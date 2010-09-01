@@ -108,6 +108,17 @@
 %-export([remove_from_start/2]).
 -export([make_unduplicate_tree/1]).
 
+
+%%%=========================================================================
+%%% temporary exports for testing functionality.
+%%%=========================================================================
+
+-export([
+    andfilter/2,
+    orfilter/2
+        ]).
+
+
 %%%=========================================================================
 %%% Includes and behaviour
 %%%=========================================================================
@@ -165,9 +176,10 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
     {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
     ?DEB2("   mirroring dir ~p",MirrorDir),
-    tree_srv:new(inodes),
-    tree_srv:new(keys),
-    tree_srv:new(open_files),
+    tree_srv:new(inodes), % contains inode entries
+    tree_srv:new(keys), % contains a list of all keys with associated inodes
+    tree_srv:new(open_files), % contains a list of all open files for each Ctx
+    tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
     ?DEB1("   created inode and key trees"),
     inode:reset(),
     RootIno=inode:get(root),
@@ -1172,7 +1184,7 @@ make_rename_reply(#attribute_dir{},_OldAttribName,OldAttribEntry,NewAttribIno,Ol
     case NewAttribEntry#inode_entry.type of
         #attribute_dir{atype=value} ->
             ?DEB1("   new parent is a value dir"),
-            {OldValueName,FileIno}=lists:keyfind(OldValueName,1,NewAttribEntry#inode_entry.children),
+            {OldValueName,FileIno}=lists:keyfind(OldValueName,1,OldAttribEntry#inode_entry.children),
             {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
             case FileEntry#inode_entry.type of
                 #external_file{} ->
@@ -1934,6 +1946,23 @@ has_group_perms(Mode,Mask) ->
 %%--------------------------------------------------------------------------
 has_user_perms(Mode,Mask) ->
     Mode band ?S_IRWXU bsr 6 band Mask/=0.
+
+
+andfilter(InList,DetsMatch) ->
+    lists:foldr(
+        fun([F],Acc) -> 
+            case dets:match(?ATTR_DB,{F,DetsMatch}) of 
+                "" -> Acc; 
+                _ -> [F|Acc] 
+            end 
+        end, 
+        [], 
+        InList).
+
+orfilter(InList,DetsMatch) ->
+    InList2 = dets:match(?ATTR_DB,{'$1',DetsMatch}),
+    gb_sets:to_list(gb_sets:union(gb_sets:from_list(InList),gb_sets:from_list(InList2))).
+
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS
