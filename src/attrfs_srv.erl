@@ -487,7 +487,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     ?DEB2("|  PIno: ~p",ParentInode),
     ?DEB2("|  Name: ~p",Name),
     ?DEB2("|  Mode: ~p",MMode),
-    Mode=MMode bor ?S_IFDIR,
+    Mode=MMode bor ?S_IFDIR bor 8#111,
     Reply=case tree_srv:lookup(ParentInode,inodes) of
         none -> #fuse_reply_err{err=enoent}; 
         {value,Parent} ->
@@ -1439,25 +1439,59 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 lookup_children(Inode) ->
   case tree_srv:lookup(Inode,inodes) of
     {value, Entry} -> 
-      ?DEB1("    got an entry"),
+      ?DEBL("    got an entry: ~p",[Entry#inode_entry.name]),
       FinalEntry=
         case Entry#inode_entry.type of
           logic_dir ->
             % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
+            ?DEBL("    ~p: logical dir: ~p",[Inode,Entry#inode_entry.name]),
             case Entry#inode_entry.name of
-              {Parent,{p,_Connective}} ->
-                {value,ParentEntry} = tree_srv:lookup(inode:get(Parent),inodes),
+              {GrandParent,_Parent,{p,_Connective}} ->
+                {value,ParentEntry} = tree_srv:lookup(inode:get(GrandParent),inodes),
                 ParentEntry;
-              {_Parent,_Connective} ->
-                {value,Attribsentry} = tree_srv:lookup(inode:get(?ATTR_FOLDR)),
+              {_GrandParent,_Parent,_Connective} ->
+                {value,Attribsentry} = tree_srv:lookup(inode:get(?ATTR_FOLDR),inodes),
                 Attribsentry
             end;
+          #attribute_dir{atype=value} ->
+            ?DEB1("    value dir"),
+            {GParent,Parent} = Entry#inode_entry.name,
+            ?DEB1("    generating lodic dirs"),
+            MyLogicDirs = generate_logic_dirs(GParent,Parent),
+            ?DEB1("    combining children"),
+            MyChildren = Entry#inode_entry.children ++ MyLogicDirs,
+            ?DEB1("    generating entry"),
+            Entry#inode_entry{children=MyChildren};
           _ ->
+            ?DEB1("    other dir"),
             Entry
         end,
       {value,FinalEntry#inode_entry.children};
     none -> none
   end.
+
+-define(LD(X) , generate_logic_dir(Grandparent,Parent,X)).
+
+generate_logic_dirs(Grandparent,Parent) ->
+  [
+    ?LD("AND"),
+    ?LD("OR"),
+    ?LD("IF")
+    ].
+
+-define(LDIR(X) , {GrandParent,Parent,X}).
+-define(LINO(X) , inode:get(?LDIR(X))).
+-define(LCLD(X) , {X,?LINO(X)}).
+
+generate_logic_dir(GrandParent,Parent,X) ->
+  ?DEB2("     generating lodic dir \"~p\"",X),
+  ?DEB1("      getting entry"),
+  {value,GPEntry}=tree_srv:lookup(inode:get(GrandParent),inodes),
+  ?DEB1("      generating new entry"),
+  Entry=GPEntry#inode_entry{name=?LDIR(X),type=logic_dir,children=[]},
+  ?DEB1("      saving new entry"),
+  tree_srv:enter(?LINO(X),Entry,inodes),
+  ?LCLD(X).
 
 %%--------------------------------------------------------------------------
 %% lookup_open_file gets the open file corresponding to the inode provided.
@@ -1691,7 +1725,7 @@ direntrify([]) ->
     [];
 
 direntrify([{Name,Inode}|Children]) ->
-    ?DEB2("    Getting inode for child ~p",{Name,Inode}),
+    ?DEB2("    Getting entry for child ~p",{Name,Inode}),
     {value,Child}=tree_srv:lookup(Inode,inodes),
     ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
     ChildStats=Child#inode_entry.stat,
