@@ -1439,6 +1439,7 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 lookup_children(Inode) ->
   case tree_srv:lookup(Inode,inodes) of
     {value, Entry} -> 
+      ?DEB1("    got an entry"),
       FinalEntry=
         case Entry#inode_entry.type of
           logic_dir ->
@@ -1452,14 +1453,14 @@ lookup_children(Inode) ->
                 Attribsentry
             end;
           _ ->
-            Entry#inode_entry.children
+            Entry
         end,
       {value,FinalEntry#inode_entry.children};
     none -> none
   end.
 
 %%--------------------------------------------------------------------------
-%% get_open_file gets the open file corresponding to the inode provided.
+%% lookup_open_file gets the open file corresponding to the inode provided.
 %% returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
 lookup_open_file({_Ctx,_Inode}=Token) ->
