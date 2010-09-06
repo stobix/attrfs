@@ -28,6 +28,8 @@ make closedir do something useful.
   Setting multi-valued arguments now fixed.
   Getting multi-valued arguments fixed.
 
+☐ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
+
 ☐ Include support for "deep attributes":
     % attr -s "Foo/Bar" -V "Etaoin" Baz.file
     =>

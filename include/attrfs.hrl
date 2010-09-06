@@ -90,12 +90,17 @@
         %{ltype::logic_type()
         %}).
 
+-record(dir_link,
+    {parents::name_list() % the parents of the link
+    ,link::name_list() % the path to the dir the dir_link is connected to
+    }).
+
 -type parent()::name().
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
--type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|logic_dir.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|logic_dir|#dir_link{}.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 
@@ -110,7 +115,9 @@
         % the name of the file, unless we have a value dir, in case it is
         % {Key,ValueName}, where ValueName is the name shown to the fuse 
         % file system server.
-        {name::inode_entry_name()
+        {
+        name::inode_entry_name()
+        iname::inod_entry_name()
         % children are the children of the file/dir
         ,children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
