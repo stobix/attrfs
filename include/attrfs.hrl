@@ -91,8 +91,7 @@
         %}).
 
 -record(dir_link,
-    {parents::name_list() % the parents of the link
-    ,link::name_list() % the path to the dir the dir_link is connected to
+    {link::inode_number() % the inode linked to.
     }).
 
 -type parent()::name().
@@ -102,6 +101,9 @@
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
 -type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|logic_dir|#dir_link{}.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
+
+
+
 
 
 %% The name slot in the inode_entry record is normally a string, but is a {parentname,childname} for value dirs, and a {grandparentname,parentname,childname} for logical dirs.
@@ -116,8 +118,13 @@
         % {Key,ValueName}, where ValueName is the name shown to the fuse 
         % file system server.
         {
-        name::inode_entry_name()
-        iname::inod_entry_name()
+        dir_name::string() % The name of the file in the file system
+        % The unique name the file uses internally. 
+        % Given name=Name, iname=
+        % Name, for normal files (How do I fix duplicates?)
+        % {Parent, Name} for Attribute value dirs
+        % {Grandparent,Parent,Name} for logical dirs.
+        ,name::inode_entry_name() 
         % children are the children of the file/dir
         ,children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
@@ -127,6 +134,9 @@
         % ext_info contains a list of attribute - value pairs in xattr style, used to put files into virtual folders.
         ,ext_info::attrib_list()
         ,ext_io::ext_io_tuple()
+        % this is a list of all links that point to this entry.
+        ,links::[inode_number()]
+        ,generated::boolean()
         }).
 
 

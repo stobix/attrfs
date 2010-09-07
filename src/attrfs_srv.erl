@@ -196,7 +196,8 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
     ?DEB1("   creating root entry"),
     RootEntry=#inode_entry{
-        name=root
+        name=root,
+        dir_name=root
        ,children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR,AttribIno}]
        ,type=internal_dir %XXX: Really ok to let this have the same type as attribute dirs?
        ,stat=#stat{
@@ -210,7 +211,8 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     tree_srv:enter(RootIno,RootEntry,inodes),
     ?DEB2("   making inode entries for ~p",MirrorDir),
     AttributeEntry=#inode_entry{
-        name=?ATTR_FOLDR,
+       name=?ATTR_FOLDR,
+       dir_name=?ATTR_FOLDR,
        children=tree_srv:to_list(keys),
        type=internal_dir,
        stat=#stat{ 
@@ -227,8 +229,6 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
     % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
     make_inode_list({MirrorDir,?REAL_FOLDR}),
     ?DEB1("   attribute inode list made"),
-    % Since InodeList1 is created first, and both InodeList1 and 
-    % AttributeBranchList are sorted, this will produce an ordered list.
     State=[],
     assert_started(fuserl),
     ?DEB1("   fuserl started, starting fuserlsrv"),
@@ -941,17 +941,17 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
     ?DEB2("|  _Ctx:~p",_Ctx),
     ?DEB2("|  PIno: ~p ",ParentInode),
     ?DEB2("|  BName: ~p",BName),
-    {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
-    PType=PEntry#inode_entry.type,
-    PName=PEntry#inode_entry.name,
-    ?DEBL("parent type ~p",[PType]),
-    Reply=case PType of
+    {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
+    ParentType=ParentEntry#inode_entry.type,
+    ParentName=ParentEntry#inode_entry.name,
+    ?DEBL("parent type ~p",[ParentType]),
+    Reply=case ParentType of
         #attribute_dir{atype=value} ->
             Name=binary_to_list(BName),
-            PChildren=PEntry#inode_entry.children,
-            case lists:keyfind(Name,1,PChildren) of
+            ParentChildren=ParentEntry#inode_entry.children,
+            case lists:keyfind(Name,1,ParentChildren) of
                 false -> 
-                    ?DEBL("~p not found in ~p",[Name,PChildren]),
+                    ?DEBL("~p not found in ~p",[Name,ParentChildren]),
                     #fuse_reply_err{err=enoent};
                 {Name,Inode} ->
                     ?DEB1("~p found"),
@@ -965,8 +965,8 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
                     ?DEBL("child type ~p",[Type]),
                     case Type of 
                         #external_file{path=Path} ->
-                            ?DEBL("Removing ~p from ~p", [PEntry#inode_entry.name,Name]),
-                            remove_old_attribute_value(Path,Inode,PName),
+                            ?DEBL("Removing ~p from ~p", [ParentEntry#inode_entry.name,Name]),
+                            remove_old_attribute_value(Path,Inode,ParentName),
                             #fuse_reply_err{err=ok};
                         _ ->
                             #fuse_reply_err{err=enotsup}
@@ -1081,7 +1081,7 @@ make_attr_child_dir(Ctx,ParentInode,key,Key,Name,Mode) ->
     ?DEB1("   creating an attribute value dir"),
     % create value directory here.
     MyInode=inode:get({Key,Name}),
-    Stat=make_general_dir(Ctx,ParentInode,MyInode,{Key,Name},Mode,#attribute_dir{atype=value}),
+    Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,{Key,Name},Mode,#attribute_dir{atype=value}),
     ?DEB1("   returning new dir"),
     #fuse_reply_entry{
         fuse_entry_param=
@@ -1106,7 +1106,7 @@ make_internal_child_dir(Ctx,ParentInode,?ATTR_FOLDR,Name,Mode) ->
     % This is where I add an attribute key folder.
     ?DEB1("   creating an attribute key dir"),
     MyInode=inode:get(Name),
-    Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,#attribute_dir{atype=key}),
+    Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Name,Mode,#attribute_dir{atype=key}),
     ?DEB1("   returning new dir"),
     tree_srv:enter(Name,MyInode,keys),
     #fuse_reply_entry{
@@ -1125,7 +1125,7 @@ make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
+make_general_dir(Ctx,ParentInode,MyInode,Name,DirName,Mode,DirType) ->
     ?DEBL("   creating new directory entry called ~p",[Name]),
     {MegaNow,NormalNow,_} = now(),
     Now=MegaNow*1000000+NormalNow,
@@ -1143,6 +1143,7 @@ make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
         },
    DirEntry=#inode_entry{
        name=Name,
+       dir_name=DirName,
        stat=DirStat,
        ext_info=[],
        ext_io=ext_info_to_ext_io([]),
@@ -1437,58 +1438,168 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 %% present. Returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
 lookup_children(Inode) ->
+  ?DEB2("  >lookup_children ~p",Inode),
   case tree_srv:lookup(Inode,inodes) of
     {value, Entry} -> 
-      ?DEBL("    got an entry: ~p",[Entry#inode_entry.name]),
-      FinalEntry=
+      Name=Entry#inode_entry.name,
+      ?DEBL("    got an entry: ~p",[Name]),
+      Children=
         case Entry#inode_entry.type of
           logic_dir ->
             % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
-            ?DEBL("    ~p: logical dir: ~p",[Inode,Entry#inode_entry.name]),
-            case Entry#inode_entry.name of
-              {GrandParent,_Parent,{p,_Connective}} ->
-                {value,ParentEntry} = tree_srv:lookup(inode:get(GrandParent),inodes),
-                ParentEntry;
-              {_GrandParent,_Parent,_Connective} ->
-                {value,Attribsentry} = tree_srv:lookup(inode:get(?ATTR_FOLDR),inodes),
-                Attribsentry
-            end;
+            ?DEBL("    ~p: logical dir: ~p",[Inode,Name]),
+            generate_logic_attribute_dir_children(Name);
           #attribute_dir{atype=value} ->
             ?DEB1("    value dir"),
-            {GParent,Parent} = Entry#inode_entry.name,
+            {GParent,_Parent}=Name,
             ?DEB1("    generating lodic dirs"),
-            MyLogicDirs = generate_logic_dirs(GParent,Parent),
+            MyLogicDirs = generate_logic_dirs(Name),
+            ?DEB1("    filtering children"),
+            MyChildren = filter_children(GParent,Entry#inode_entry.children),
             ?DEB1("    combining children"),
-            MyChildren = Entry#inode_entry.children ++ MyLogicDirs,
-            ?DEB1("    generating entry"),
-            Entry#inode_entry{children=MyChildren};
-          _ ->
-            ?DEB1("    other dir"),
-            Entry
-        end,
-      {value,FinalEntry#inode_entry.children};
-    none -> none
+            % Lets push the logic dirs to the childrens list, removing old logic dirs.
+            MyFinalChildren=lists:foldl(fun(Item,Acc) -> keymergeunique(Item,Acc) end, MyChildren,MyLogicDirs),
+            ?DEB2("    children: ~p",MyFinalChildren),
+            MyFinalChildren;
+          #dir_link{link=Ino} ->
+            ?DEB1("     dir link"),
+            MyChildren=generate_dir_link_children(Ino,Name),
+            ?DEB2("     generated children: ~p",MyChildren),
+            MyChildren;
+          _DirType ->
+            ?DEB2("    other dir: ~p",_DirType),
+            Entry#inode_entry.children
+              end,
+              {value,Children};
+            none -> none
+              end.
+
+
+generate_dir_link_children(Ino,Name) ->
+  {value,Entry}=tree_srv:lookup(Ino,inodes),
+  EntryType=Entry#inode_entry.type,
+  LinkChildren0=filter_children(Ino,Name),
+  LinkChildren = case EntryType of
+    #attribute_dir{atype=value} ->
+      filter:filter(LinkChildren0,"BUTNOT",[{"AND",any},{"OR",any},{"BUTNOT",any}]);
+    _ ->
+      LinkChildren0
+  end,
+  ?DEB2("    converting children: ~p",LinkChildren),
+  %XXX: When looking for ONE entry, generating ALL seems stupid.
+  ConvertedChildren=lists:map(
+    fun({MyName,Inode}) ->
+      MyInode=inode:get({Name,MyName}),
+      case tree_srv:lookup(MyInode,inodes) of
+        {value,_MyEntry} ->
+          % For now, I return the children of the linked to entry, if already generated.
+          {MyName,MyInode};
+        none ->
+          % No entry found, generating children from the dir linked with, if a dir,
+          % and returning linked to file entry if file.
+          {value,MyLinkEntry}=tree_srv:lookup(Inode,inodes),
+          case MyLinkEntry#inode_entry.type of
+            #attribute_dir{} ->
+              MyEntry=MyLinkEntry#inode_entry{
+                name={Name,MyName},
+                children=[],
+                type=#dir_link{link=Inode},
+                links=[]
+                  },
+                  tree_srv:enter(MyInode,MyEntry,inodes),
+                  {MyName,MyInode};
+                _ ->
+                  {MyName,Inode}
+          end
+
+      end
+    end,LinkChildren),
+  case EntryType of
+    #attribute_dir{atype=value} ->
+      LogicDirs=generate_logic_dirs(Name),
+      ConvertedChildren++LogicDirs;
+    _ ->
+      ConvertedChildren
   end.
 
--define(LD(X) , generate_logic_dir(Grandparent,Parent,X)).
+filter_children(Ino,{{{_KeyVal,_Connective}=Logic,_Parent},_Me}) ->
+  {value,Children}=lookup_children(Ino),
+  filter_children(Logic,Children);
 
-generate_logic_dirs(Grandparent,Parent) ->
+
+filter_children({{Key,_Val}=KeyValPair,Connective},LastChildrenUnfiltered) ->
+  case inode:is_numbered(KeyValPair) of
+    false -> false;
+    Ino -> 
+      {value,PrevChildrenUnfiltered} = lookup_children(Ino),
+      PrevChildren = filter_children(Key,PrevChildrenUnfiltered),
+      LastChildren = filter:filter(PrevChildren,Connective,LastChildrenUnfiltered),
+      LastChildren
+  end;
+
+filter_children(_Grandparent,LastChildrenUnfiltered) -> 
+  LastChildrenUnfiltered.
+
+
+      
+
+
+%XXX: THIS IS WRONG!
+% It's not when I enter a logic dir, but when I enter a value child dir of a subdir that I do logic magic!
+
+generate_logic_attribute_dir_children(LogicName) ->
+  % get entry, change inodes and names, return.
+  ?DEB1("     getting attributes entry "),
+  PIno=inode:get(?ATTR_FOLDR),
+  {value,PEntry} = tree_srv:lookup(PIno,inodes),
+  ?DEB1("     transforming children"),
+  lists:map(
+    fun({Name,Inode}) ->
+      {value,Entry}=tree_srv:lookup(Inode,inodes),
+      case Entry#inode_entry.type of
+        #attribute_dir{} ->
+          LinkEntry=Entry#inode_entry{
+            dir_name=Name,
+            name={LogicName,Name},
+            links=[],
+            generated=false,
+            type=#dir_link{link=Inode}},
+          LinkIno=inode:get(LinkEntry#inode_entry.name),
+          tree_srv:enter(LinkIno,LinkEntry,inodes),
+          {Name,LinkIno};
+        #external_file{} ->
+          {Name,Inode}
+      end
+    end,
+    PEntry#inode_entry.children).
+
+
+
+
+
+      
+
+
+
+-define(LD(X) , generate_logic_dir(Predecessor,X)).
+
+generate_logic_dirs({_Grandparent,_Parent}=Predecessor) ->
   [
     ?LD("AND"),
     ?LD("OR"),
-    ?LD("IF")
+    ?LD("BUTNOT")
     ].
 
--define(LDIR(X) , {GrandParent,Parent,X}).
+-define(LDIR(X) , {Predecessor,X}).
 -define(LINO(X) , inode:get(?LDIR(X))).
 -define(LCLD(X) , {X,?LINO(X)}).
 
-generate_logic_dir(GrandParent,Parent,X) ->
+generate_logic_dir({GrandParent,_Parent}=Predecessor,X) ->
   ?DEB2("     generating lodic dir \"~p\"",X),
   ?DEB1("      getting entry"),
   {value,GPEntry}=tree_srv:lookup(inode:get(GrandParent),inodes),
   ?DEB1("      generating new entry"),
-  Entry=GPEntry#inode_entry{name=?LDIR(X),type=logic_dir,children=[]},
+  Entry=GPEntry#inode_entry{dir_name=X,name=?LDIR(X),type=logic_dir,children=[]},
   ?DEB1("      saving new entry"),
   tree_srv:enter(?LINO(X),Entry,inodes),
   ?LCLD(X).
@@ -1999,6 +2110,8 @@ has_user_perms(Mode,Mask) ->
     Mode band ?S_IRWXU bsr 6 band Mask/=0.
 
 
+
+%% It seems I created these two filters to filter out directly on dets matches. However, since I also will be needing the inode numbers for the children, this at the end of the day seems like a bad approach.
 andfilter(InList,DetsMatch) ->
     lists:foldr(
         fun([F],Acc) -> 

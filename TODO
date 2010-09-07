@@ -46,6 +46,7 @@ make closedir do something useful.
     =>
     % ls attribs/Foo 
     Bar.file
+    ☐ Change Key, {Key,Value} into {Key,nil},{Key,Value}, {{Key,Value},Value},...
 
 
 ☐ Include support for setting multiple attributes at once:
@@ -105,3 +106,4 @@ have different attribute folders for different users? different groups? differen
 To do later on:
 
 ☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
+
