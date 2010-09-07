@@ -38,6 +38,9 @@
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
+-define(UEXEC(X), X#stat{st_mode=(X#stat.st_mode bor 8#100)}).
+
+
 -record(initargs,
         {dir::string()}).
 

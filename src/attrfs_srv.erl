@@ -1543,13 +1543,6 @@ filter_children({{Key,_Val}=KeyValPair,Connective},LastChildrenUnfiltered) when 
 filter_children(_Grandparent,LastChildrenUnfiltered) -> 
   LastChildrenUnfiltered.
 
-
-      
-
-
-%XXX: THIS IS WRONG!
-% It's not when I enter a logic dir, but when I enter a value child dir of a subdir that I do logic magic!
-
 generate_logic_attribute_dir_children(LogicName) ->
   % get entry, change inodes and names, return.
   ?DEB1("     getting attributes entry "),
@@ -1575,14 +1568,6 @@ generate_logic_attribute_dir_children(LogicName) ->
       end
     end,
     PEntry#inode_entry.children).
-
-
-
-
-
-      
-
-
 
 -define(LD(X) , generate_logic_dir(Predecessor,X)).
 
@@ -1648,7 +1633,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     ?DEBL("   new database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
     #inode_entry{stat=Stat,name=FName}=FEntry,
     ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
-    append_attribute(Attr,FName,Stat),
+    append_attribute(Attr,FName,?UEXEC(Stat)),
     ?DEB1("   creating new ext info"),
     rehash_ext_from_db(FIno,Path).
 
@@ -1909,18 +1894,16 @@ make_inode_list({Path,Name}) ->
             EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
             EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
             EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
-                
             ?DEB2("    atime:~p~n",EpochAtime),
             ?DEB2("    ctime:~p~n",EpochCtime),
             ?DEB2("    mtime:~p~n",EpochMtime),
             MyStat=statify_file_info(
-                    FileInfo#file_info{
-                        inode=inode:get(Name)
-                       ,atime=EpochAtime
-                       ,ctime=EpochCtime
-                       ,mtime=EpochMtime
-                           }),
-
+              FileInfo#file_info{
+                inode=inode:get(Name)
+                ,atime=EpochAtime
+                ,ctime=EpochCtime
+                ,mtime=EpochMtime
+                }),
             InodeEntry=#inode_entry{ 
                 name=Name
                 ,children=Children
@@ -1928,11 +1911,13 @@ make_inode_list({Path,Name}) ->
                 ,stat=MyStat
                 ,ext_info=ExtInfo
                 ,ext_io=ExtIo},
+
+
             tree_srv:enter(inode:get(Name),InodeEntry,inodes),
             ?DEB2("    looking up ext folders for ~p",Name),
             ExtFolders=lists:flatten(dets:match(?ATTR_DB,{Path,'$1'})),
             ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
-            lists:foreach(fun(Attr) -> append_attribute(Attr,Name,MyStat) end,ExtFolders),
+            lists:foreach(fun(Attr) -> append_attribute(Attr,Name,?UEXEC(MyStat)) end,ExtFolders),
             ?DEB1("    recursing for all real subdirs"),
             lists:foreach(fun({ChildName,_Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children);
         E ->
