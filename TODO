@@ -10,14 +10,11 @@ include support for
     ☐ and others? to change attributes.
 
 
-Detect duplicates in the folder(s) to copy? 
-  note as folders under /duplicates
-  /duplicates/foo.file/paths.txt or something like it.
     
     
-include support for reading files!
+☐ include support for reading files!
 
-make closedir do something useful.
+☐ make closedir do something useful.
 
 ☑ Include support for "multi-valued attributes":
     % attr -s "Foo" -V "Etaoin,Shrdlu" Baz.file
@@ -64,7 +61,9 @@ make closedir do something useful.
     Shrdlu/Baz.file
 
 ☐ Include support for search directories:
-    ☐ Special directories AND, OR, NOT, AND<key folder> , AND NOT <key folder> etc for every value folder.
+    ☐ Special directories 
+        ☑ AND, OR, BUTNOT, 
+        ☐ AND<key folder> , BUTNOT <key folder> etc for every value folder.
         
         % ls attribs/Foo/Bar
             Etaoin
@@ -96,10 +95,17 @@ make closedir do something useful.
   This copying is to be "ignored", that is, regarded as a rename operation, which is the same as hard linking, also for dirs. Touching or movin the file should be regarded as the same as copying in this FS.
 
 
+☐ Make a way to "reload" the directory we're mirroring from.
+☐ Support mirroring from multiple directories.
+☐ Detect duplicates in the folder(s) to mirror.
+  * note as folders under /duplicates ?
+    /duplicates/foo.file/paths.txt or something like it.
+  * show duplicate files as a special type of folder?
 
-Apparently, linux calls open before calling setattr. What to do with open?
 
-have different attribute folders for different users? different groups? different users or group according to mode?
+☐ Apparently, linux calls open before calling setattr. What to do with open?
+
+☐ have different attribute folders for different users? different groups? different users or group according to mode?
 
 ☐ Use CTX as an index for accessing attributes?
 
