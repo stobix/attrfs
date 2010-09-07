@@ -1476,11 +1476,13 @@ lookup_children(Inode) ->
 
 
 generate_dir_link_children(Ino,Name) ->
+  ?DEB1("generate_dir_link_children"),
   {value,Entry}=tree_srv:lookup(Ino,inodes),
   EntryType=Entry#inode_entry.type,
   LinkChildren0=filter_children(Ino,Name),
   LinkChildren = case EntryType of
     #attribute_dir{atype=value} ->
+      ?DEB1("Filtering out bogus logical connectives"),
       filter:filter(LinkChildren0,"BUTNOT",[{"AND",any},{"OR",any},{"BUTNOT",any}]);
     _ ->
       LinkChildren0
@@ -1527,12 +1529,13 @@ filter_children(Ino,{{{_KeyVal,_Connective}=Logic,_Parent},_Me}) ->
   filter_children(Logic,Children);
 
 
-filter_children({{Key,_Val}=KeyValPair,Connective},LastChildrenUnfiltered) ->
+filter_children({{Key,_Val}=KeyValPair,Connective},LastChildrenUnfiltered) when (Connective == "AND") or (Connective == "OR") or (Connective == "BUTNOT") ->
   case inode:is_numbered(KeyValPair) of
     false -> false;
     Ino -> 
       {value,PrevChildrenUnfiltered} = lookup_children(Ino),
       PrevChildren = filter_children(Key,PrevChildrenUnfiltered),
+      ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,LastChildrenUnfiltered,Connective]),
       LastChildren = filter:filter(PrevChildren,Connective,LastChildrenUnfiltered),
       LastChildren
   end;
