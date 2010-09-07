@@ -1081,7 +1081,7 @@ make_attr_child_dir(Ctx,ParentInode,key,Key,Name,Mode) ->
     ?DEB1("   creating an attribute value dir"),
     % create value directory here.
     MyInode=inode:get({Key,Name}),
-    Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,{Key,Name},Mode,#attribute_dir{atype=value}),
+    Stat=make_general_dir(Ctx,ParentInode,MyInode,{Key,Name},Name,Mode,#attribute_dir{atype=value}),
     ?DEB1("   returning new dir"),
     #fuse_reply_entry{
         fuse_entry_param=
