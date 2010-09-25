@@ -1,1 +1,2 @@
-{'src/*',[{outdir,'ebin'},{d,debug},{d,timestamp}]}.
+{'src/*',[{outdir,'ebin'}]}.
+%{'src/*',[{outdir,'ebin'},{d,debug},{d,timestamp}]}.

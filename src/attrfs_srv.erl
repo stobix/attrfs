@@ -532,6 +532,7 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
     Reply=case Entry#inode_entry.type of
         #external_file{path=Path} ->
             ?DEBL("   External file path: ~p",[Path]),
+            set_open_file({Ctx,Inode},times(4096,Path)),
 %            case file:open(Path,[read,raw]) of
 %                {ok,IoDevice} ->
 %                    set_open_file({Ctx,Inode},#open_external_file{io_device=IoDevice}),
@@ -544,6 +545,11 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
             #fuse_reply_err{err=enotsup}
     end,
     {Reply,State}.
+
+times(0,_string) ->
+  [];
+times(N,String) ->
+  String++times(N-1,String).
 
 %%--------------------------------------------------------------------------
 %% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
@@ -587,7 +593,7 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %        {ok, Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
 %    Info="hej\n\nhej\n",
-    Info=4,
+    {value,Info}=lookup_open_file({Ctx,Inode}),
     Reply=make_read_reply(Info,Offset,Size),
 %    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
 %        eof ->
@@ -1001,7 +1007,8 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 make_read_reply(Info,Offset,Size) ->
     %% This section I stole from fuserlprocsrv.erl. 
     %% It works there, why doesn't it work here??
-    IoList = io_lib:format("~p.~n",[ Info ]),
+    %IoList = io_lib:format("~p.~n"++[-1],[ Info ]),
+    IoList=Info,
     Len = erlang:iolist_size (IoList),
     if
       Offset < Len ->

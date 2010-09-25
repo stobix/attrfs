@@ -8,6 +8,6 @@
      {env,[{to_dir,"/home/Volatile/testfs"},
          {from_dir,"/home/Volatile/mirrorfs"},
          {attributes_db,"/home/Volatile/attributes"},
-         {linked_in,false},
+         {linked_in,true},
          {mount_opts, "allow_other,default_permissions"}]}
 ]}.
