@@ -1455,7 +1455,7 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
     %st_blocks,
     st_atime=datetime_to_epoch(Atime),
     st_mtime=datetime_to_epoch(Mtime),
-    st_ctime=datetime_to_epoch(Ctime),
+    st_ctime=datetime_to_epoch(Ctime)
   }.
 
 
