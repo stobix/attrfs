@@ -1,0 +1,43 @@
+This is the style I've choosen for this project:
+
+Indentation: 
+  2 spaces for each indentation level.
+  end brackets at the same level as beginning brackets.
+  case/if/etc and end on the same indentation level.
+
+Spaces beetween words:
+  As few as possible!
+  Spaces around arrows, " -> "
+  No other spaces around operators, unless neccessary. (Around "or" but not around "+").
+
+  Primarily use the style
+    Bla=
+      case ...
+      end
+  and not
+    Bla=case
+    end
+
+
+Function calls broken over several lines have the end parenthesis at the same indentation level as the function.
+  FunFoo(...
+    ...
+  )
+
+funs have matchings on same indentation level:
+  fun({A}) ->...
+     (B) -> ...
+  end
+  
+
+case clauses broken over several lines:
+
+  case some
+    long
+    case
+    condition of
+    ...
+  end
+
+
+
