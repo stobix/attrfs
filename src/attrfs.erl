@@ -25,20 +25,20 @@
 -include("../include/debug.hrl").
 
 start(_dont,_care) ->
-    ?DEB2("Starting ~p",?MODULE),
-    ?DEB1("  getting arguments"),
-    {ok,DirFrom}=application:get_env(?MODULE,from_dir),
-    ?DEB2("  dir_from: ~p",DirFrom),
-    {ok,DirTo}=application:get_env(?MODULE,to_dir),
-    ?DEB2("  dir_to: ~p",DirTo),
-    {ok,DB}=application:get_env(?MODULE,attributes_db),
-    ?DEB2("  database: ~p",DB),
-    {ok,LinkedIn}=application:get_env(?MODULE,linked_in),
-    ?DEB2("  linked in status: ~p", LinkedIn),
-    {ok,MountOpts}=application:get_env(?MODULE,mount_opts),
-    ?DEB2("   fuserl mount opts: ~p", MountOpts),
-    ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
-    attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn).
+  ?DEB2("Starting ~p",?MODULE),
+  ?DEB1("  getting arguments"),
+  {ok,DirFrom}=application:get_env(?MODULE,from_dir),
+  ?DEB2("  dir_from: ~p",DirFrom),
+  {ok,DirTo}=application:get_env(?MODULE,to_dir),
+  ?DEB2("  dir_to: ~p",DirTo),
+  {ok,DB}=application:get_env(?MODULE,attributes_db),
+  ?DEB2("  database: ~p",DB),
+  {ok,LinkedIn}=application:get_env(?MODULE,linked_in),
+  ?DEB2("  linked in status: ~p", LinkedIn),
+  {ok,MountOpts}=application:get_env(?MODULE,mount_opts),
+  ?DEB2("   fuserl mount opts: ~p", MountOpts),
+  ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
+  attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn).
 
 stop(_State) -> ok.
 

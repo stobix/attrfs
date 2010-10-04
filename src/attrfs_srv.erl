@@ -242,7 +242,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 init(State) ->
-  {ok, State}.
+  {ok,State}.
 
 %%--------------------------------------------------------------------------
 %% The analog to Module:terminate/2 in gen_server.
@@ -598,7 +598,7 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %    Reply=
 %            #fuse_reply_err{err=eof},
 %    =case file:pread(IoDevice,Offset,Size) of
-%        {ok, Data} ->
+%        {ok,Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
 %    Info="hej\n\nhej\n",
     {value,Info}=lookup_open_file({Ctx,Inode}),
@@ -1897,7 +1897,7 @@ find(SearchFun,[Item|Items]) ->
 make_inode_list({Path,Name}) ->
   ?DEBL("   reading file info for ~p into ~p",[Path,Name]),
   case catch file:read_file_info(Path) of
-    {ok, FileInfo} ->
+    {ok,FileInfo} ->
       ?DEB1("   got file info"),
       {ok,Children,Type}= 
         case FileInfo#file_info.type of

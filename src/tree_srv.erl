@@ -59,12 +59,12 @@
 %%%=========================================================================
 
 start_link() ->
-    ?DEB1("Starting tree server"),
-    gen_server:start_link({local,?MODULE},?MODULE,[],[]).
+  ?DEB1("Starting tree server"),
+  gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 init(_) ->
-    ?DEB1("Tree server started"),
-    {ok,[]}.
+  ?DEB1("Tree server started"),
+  {ok,[]}.
 
 terminate(_Reason,_State) -> ok.
 
@@ -80,7 +80,7 @@ terminate(_Reason,_State) -> ok.
 %% @end
 %%----------------------------------------------
 store(TreeID,Tree) ->
-    gen_server:call(?MODULE,{store_tree,TreeID,Tree}).
+  gen_server:call(?MODULE,{store_tree,TreeID,Tree}).
 
 % TODO: Make this work in a parallel environment.
 %%----------------------------------------------
@@ -89,7 +89,7 @@ store(TreeID,Tree) ->
 %% @end
 %%----------------------------------------------
 enter(Key,Entry,TreeID) ->
-    gen_server:cast(?MODULE,{update,Key,Entry,TreeID}). 
+  gen_server:cast(?MODULE,{update,Key,Entry,TreeID}). 
 
 
 %%----------------------------------------------
@@ -98,7 +98,7 @@ enter(Key,Entry,TreeID) ->
 %% @end
 %%----------------------------------------------
 new(TreeID) ->
-    gen_server:call(?MODULE,{new,TreeID}).
+  gen_server:call(?MODULE,{new,TreeID}).
 
 %%----------------------------------------------
 %% @doc returns the entry Entry with key Key in the tree TreeID.
@@ -106,66 +106,61 @@ new(TreeID) ->
 %% @end
 %%----------------------------------------------
 lookup(Key,TreeID) ->
-    gen_server:call(?MODULE,{get,Key,TreeID}).
+  gen_server:call(?MODULE,{get,Key,TreeID}).
 
 
 to_list(TreeID) ->
-    gen_server:call(?MODULE,{to_list,TreeID}).
+  gen_server:call(?MODULE,{to_list,TreeID}).
 
 clear(TreeID) ->
-    gen_server:cast(?MODULE,{clear,TreeID}).
+  gen_server:cast(?MODULE,{clear,TreeID}).
 
 delete_any(Key,TreeID) ->
-    gen_server:cast(?MODULE,{remove,Key,TreeID}).
+  gen_server:cast(?MODULE,{remove,Key,TreeID}).
 
 %%%=========================================================================
 %%% gen_server callback functions.
 %%%=========================================================================
 
-
 handle_call({to_list,TreeID},_From,Trees) ->
-    {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
-    {reply,gb_trees:to_list(Tree),Trees};
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  {reply,gb_trees:to_list(Tree),Trees};
 
 handle_call({get,Key,TreeID},_From,Trees) ->
-    {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
-    % TODO: In the parallel version, keep track of which keys are taken, and implement some kind of semaphoric thingie.
-    {reply,gb_trees:lookup(Key,Tree),Trees};
-
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  % TODO: In the parallel version, keep track of which keys are taken, and implement some kind of semaphoric thingie.
+  {reply,gb_trees:lookup(Key,Tree),Trees};
 
 handle_call({new,TreeID},_From,Trees) ->
-    case lists:keymember(TreeID,1,Trees) of
-        false -> {reply,ok,[{TreeID,gb_trees:empty()}|Trees]};
-        true ->  {reply,{error,exists},Trees}
-    end;
+  case lists:keymember(TreeID,1,Trees) of
+    false -> {reply,ok,[{TreeID,gb_trees:empty()}|Trees]};
+    true ->  {reply,{error,exists},Trees}
+  end;
 
 handle_call({store_tree,TreeID,Tree},_From,Trees) ->
-    case lists:keymember(TreeID,1,Trees) of
-        false -> {reply,ok,[{TreeID,Tree}|Trees]};
-        true ->  {reply,{error,exists},Trees}
-    end.
+  case lists:keymember(TreeID,1,Trees) of
+    false -> {reply,ok,[{TreeID,Tree}|Trees]};
+    true ->  {reply,{error,exists},Trees}
+  end.
 
 handle_cast({remove,Key,TreeID},Trees) ->
-    {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
-    NewTree=gb_trees:delete_any(Key,Tree),
-    NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
-    {noreply,NewTrees};
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  NewTree=gb_trees:delete_any(Key,Tree),
+  NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
+  {noreply,NewTrees};
 
 handle_cast({clear,TreeID},Trees) ->
-    case lists:keymember(TreeID,1,Trees) of
-        false -> {noreply,[{TreeID,gb_trees:empty()}|Trees]};
-        true -> {noreply,lists:keymerge([{TreeID,gb_trees:empty()}],1,Trees)}
-    end;
+  case lists:keymember(TreeID,1,Trees) of
+    false -> {noreply,[{TreeID,gb_trees:empty()}|Trees]};
+    true -> {noreply,lists:keymerge([{TreeID,gb_trees:empty()}],1,Trees)}
+  end;
 
 handle_cast({update,Key,Entry,TreeID},Trees) ->
-    case lists:keyfind(TreeID,1,Trees) of
-        false -> {noreply,Trees};
-        {TreeID,Tree} ->
-            NewTree=gb_trees:enter(Key,Entry,Tree),
-            NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
-            {noreply,NewTrees}
-    end.
-            
-
-
+  case lists:keyfind(TreeID,1,Trees) of
+    false -> {noreply,Trees};
+    {TreeID,Tree} ->
+      NewTree=gb_trees:enter(Key,Entry,Tree),
+      NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
+      {noreply,NewTrees}
+  end.
 
