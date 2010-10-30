@@ -181,6 +181,33 @@ start_link({MountDir,MirrorDir,DB}) ->
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
   Options=[],
   ?DEB1(">start_link"),
+  ?DEB1("   checkning if dirs are ok..."),
+  ?DEB2("    ~p...",Dir),
+  case filelib:ensure_dir(Dir) of
+    ok -> 
+      ?DEB1("     path ok."),
+      case filelib:is_dir(Dir) of
+        true ->
+          ?DEB2("       ~p exists, and is a dir. Ok.",Dir);
+        false->
+          ?DEB2("       ~p is not a directory!(Check your config)",Dir),
+          ?DEB1("TERMINATING"),
+          exit({error,dir_is_not_a_dir})
+      end;
+    E ->
+      ?DEB2("     received ~p (Check your config)",E),
+      ?DEB1("TERMINATING"),
+      exit(E)
+  end,
+  ?DEB2("    ~p...",MirrorDir),
+  case filelib:is_dir(MirrorDir) of
+    true ->
+      ?DEB2("      ~p exists, and is a dir. Ok.",MirrorDir);
+    false->
+      ?DEB2("      ~p is not a directory!(Check your config)",MirrorDir),
+      ?DEB1("TERMINATING"),
+      exit({error,mirror_dir_is_not_a_dir})
+  end,
   ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   ?DEB2("   mirroring dir ~p",MirrorDir),
