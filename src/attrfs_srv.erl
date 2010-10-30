@@ -493,7 +493,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
   ?DEB2("|  PIno: ~p",ParentInode),
   ?DEB2("|  Name: ~p",Name),
   ?DEB2("|  Mode: ~p",MMode),
-  Mode=MMode bor ?S_IFDIR bor 8#111,
+  Mode=MMode bor ?S_IFDIR bor 8#111, % To the mode provided with, I add the dir status and make the dir executable.
   Reply=
     case tree_srv:lookup(ParentInode,inodes) of
       none -> #fuse_reply_err{err=enoent}; 
@@ -1741,7 +1741,7 @@ remove_old_attribute_key(Path,Inode,AName) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dir(Stat) ->
-  NewMode=(Stat#stat.st_mode band 8#777) bor ?S_IFDIR,
+  NewMode=(Stat#stat.st_mode band 8#777) bor ?STD_DIR_MODE,
   ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
 
@@ -1992,7 +1992,8 @@ append_key_dir(KeyDir,ValDir,Stat) ->
           type=#attribute_dir{atype=key},
           name=KeyDir,
           children=[{ValDir,ChildIno}],
-          stat=dir(Stat#stat{st_ino=MyInode}),
+          %XXX: Give the user some way of setting a standard 
+          stat=dir(Stat#stat{st_ino=MyInode}), 
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
         };

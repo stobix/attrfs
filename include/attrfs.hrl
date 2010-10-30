@@ -40,6 +40,7 @@
 
 -define(UEXEC(X), X#stat{st_mode=(X#stat.st_mode bor 8#100)}).
 
+-define(STD_DIR_MODE, ?S_IFDIR band 8#755).
 
 -record(initargs,
         {dir::string()}).

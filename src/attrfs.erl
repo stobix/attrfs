@@ -38,7 +38,10 @@ start(_dont,_care) ->
   {ok,MountOpts}=application:get_env(?MODULE,mount_opts),
   ?DEB2("   fuserl mount opts: ~p", MountOpts),
   ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
-  attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn).
+  case attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn) of
+    ok -> {ok,self()}; % Why do I sometimes need this? Why would supervisor:start_link suddenly start returning ok instead of {ok,Pid}?
+   {ok,Pid}=A -> A
+  end.
 
 stop(_State) -> ok.
 
