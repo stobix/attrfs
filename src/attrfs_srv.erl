@@ -56,7 +56,7 @@
 %%%=========================================================================
 %%% server function exports
 %%%=========================================================================
--export([handle_info/2,init/1]).
+-export([handle_info/2,init/1,terminate/2]).
 % TODO: Do something intelligent with this one. 
 % Returns "ok" now, totally ignoring its indata.
 -export([code_change/3]). 
@@ -90,13 +90,14 @@
          rename/7,
          rmdir/5,
          setattr/7,
+         statfs/4,
          setlk/7,
          setxattr/7,
-         statfs/4,
          symlink/6,
-         terminate/2,
          unlink/5,
-         write/7]).
+         write/7
+         ]).
+         
 
 
 %%%=========================================================================
@@ -179,7 +180,6 @@ start_link({MountDir,MirrorDir,DB}) ->
 %% Maybe this is an unneccessary precaution?
 %%--------------------------------------------------------------------------
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
-  Options=[],
   ?DEB1(">start_link"),
   ?DEB1("   checkning if dirs are ok..."),
   ?DEB2("    ~p...",Dir),
@@ -190,7 +190,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
         true ->
           ?DEB2("       ~p exists, and is a dir. Ok.",Dir);
         false->
-          ?DEB2("       ~p is not a directory!(Check your config)",Dir),
+          ?DEB2("       ~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
           ?DEB1("TERMINATING"),
           exit({error,dir_is_not_a_dir})
       end;
@@ -208,6 +208,15 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
       ?DEB1("TERMINATING"),
       exit({error,mirror_dir_is_not_a_dir})
   end,
+  Options=[],
+  ?DEB1("   starting fuserlsrv"),
+  fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,{MirrorDir,DB},Options).
+
+%%--------------------------------------------------------------------------
+%% The analog to Module:init/1 in gen_server.
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+init({MirrorDir,DB}) ->
   ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   ?DEB2("   mirroring dir ~p",MirrorDir),
@@ -260,15 +269,6 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
   make_inode_list({MirrorDir,?REAL_FOLDR}),
   ?DEB1("   attribute inode list made"),
   State=[],
-  assert_started(fuserl),
-  ?DEB1("   fuserl started, starting fuserlsrv"),
-  fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,State,Options).
-
-%%--------------------------------------------------------------------------
-%% The analog to Module:init/1 in gen_server.
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-init(State) ->
   {ok,State}.
 
 %%--------------------------------------------------------------------------
@@ -567,7 +567,8 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
         ?DEBL("   External file path: ~p",[Path]),
-        set_open_file({Ctx,Inode},times(4096,Path)),
+%        set_open_file({Ctx,Inode},times(4096,Path)),
+        set_open_file({Ctx,Inode},Path),
 %            case file:open(Path,[read,raw]) of
 %                {ok,IoDevice} ->
 %                    set_open_file({Ctx,Inode},#open_external_file{io_device=IoDevice}),
@@ -1050,8 +1051,7 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 make_read_reply(Info,Offset,Size) ->
   %% This section I stole from fuserlprocsrv.erl. 
   %% It works there, why doesn't it work here??
-  %IoList = io_lib:format("~p.~n"++[-1],[ Info ]),
-  IoList=Info,
+  IoList = io_lib:format("~p.~n",[ Info ]),
   Len = erlang:iolist_size (IoList),
   if
     Offset < Len ->
@@ -1068,7 +1068,7 @@ make_read_reply(Info,Offset,Size) ->
       Data = <<>>
   end,
   ErlSize=erlang:size (Data),
-  ?DEBL("   replying with data: ~p and size ~p",[Data,ErlSize]),
+  ?DEBL("   replying with data: ~p + size ~p",[Data,ErlSize]),
   #fuse_reply_buf{ buf=Data,size=ErlSize}.
   %% end of stolen code.
 
@@ -1468,7 +1468,7 @@ datetime_to_epoch(DateTime) ->
 %% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
 %%--------------------------------------------------------------------------
 statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-  ?DEBL("    converting file info for ~p to fuse stat info",[Inode]),
+  ?DEBL("    converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
   #stat{
     st_dev= {MajorDevice,MinorDevice},
     st_ino=Inode,
@@ -1890,21 +1890,6 @@ direntrify([{Name,Inode}|Children]) ->
   Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
   ?DEB2("    Appending child ~p to list",{Name,Inode}),
   [Direntry1|direntrify(Children)].
-
-
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-assert_started(Application) ->
-  ?DEB2("   Checking that ~p is loaded",Application),
-  case find(
-        fun({A,_,_}) when A==Application -> true;
-           (_) -> false 
-        end,application:loaded_applications()
-       ) of
-    true -> ?DEB1("   loaded"),true;
-    false -> ?DEB1("   not loaded, starting"),application:start(Application)
-  end.
 
 %%--------------------------------------------------------------------------
 %% find runs SearchFun for one element at a time in the provided list,

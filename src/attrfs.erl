@@ -40,7 +40,8 @@ start(_dont,_care) ->
   ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
   case attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn) of
     ok -> {ok,self()}; % Why do I sometimes need this? Why would supervisor:start_link suddenly start returning ok instead of {ok,Pid}?
-   {ok,Pid}=A -> A
+   {ok,_Pid}=A -> A;
+   E -> ?DEB2("Got an error while starting! Exiting! (~p)",E),E
   end.
 
 stop(_State) -> ok.

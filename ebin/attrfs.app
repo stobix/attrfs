@@ -6,7 +6,7 @@
    {registered,[attrfs]},
    {mod,{attrfs,[]}},
    {env,
-     [{to_dir,"/home/Volatile/testfs"},
+     [{to_dir,"/home/Volatile/attrfs"},
       {from_dir,"/home/Volatile/mirrorfs"},
       {attributes_db,"/home/Volatile/attributes"},
       {linked_in,true},
