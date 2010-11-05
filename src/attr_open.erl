@@ -2,7 +2,7 @@
 
 -export([init/0,
        lookup/1,
-       set/2,
+       set/3,
        remove/1,
        forget/1]).
 
@@ -22,8 +22,8 @@ lookup(FIno) ->
 %% set_open_file returns a state with the open file for the provided inode
 %% changed to the FileContents provided.
 %%--------------------------------------------------------------------------
-set({_FIno,_Inode}=Token,FileContents) ->
-  ets:insert(open_files,{Token,FileContents}).
+set(FIno,Inode,FileContents) ->
+  ets:insert(open_files,{{FIno,Inode},FileContents}).
 
 %%--------------------------------------------------------------------------
 %% remove_open_file removes the file from the current context. Used for closedir.
