@@ -34,11 +34,12 @@
 
 -behaviour(gen_server).
 
--export([get/0,release/1]).
--export([get/1,is_named/1,is_numbered/1,is_used/1]).
--export([reset/0,reset/1,list_bound/0]).
--export([rename/2]).
--export([count_occupied/0]).
+-export([get/1,release/2]).
+-export([get/2,is_named/2,is_numbered/2,is_used/2]).
+-export([reset/1,reset/2,list_bound/1]).
+-export([rename/3]).
+-export([count_occupied/1]).
+-export([initiate/1,initiate/2]).
 
 
 -export([start_link/0,start_link/1,init/1]).
@@ -80,8 +81,9 @@ start_link(SmallestNumber) ->
   ?DEB1("Starting inode server"),
   gen_server:start_link({local,?MODULE},?MODULE,SmallestNumber,[]).
 
-init(SmallestNumber) ->
-  {ok,{SmallestNumber,[],[]}}.
+init(_SmallestNumber) ->
+  {ok,gb_trees:empty()}.
+%  {ok,{SmallestNumber,[],[]}}.
 
 terminate(_Reason,_State) -> ok.
 
@@ -89,21 +91,41 @@ terminate(_Reason,_State) -> ok.
 %%% exports
 %%%=========================================================================
 
+
+%%----------------------------------------------
+%% @doc initates a new inode server.
+%% @spec (Server::string()|atom()|integer()) -> ok
+%%       If server is already initiated, nothing is done.
+%% @end
+%%----------------------------------------------
+initiate(Server) ->
+  gen_server:cast(?MODULE,{init,1,Server}).
+
+%%----------------------------------------------
+%% @doc initates a new inode server that starts numbering inodes at N.
+%%       If server is already initiated, nothing is done.
+%% @spec (N::integer(),Server::string()|atom()|integer()) -> ok
+%% @end
+%%----------------------------------------------
+initiate(N,Server) ->
+  gen_server:cast(?MODULE,{init,N,Server}).
+
+
 %%----------------------------------------------
 %% @doc counts the number of occupied inodes.
 %% @spec () -> non_neg_integer().
 %% @end
 %%----------------------------------------------
-count_occupied() ->
-  gen_server:call(?MODULE,count).
+count_occupied(Server) ->
+  gen_server:call(?MODULE,{count,Server}).
 
 %%----------------------------------------------
 %% @doc Returns an unused integer.
 %% @spec () -> Number::unique_integer().
 %% @end
 %%----------------------------------------------
-get() ->
-  gen_server:call(?MODULE,get).
+get(Server) ->
+  gen_server:call(?MODULE,{get,Server}).
 
 %%----------------------------------------------
 %% @doc On first run, assosicate a unique integer with Name.
@@ -111,12 +133,12 @@ get() ->
 %% @spec (term())-> Number::non_neg_integer().
 %% @end
 %%----------------------------------------------
-get(Name) ->
-  case is_numbered(Name) of
+get(Name,Server) ->
+  case is_numbered(Name,Server) of
     false -> 
-      Number=?MODULE:get(),
+      Number=?MODULE:get(Server),
       ?DEBL("   binding ~p to ~p",[Name,Number]),
-      gen_server:cast(?MODULE,{register,Name,Number}),
+      gen_server:cast(?MODULE,{register,Name,Number,Server}),
       Number;
     Number -> Number
   end.
@@ -128,27 +150,27 @@ get(Name) ->
 %% @spec (non_neg_integer()) -> false|Name::term().
 %% @end
 %%----------------------------------------------
-is_named(Number) ->
-  gen_server:call(?MODULE,{is_named,Number}).
+is_named(Number,Server) ->
+  gen_server:call(?MODULE,{is_named,Number,Server}).
 
-rename(OldName,NewName) ->
-  gen_server:cast(?MODULE,{rename,OldName,NewName}).
+rename(OldName,NewName,Server) ->
+  gen_server:cast(?MODULE,{rename,OldName,NewName,Server}).
 
 %%----------------------------------------------
 %% @doc Checks whether Name has a number associated with it. Returs either false, or the associated number.
 %% @spec (term()) -> false|Name::uniqe_integer().
 %% @end
 %%----------------------------------------------
-is_numbered(Name) ->
-  gen_server:call(?MODULE,{is_numbered,Name}).
+is_numbered(Name,Server) ->
+  gen_server:call(?MODULE,{is_numbered,Name,Server}).
 
 %%----------------------------------------------
 %% @doc Checks whether Number is currently in use. Returns either false or true.
 %% @spec (term()) -> bool().
 %% @end
 %%----------------------------------------------
-is_used(Number) ->
-  gen_server:call(?MODULE,{is_used,Number}).
+is_used(Number,Server) ->
+  gen_server:call(?MODULE,{is_used,Number,Server}).
 
 %%----------------------------------------------
 %% @doc Makes the number Number no longer occupied.
@@ -156,90 +178,149 @@ is_used(Number) ->
 %% @spec (term()) -> false|Name::unique_integer().
 %% @end
 %%----------------------------------------------
-release(Number) ->
-  gen_server:cast(?MODULE,{return,Number}).
+release(Number,Server) ->
+  gen_server:cast(?MODULE,{return,Number,Server}).
 
 %%----------------------------------------------
 %% @doc Resets the counter. Forgets all name bindings.
 %% @spec () -> ok.
 %% @end
 %%----------------------------------------------
-reset() ->
-  gen_server:cast(?MODULE,{reset,1}).
+reset(Server) ->
+  gen_server:cast(?MODULE,{reset,1,Server}).
 
 %%----------------------------------------------
 %% @doc Resets the counter. Forgets all name bindings. Starts anew at number Number.
 %% @spec (Number) -> ok.
 %% @end
 %%----------------------------------------------
-reset(Number) ->
-  gen_server:cast(?MODULE,{reset,Number}).
+reset(Number,Server) ->
+  gen_server:cast(?MODULE,{reset,Number,Server}).
 
 %%----------------------------------------------
 %% @doc Lists all integers bound to a term.
 %% @spec () -> [{term(),unique_integer()}].
 %% @end
 %%----------------------------------------------
-list_bound() ->
-  gen_server:call(?MODULE,list).
+list_bound(Server) ->
+  gen_server:call(?MODULE,{list,Server}).
 
 %%%=========================================================================
 %%% gen_server callback functions.
 %%%=========================================================================
 
-handle_call(count,_From,State={CurrHigh,Frees,Reserved}) ->
-  Reply=CurrHigh-length(Frees)+length(Reserved)-1,
-  {reply,Reply,State};
+handle_call({count,Server},_From,State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {reply,count_(S),State};
 
-handle_call(list,_From,State={_CurrHigh,_Frees,Reserved}) ->
-  {reply,Reserved,State};
 
-handle_call({is_used,Number},_From,State={CurrentHighest,Frees,Reserved}) ->
-  Reply=not lists:member(Number,Frees) 
+handle_call({list,Server},_From,State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {reply,list_(S),State};
+
+
+handle_call({is_used,Number,Server},_From,State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {reply,is_used_(Number,S),State};
+
+
+
+handle_call({is_numbered,Name,Server},_From,State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {reply,is_numbered_(Name,S),State};
+
+
+
+handle_call({is_named,Number,Server},_From,State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {reply,is_named_(Number,S),State};
+
+
+%-- modifying calls/casts --
+
+handle_call({get,Server},_From,State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {Reply,NewS}=get__(S),
+  {reply,Reply,gb_trees:enter(Server,NewS,State)}.
+
+
+
+handle_cast({rename,OldName,NewName,Server},State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {noreply,gb_trees:enter(Server,rename__(OldName,NewName,S),State)};
+
+
+handle_cast({reset,N,Server},State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {noreply,gb_trees:enter(Server,reset__(N,S),State)};
+
+handle_cast({register,Name,Number,Server},State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {noreply,gb_trees:enter(Server,register__(Name,Number,S),State)};
+
+handle_cast({return,NewFree,Server},State) ->
+  {value,S}=gb_trees:lookup(Server,State),
+  {noreply,gb_trees:enter(Server,return__(NewFree,S),State)};
+
+
+handle_cast({init,N,Server},State) ->
+  case gb_trees:lookup(Server,State) of
+    {value,_} -> {noreply,State};
+    none -> {noreply,gb_trees:enter(Server,init__(N),State)}
+  end.
+
+%-- internal functions --
+
+count_({CurrHigh,Frees,Reserved}) ->
+  CurrHigh-length(Frees)+length(Reserved)-1.
+
+
+list_({_,_,Reserved}) ->
+  Reserved.
+
+is_used_(Number,{CurrentHighest,Frees,Reserved})->
+  not lists:member(Number,Frees) 
     orelse not lists:keymember(Number,2,Reserved)
-    orelse Number >= CurrentHighest,
-  {reply,Reply,State};
+    orelse Number >= CurrentHighest.
 
-
-handle_call({is_numbered,Name},_From,State={_CurrHigh,_Frees,Reserved}) ->
-  Reply=
+is_numbered_(Name,{_,_,Reserved}) ->
     case lists:keyfind(Name,1,Reserved) of
       false -> false;
       {Name,Number} -> Number
-    end,
-  {reply,Reply,State};
+    end.
 
-handle_call({is_named,Number},_From,State={_CurrHigh,_Frees,Reserved}) ->
-  Reply=
+is_named_(Number,{_,_,Reserved}) ->
     case lists:keyfind(Number,2,Reserved) of
       false -> false;
       {Name,Number} -> Name
-    end,
-  {reply,Reply,State};
+    end.
 
-handle_call(get,_From,{CurrentHighest,[],_Reserved}) ->
-  {reply, CurrentHighest,{CurrentHighest+1,[],_Reserved}};
+get__({CurrentHighest,[],_Reserved}) ->
+  {CurrentHighest,{CurrentHighest+1,[],_Reserved}};
 
-handle_call(get,_From,{CurrentHighest,[Free|Frees],_Reserved}) ->
-  {reply, Free, {CurrentHighest,Frees,_Reserved}}.
+get__({CurrentHighest,[Free|Frees],_Reserved}) ->
+  {Free, {CurrentHighest,Frees,_Reserved}}.
 
-handle_cast({rename,OldName,NewName},Status={CurrentHighest,Frees,Reserved}) ->
+rename__(OldName,NewName,{CurrentHighest,Frees,Reserved}=Status) ->
   case lists:keytake(OldName,1,Reserved) of
     {value,{OldName,OldIno},NewReserved} ->
       ?DEBL("   ~p found. New list ~p.",[OldName,NewReserved]),
-      {noreply,{CurrentHighest,Frees,[{NewName,OldIno}|NewReserved]}};
+      {CurrentHighest,Frees,[{NewName,OldIno}|NewReserved]};
     false ->
       ?DEBL("   ~p not bound! Not binding ~p.",[OldName,NewName]),
-      {noreply,Status}
-  end;
+      Status
+  end.
 
-handle_cast({reset,N},_) ->
-  {noreply,{N,[],[]}};
+reset__(N,_) ->
+  {N,[],[]}.
 
-handle_cast({register,Name,Number},{CurrentHighest,Frees,Reserved}) ->
-  {noreply,{CurrentHighest,Frees,[{Name,Number}|Reserved]}};
+init__(N) ->
+  {N,[],[]}.
 
-handle_cast({return,NewFree},{CurrentHighest,Frees,Reserved}) ->
+register__(Name,Number,{CurrentHighest,Frees,Reserved}) ->
+  {CurrentHighest,Frees,[{Name,Number}|Reserved]}.
+
+return__(NewFree, {CurrentHighest,Frees,Reserved}) ->
   NewReserved=lists:keydelete(NewFree,2,Reserved),
   {noreply,{CurrentHighest,[NewFree|Frees],NewReserved}}.
 

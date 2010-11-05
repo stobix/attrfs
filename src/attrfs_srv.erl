@@ -105,7 +105,10 @@
 %%%=========================================================================
 
 -export([keymergeunique/2]).
--export([dump_entries/1,dump_inodes/0,dump_inode_entries/0]).
+-export([dump_entries/1,
+         dump_inodes/0,
+         dump_finodes/0,
+         dump_inode_entries/0]).
 %-export([remove_from_start/2]).
 -export([make_unduplicate_tree/1]).
 
@@ -225,10 +228,11 @@ init({MirrorDir,DB}) ->
   ets:new(open_files,[named_table,set,public]),
   tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
   ?DEB1("   created inode and key trees"),
-  inode:reset(),
-  RootIno=inode:get(root),
-  RealIno=inode:get(?REAL_FOLDR),
-  AttribIno=inode:get(?ATTR_FOLDR),
+  inode:initiate(ino), % the inode table
+  inode:initiate(fino), % the open files "inode" table
+  RootIno=inode:get(root,ino),
+  RealIno=inode:get(?REAL_FOLDR,ino),
+  AttribIno=inode:get(?ATTR_FOLDR,ino),
   ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   RootEntry=
@@ -240,7 +244,7 @@ init({MirrorDir,DB}) ->
       stat=
         #stat{
           st_mode=8#755 bor ?S_IFDIR,
-          st_ino=inode:get(root)
+          st_ino=inode:get(root,ino)
         },
         ext_info=[],
         ext_io=ext_info_to_ext_io([])
@@ -314,7 +318,7 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB2("|  ParentIno: ~p",ParentInode),
   ?DEB2("|  Name: ~p",Name),
   ?DEB2("|  FI: ~p",Fuse_File_Info),
-  Reply=case inode:is_numbered(binary_to_list(Name)) of
+  Reply=case inode:is_numbered(binary_to_list(Name),ino) of
     false -> 
       ?DEB1("No real file with that name, not supported."),
       #fuse_reply_err{err=enotsup};
@@ -361,7 +365,7 @@ flush(_Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
-  ?DEBL(">forget inode: ~p ctx: ~p ",[Inode,_Ctx]),
+  ?DEBL(">forget inode: ~p",[Inode]),
   forget_open_file(Inode),
   {#fuse_reply_none{},State}.
 
@@ -525,7 +529,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     case tree_srv:lookup(ParentInode,inodes) of
       none -> #fuse_reply_err{err=enoent}; 
       {value,Parent} ->
-        case tree_srv:lookup(inode:is_numbered(Name),inodes) of
+        case tree_srv:lookup(inode:is_numbered(Name,ino),inodes) of
           none ->
             ParentName=Parent#inode_entry.name,
             ParentType=Parent#inode_entry.type,
@@ -567,25 +571,20 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
         ?DEBL("   External file path: ~p",[Path]),
-%        set_open_file({Ctx,Inode},times(4096,Path)),
-        set_open_file({Ctx,Inode},Path),
+            case file:open(Path,[read,binary]) of
 %            case file:open(Path,[read,raw]) of
-%                {ok,IoDevice} ->
-%                    set_open_file({Ctx,Inode},#open_external_file{io_device=IoDevice}),
-%                    #fuse_reply_open{fuse_file_info=Fuse_File_Info};
-%                {error,Error} ->
-%                    #fuse_reply_err{err=Error}
-%            end;
-        #fuse_reply_open{fuse_file_info=Fuse_File_Info};
+                {ok,IoDevice} ->
+                    MyFino=inode:get(fino),
+                    set_open_file({MyFino,Inode},#open_external_file{io_device=IoDevice,path=Path}),
+                    #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
+                {error,Error} ->
+                    #fuse_reply_err{err=Error}
+            end;
+%        #fuse_reply_open{fuse_file_info=Fuse_File_Info};
       _ ->
         #fuse_reply_err{err=enotsup}
     end,
   {Reply,State}.
-
-times(0,_string) ->
-  [];
-times(N,String) ->
-  String++times(N-1,String).
 
 %%--------------------------------------------------------------------------
 %% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
@@ -604,8 +603,9 @@ opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io
   ?DEB2("  Getting inode entries for ~p",Inode),
   ?DEB1("  Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
-  set_open_file({Ctx,Inode},direntries(Inode)),
-  {#fuse_reply_open{ fuse_file_info = FI }, State}.
+  MyFIno=inode:get(fino),
+  set_open_file({MyFIno,Inode},direntries(Inode)),
+  {#fuse_reply_open{ fuse_file_info = FI#fuse_file_info{fh=MyFIno} }, State}.
 
 %%--------------------------------------------------------------------------
 %% Read Size bytes starting at offset Offset. The file descriptor and other flags are available in Fi. If noreply is used, eventually fuserlsrv:reply/2 should be called with Cont as first argument and the second argument of type read_async_reply ().
@@ -613,13 +613,13 @@ opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io
 %% To read an internal file that has an external counterpart, open the external file and forward the contents to the reader.
 %% To read other internal files, I need to output the Right Kind Of Data somehow. A project to do later.
 %%--------------------------------------------------------------------------
-read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
+read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">read"),
   ?DEB2("|  Ctx:~p",Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
   ?DEB2("|  Size: ~p ",Size),
   ?DEB2("|  Offset: ~p",Offset),
-  ?DEB2("|  FI: ~p", _Fuse_File_Info),
+  ?DEB2("|  FI: ~p", Fuse_File_Info),
 %% XXX: THIS DOES NOT WORK, EVENTHOUGH I FOLLOW THE EXAMPLE FILE SYSTEM AND SEND EXACTLY THE SAME THING!
 %    {value,File}=lookup_open_file({Ctx,Inode}),
 %    IoDevice=File#open_external_file.io_device,
@@ -629,8 +629,19 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
 %        {ok,Data} ->
 %            #fuse_reply_buf{buf=Data,size=Size};
 %    Info="hej\n\nhej\n",
-    {value,Info}=lookup_open_file({Ctx,Inode}),
-    Reply=make_read_reply(Info,Offset,Size),
+    #fuse_file_info{fh=FIno}=Fuse_File_Info,
+    {value,File}=lookup_open_file(FIno),
+    #open_external_file{io_device=IoDevice}=File,
+    Reply=case file:pread(IoDevice,Offset,Size) of
+      {ok, Data} ->
+        #fuse_reply_buf{ buf = Data, size=erlang:size(Data) };
+      eof ->
+        #fuse_reply_err{ err=enodata };
+      _E ->
+        #fuse_reply_err{ err=eio }
+    end,
+
+%    Reply=make_read_reply(Info,Offset,Size),
 %    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
 %        eof ->
 %            #fuse_reply_err{err=eof};
@@ -640,20 +651,46 @@ read(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
     {Reply,State}.
 
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+make_read_reply(Info,Offset,Size) ->
+  %% This section I stole from fuserlprocsrv.erl. 
+  %% It works there, why doesn't it work here??
+  IoList = io_lib:format("~p.~n",[ Info ]),
+  Len = erlang:iolist_size (IoList),
+  if
+    Offset < Len ->
+      if
+        Offset + Size > Len ->
+          Take = Len - Offset,
+          <<_:Offset/binary, Data:Take/binary, _/binary>> = 
+            erlang:iolist_to_binary (IoList);
+        true ->
+          <<_:Offset/binary, Data:Size/binary, _/binary>> = 
+            erlang:iolist_to_binary (IoList)
+      end;
+    true ->
+      Data = <<>>
+  end,
+  ErlSize=erlang:size (Data),
+  ?DEBL("   replying with data: ~p + size ~p",[Data,ErlSize]),
+  #fuse_reply_buf{ buf=Data,size=ErlSize}.
+  %% end of stolen code.
 
 
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-readdir(Ctx,Inode,Size,Offset,_Fuse_File_Info,_Continuation,State) ->
+readdir(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">readdir"),
   ?DEB2("|  Ctx:~p",Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
   ?DEB2("|  Offset:~p",Offset),
-  ?DEB2("|  FI: ~p",_Fuse_File_Info),
+  ?DEB2("|  FI: ~p",Fuse_File_Info),
+  #fuse_file_info{fh=FIno}=Fuse_File_Info,
   Reply=
-    case lookup_open_file({Ctx,Inode}) of 
+    case lookup_open_file(FIno) of 
       {value, OpenFile} ->
         DirEntryList = 
           case Offset<length(OpenFile) of
@@ -694,6 +731,8 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
 %%--------------------------------------------------------------------------
 release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
+  #fuse_file_info{fh=FIno}=Fuse_File_Info,
+  remove_open_file(FIno),
   ?DEB1(">release"),
   ?DEB2("|  Ctx:~p",Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
@@ -705,12 +744,13 @@ release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 %%--------------------------------------------------------------------------
-releasedir(Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
+releasedir(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">releasedir"),
   ?DEB2("|  Ctx:~p",Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
-  ?DEB2("|  FI: ~p",_Fuse_File_Info),
-  remove_open_file({Ctx,Inode}),
+  ?DEB2("|  FI: ~p",Fuse_File_Info),
+  #fuse_file_info{fh=FIno}=Fuse_File_Info,
+  remove_open_file(FIno),
   {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -796,7 +836,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
       #attribute_dir{} ->
         Name=binary_to_list(BName),
         remove_child_from_parent(Name,PName),
-        inode:release(inode:get(Name)),
+        inode:release(inode:get(Name,ino),ino),
         ok;
       internal_dir ->
         case PName of
@@ -804,7 +844,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
             Name=binary_to_list(BName),
             ?DEBL("   Removing attribute key folder ~p",[Name]),
             remove_child_from_parent(Name,PName),
-            inode:release(inode:get(Name)),
+            inode:release(inode:get(Name,ino),ino),
             ok;
           _ ->
             enotsup
@@ -957,8 +997,8 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
         f_bfree=314159265,
         f_bavail=271828182,
         f_files=1000000000000000, % at least!
-        f_ffree=1000000000000000-inode:count_occupied(), % at least!
-        f_favail=1000000000000000-inode:count_occupied(), % at least!
+        f_ffree=1000000000000000-inode:count_occupied(ino), % at least!
+        f_favail=1000000000000000-inode:count_occupied(ino), % at least!
 %            f_fsid=0, % how to get this right?
 %            f_flag=0, % Hm...
         f_namemax=10000 % Or some other arbitary high value.
@@ -1046,31 +1086,6 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%% Callback function internals
 %%%=========================================================================
 
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_read_reply(Info,Offset,Size) ->
-  %% This section I stole from fuserlprocsrv.erl. 
-  %% It works there, why doesn't it work here??
-  IoList = io_lib:format("~p.~n",[ Info ]),
-  Len = erlang:iolist_size (IoList),
-  if
-    Offset < Len ->
-      if
-        Offset + Size > Len ->
-          Take = Len - Offset,
-          <<_:Offset/binary, Data:Take/binary, _/binary>> = 
-            erlang:iolist_to_binary (IoList);
-        true ->
-          <<_:Offset/binary, Data:Size/binary, _/binary>> = 
-            erlang:iolist_to_binary (IoList)
-      end;
-    true ->
-      Data = <<>>
-  end,
-  ErlSize=erlang:size (Data),
-  ?DEBL("   replying with data: ~p + size ~p",[Data,ErlSize]),
-  #fuse_reply_buf{ buf=Data,size=ErlSize}.
-  %% end of stolen code.
 
 
 %%--------------------------------------------------------------------------
@@ -1131,7 +1146,7 @@ make_attr_child_dir(_Ctx,_ParentInode,value,_ValueParentName,_Name,_Mode) ->
 make_attr_child_dir(Ctx,ParentInode,key,Key,Name,Mode) ->
   ?DEB1("   creating an attribute value dir"),
   % create value directory here.
-  MyInode=inode:get({Key,Name}),
+  MyInode=inode:get({Key,Name},ino),
   Stat=make_general_dir(Ctx,ParentInode,MyInode,{Key,Name},Name,Mode,#attribute_dir{atype=value}),
   ?DEB1("   returning new dir"),
   #fuse_reply_entry{
@@ -1156,7 +1171,7 @@ make_internal_child_dir(_Ctx,_ParentInode,?REAL_FOLDR,_Name,_Mode) ->
 make_internal_child_dir(Ctx,ParentInode,?ATTR_FOLDR,Name,Mode) ->
   % This is where I add an attribute key folder.
   ?DEB1("   creating an attribute key dir"),
-  MyInode=inode:get(Name),
+  MyInode=inode:get(Name,ino),
   Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Name,Mode,#attribute_dir{atype=key}),
   ?DEB1("   returning new dir"),
   tree_srv:enter(Name,MyInode,keys),
@@ -1222,7 +1237,7 @@ make_rename_reply(#external_dir{},_OldAttribName,_OldAttribEntry,NewAttribIno,Fi
   case NewAttribEntry#inode_entry.type of
     #attribute_dir{atype=value} ->
       ?DEB1("   new parent is a value dir"),
-      FileIno=inode:is_numbered(File),
+      FileIno=inode:is_numbered(File,ino),
       {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
       case FileEntry#inode_entry.type of
         %external dir, attribute dir, external file
@@ -1313,7 +1328,7 @@ make_rename_reply(internal_dir,?ATTR_FOLDR,_OldAttribEntry,NewAttribIno,File,New
     internal_dir ->
       case NewAttribEntry#inode_entry.name of
         ?ATTR_FOLDR ->
-          FileIno=inode:is_numbered(File),
+          FileIno=inode:is_numbered(File,ino),
           {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
           case FileEntry#inode_entry.type of
             #attribute_dir{} ->
@@ -1342,7 +1357,7 @@ make_rename_reply(_DirType,_OldAttribName,_OldAttribEntry,_NewAttribIno,_File,_N
 make_rename_file_reply(NewAttribIno,FileInode,FileEntry) ->
   ?DEB1("   copying file"),
   Path=(FileEntry#inode_entry.type)#external_file.path,
-  Attribute=inode:is_named(NewAttribIno),
+  Attribute=inode:is_named(NewAttribIno,ino),
   case Attribute of
     {_Key,_Value} ->
       add_new_attribute(Path,FileInode,FileEntry,Attribute),
@@ -1371,14 +1386,14 @@ make_rename_value_to_value_dir_reply(NewKeyEntry,ValueIno,OldValueEntry,NewValue
     OldValueEntry#inode_entry.children
   ),
   ?DEBL("    removing ~p from the ~p directory", [OldValueName,OldKeyName]),
-  KeyIno=inode:is_numbered(OldKeyName),
+  KeyIno=inode:is_numbered(OldKeyName,ino),
   remove_empty_dir(KeyIno,OldValueName),
   ?DEBL("    adding ~p to ~p directory", [NewValueName,NewKeyName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
   ?DEB2("    adding ~p to inode list",NewAttribName),
   append_child({NewValueName,ValueIno},KeyIno),
   ?DEB1("    moving inode number"),
-  inode:rename(OldAttribName,NewAttribName),
+  inode:rename(OldAttribName,NewAttribName,ino),
   ok.
 
 %%--------------------------------------------------------------------------
@@ -1398,13 +1413,13 @@ make_rename_key_to_key_dir_reply(KeyIno,OldKeyEntry,NewKeyName) ->
     Children
   ),
   ?DEB2("    removing ~p from attribute directory", OldKeyName),
-  AttrsIno=inode:is_numbered(?ATTR_FOLDR),
+  AttrsIno=inode:is_numbered(?ATTR_FOLDR,ino),
   remove_empty_dir(AttrsIno,OldKeyName),
   ?DEB2("    adding ~p to inode tree and attribute directory", NewKeyName),
   tree_srv:enter(KeyIno,NewKeyEntry,inodes),
   append_child({NewKeyName,KeyIno},AttrsIno),
   ?DEB1("    moving inode number"),
-  inode:rename(OldKeyName,NewKeyName),
+  inode:rename(OldKeyName,NewKeyName,ino),
   ok.
 
 %%%=========================================================================
@@ -1419,7 +1434,7 @@ insert_entry(ParentInode,ChildEntry) ->
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,
-  ChildInode=inode:get(InoName),
+  ChildInode=inode:get(InoName,ino),
   ChildName=
     case ChildEntry#inode_entry.type of
       #attribute_dir{atype=value} ->
@@ -1545,7 +1560,7 @@ generate_dir_link_children(Ino,Name) ->
   %XXX: When looking for ONE entry, generating ALL seems stupid.
   ConvertedChildren=lists:map(
     fun({MyName,Inode}) ->
-      MyInode=inode:get({Name,MyName}),
+      MyInode=inode:get({Name,MyName},ino),
       case tree_srv:lookup(MyInode,inodes) of
         {value,_MyEntry} ->
           % For now, I return the children of the linked to entry, if already generated.
@@ -1584,7 +1599,7 @@ filter_children(Ino,{{{_KeyVal,_Connective}=Logic,_Parent},_Me}) ->
 
 
 filter_children({{Key,_Val}=KeyValPair,Connective},LastChildrenUnfiltered) when (Connective == "AND") or (Connective == "OR") or (Connective == "BUTNOT") ->
-  case inode:is_numbered(KeyValPair) of
+  case inode:is_numbered(KeyValPair,ino) of
     false -> false;
     Ino -> 
       {value,PrevChildrenUnfiltered} = lookup_children(Ino),
@@ -1600,7 +1615,7 @@ filter_children(_Grandparent,LastChildrenUnfiltered) ->
 generate_logic_attribute_dir_children(LogicName) ->
   % get entry, change inodes and names, return.
   ?DEB1("     getting attributes entry "),
-  PIno=inode:get(?ATTR_FOLDR),
+  PIno=inode:get(?ATTR_FOLDR,ino),
   {value,PEntry} = tree_srv:lookup(PIno,inodes),
   ?DEB1("     transforming children"),
   lists:map(
@@ -1614,7 +1629,7 @@ generate_logic_attribute_dir_children(LogicName) ->
             links=[],
             generated=false,
             type=#dir_link{link=Inode}},
-          LinkIno=inode:get(LinkEntry#inode_entry.name),
+          LinkIno=inode:get(LinkEntry#inode_entry.name,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
           {Name,LinkIno};
         #external_file{} ->
@@ -1634,13 +1649,13 @@ generate_logic_dirs({_Grandparent,_Parent}=Predecessor) ->
   ].
 
 -define(LDIR(X) , {Predecessor,X}).
--define(LINO(X) , inode:get(?LDIR(X))).
+-define(LINO(X) , inode:get(?LDIR(X),ino)).
 -define(LCLD(X) , {X,?LINO(X)}).
 
 generate_logic_dir({GrandParent,_Parent}=Predecessor,X) ->
   ?DEB2("     generating lodic dir \"~p\"",X),
   ?DEB1("      getting entry"),
-  {value,GPEntry}=tree_srv:lookup(inode:get(GrandParent),inodes),
+  {value,GPEntry}=tree_srv:lookup(inode:get(GrandParent,ino),inodes),
   ?DEB1("      generating new entry"),
   Entry=GPEntry#inode_entry{dir_name=X,name=?LDIR(X),type=logic_dir,children=[]},
   ?DEB1("      saving new entry"),
@@ -1651,8 +1666,8 @@ generate_logic_dir({GrandParent,_Parent}=Predecessor,X) ->
 %% lookup_open_file gets the open file corresponding to the inode provided.
 %% returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
-lookup_open_file({_Ctx,_Inode}=Token) ->
-  case ets:match(open_files,{Token,'$1'}) of
+lookup_open_file(FIno) ->
+  case ets:match(open_files,{{FIno,'_'},'$1'}) of
     "" -> none;
     [[File]] -> {value,File}
   end.
@@ -1661,14 +1676,14 @@ lookup_open_file({_Ctx,_Inode}=Token) ->
 %% set_open_file returns a state with the open file for the provided inode
 %% changed to the FileContents provided.
 %%--------------------------------------------------------------------------
-set_open_file({_Ctx,_Inode}=Token,FileContents) ->
+set_open_file({_FIno,_Inode}=Token,FileContents) ->
   ets:insert(open_files,{Token,FileContents}).
 
 %%--------------------------------------------------------------------------
 %% remove_open_file removes the file from the current context. Used for closedir.
 %%--------------------------------------------------------------------------
-remove_open_file({_Ctx,_Inode}=Token) ->
-  ets:match_delete(open_files,{Token,'_'}).
+remove_open_file(FIno) ->
+  ets:match_delete(open_files,{{FIno,'_'},'_'}).
 
 %%--------------------------------------------------------------------------
 %% forget_open_file removes an open file from the table, for all Ctx-es.
@@ -1722,11 +1737,11 @@ remove_old_attribute_value(Path,Inode,{_Key,_Value}=Attribute) ->
   % File attribute handling
   rehash_ext_from_db(Inode,Path),
   % Attribute dir handling
-  remove_child_from_parent(inode:is_named(Inode),Attribute).
+  remove_child_from_parent(inode:is_named(Inode,ino),Attribute).
 
 
 remove_child_from_parent(ChildName,ParentName) ->
-  Inode=inode:get(ParentName),
+  Inode=inode:get(ParentName,ino),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   Children=Entry#inode_entry.children,
   NewChildren=lists:keydelete(ChildName,1,Children),
@@ -1757,7 +1772,7 @@ remove_old_attribute_key(Path,Inode,AName) ->
   % Updating ext io using the filtered ext info
   rehash_ext_from_db(Inode,Path),
   % removing file child from attribute folder entry
-  FName=inode:is_named(Inode),
+  FName=inode:is_named(Inode,ino),
   lists:foreach(
     fun(AValue) -> 
       remove_child_from_parent(FName,{AName,AValue})
@@ -1919,7 +1934,7 @@ make_inode_list({Path,Name}) ->
             ?DEB2("     directory entries:~p",ChildNames),
             NameInodePairs=
               lists:map(
-                fun(ChildName) -> {ChildName,inode:get(ChildName)} end, 
+                fun(ChildName) -> {ChildName,inode:get(ChildName,ino)} end, 
                 ChildNames
               ),
             {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path}};
@@ -1943,7 +1958,7 @@ make_inode_list({Path,Name}) ->
       MyStat=
         statify_file_info(
           FileInfo#file_info{
-            inode=inode:get(Name),
+            inode=inode:get(Name,ino),
             atime=EpochAtime,
             ctime=EpochCtime,
             mtime=EpochMtime
@@ -1958,7 +1973,7 @@ make_inode_list({Path,Name}) ->
           ext_info=ExtInfo,
           ext_io=ExtIo
         },
-      tree_srv:enter(inode:get(Name),InodeEntry,inodes),
+      tree_srv:enter(inode:get(Name,ino),InodeEntry,inodes),
       ?DEB2("    looking up ext folders for ~p",Name),
       ExtFolders=lists:flatten(dets:match(?ATTR_DB,{Path,'$1'})),
       ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
@@ -1980,8 +1995,8 @@ append_attribute({Key,Val},Name,Stat) ->
   append_value_dir(Key,Val,Name,Stat),
   ?DEBL("    appending ~p/~p",[Key,Val]),
   append_key_dir(Key,Val,Stat),
-  tree_srv:enter(Key,inode:get(Key),keys),
-  AttributesFolderIno=inode:get(?ATTR_FOLDR),
+  tree_srv:enter(Key,inode:get(Key,ino),keys),
+  AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
   ?DEB1("   getting attribute folder inode entry"),
   {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
   ?DEB1("   getting attribute folder children"),
@@ -1994,8 +2009,8 @@ append_attribute({Key,Val},Name,Stat) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 append_key_dir(KeyDir,ValDir,Stat) ->
-  ChildIno=inode:get({KeyDir,ValDir}),
-  MyInode=inode:get(KeyDir),
+  ChildIno=inode:get({KeyDir,ValDir},ino),
+  MyInode=inode:get(KeyDir,ino),
   NewEntry=
     case tree_srv:lookup(MyInode,inodes) of
       % No entry found, creating new attribute entry.
@@ -2021,8 +2036,8 @@ append_key_dir(KeyDir,ValDir,Stat) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 append_value_dir(Key,Value,ChildName,Stat) ->
-  ChildIno=inode:get(ChildName),
-  MyInode=inode:get({Key,Value}),
+  ChildIno=inode:get(ChildName,ino),
+  MyInode=inode:get({Key,Value},ino),
   NewEntry=
     case tree_srv:lookup(MyInode,inodes) of
       % No entry found, creating new attribute entry.
@@ -2180,5 +2195,9 @@ dump_entries(Table) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_inodes() ->
-  inode:list_bound().
+  inode:list_bound(ino).
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+dump_finodes() ->
+  inode:list_bound(fino).

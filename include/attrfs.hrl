@@ -150,7 +150,8 @@
         
 
 -record(open_external_file,
-        {io_device::file:io_device()
+        {io_device::file:io_device(),
+         path::string()
         }).
 
 
