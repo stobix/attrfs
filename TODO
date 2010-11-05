@@ -10,9 +10,17 @@ include support for
     ☐ and others? to change attributes.
 
 
+☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
+
+☐ Include support for creating files! Nautilus wants to have a .Trash and a .thumbnails directory...    
+ ☐  files
+ ☐  folders
     
-    
-☐ include support for reading files!
+☐ Include support for writing to files
+ ☐  mirrored
+ ☐  created
+
+☑ include support for reading files!
 
 ☐ make closedir do something useful.
 
@@ -25,7 +33,7 @@ include support for
   Setting multi-valued arguments now fixed.
   Getting multi-valued arguments fixed.
 
-☐ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
+☑ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
 
 ☐ Include support for "deep attributes":
     % attr -s "Foo/Bar" -V "Etaoin" Baz.file
@@ -90,6 +98,8 @@ include support for
 ☐ make the dir functions context sensitive.
     different users shown different context, different users have different rights...
 ☐ make all applicable functions context sensitive.
+☐ have different attribute folders for different users? different groups? different users or group according to mode?
+☐ Use CTX as an index for accessing attributes?
 
 ☐ check if the OS tries to copy a file unto itself (from a real dir to an attribute dir). 
   This copying is to be "ignored", that is, regarded as a rename operation, which is the same as hard linking, also for dirs. Touching or movin the file should be regarded as the same as copying in this FS.
@@ -103,13 +113,7 @@ include support for
   * show duplicate files as a special type of folder?
 
 
-☐ Apparently, linux calls open before calling setattr. What to do with open?
+☑ Apparently, linux calls open before calling setattr. What to do with open? Assign fh.
 
-☐ have different attribute folders for different users? different groups? different users or group according to mode?
 
-☐ Use CTX as an index for accessing attributes?
-
-To do later on:
-
-☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
 

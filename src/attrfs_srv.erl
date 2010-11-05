@@ -23,11 +23,11 @@
 %%%=========================================================================
 %%%                                  META
 %%%=========================================================================
-%%% @author Joel Ericson <kasettbok@gmail.com>
+%%% @author Joel Ericson <joel.mikael.ericson@gmail.com>
 %%%
 %%% @copyright Copylefted using some GNU license or other.
 %%%
-%%% @version Almost working, yo...
+%%% @version 0.9
 %%%-------------------------------------------------------------------------
 %%% @doc This is the attrfs fuserl server.
 %%% Attrfs is a file system that is used to sort files into several virtual
@@ -118,11 +118,6 @@
 %%%=========================================================================
 
 -export([
-    andfilter/2,
-    orfilter/2
-        ]).
-
--export([
     lookup_open_file/1,
     set_open_file/2,
     remove_open_file/1,
@@ -134,7 +129,7 @@
 %%% Includes and behaviour
 %%%=========================================================================
 
-%-behaviour(fuserl).
+-behaviour(fuserl).
 
 -include_lib("fuserl/include/fuserl.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -463,10 +458,14 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
   ?DEBL("   got attributes and size (~p,~p)",[ExtAttribs,ExtSize]),
   Reply=
     case Size == 0 of 
-      true -> ?DEB1("   they want to know our size."),#fuse_reply_xattr{count=ExtSize};
+      true -> 
+        ?DEB1("   they want to know our size."),
+        #fuse_reply_xattr{count=ExtSize};
       false -> 
         case Size < ExtSize of
-          true -> ?DEBL("   they are using a too small buffer; ~p < ~p ",[Size,ExtSize]),#fuse_reply_err{err=erange};
+          true -> 
+            ?DEBL("   they are using a too small buffer; ~p < ~p ",[Size,ExtSize]),
+            #fuse_reply_err{err=erange};
           false -> ?DEB1("   all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
         end
     end,
@@ -620,34 +619,23 @@ read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB2("|  Size: ~p ",Size),
   ?DEB2("|  Offset: ~p",Offset),
   ?DEB2("|  FI: ~p", Fuse_File_Info),
-%% XXX: THIS DOES NOT WORK, EVENTHOUGH I FOLLOW THE EXAMPLE FILE SYSTEM AND SEND EXACTLY THE SAME THING!
-%    {value,File}=lookup_open_file({Ctx,Inode}),
-%    IoDevice=File#open_external_file.io_device,
-%    Reply=
-%            #fuse_reply_err{err=eof},
-%    =case file:pread(IoDevice,Offset,Size) of
-%        {ok,Data} ->
-%            #fuse_reply_buf{buf=Data,size=Size};
-%    Info="hej\n\nhej\n",
     #fuse_file_info{fh=FIno}=Fuse_File_Info,
+    ?DEB2("   looking up fino ~p",FIno),
     {value,File}=lookup_open_file(FIno),
+    ?DEB1("   extracting io_device"),
     #open_external_file{io_device=IoDevice}=File,
+    ?DEB1("   got file and iodevice, reading..."),
     Reply=case file:pread(IoDevice,Offset,Size) of
       {ok, Data} ->
+        ?DEB2("   data ~p read, returning",Data),
         #fuse_reply_buf{ buf = Data, size=erlang:size(Data) };
       eof ->
+        ?DEB1("   eof reached, returning nodata"),
         #fuse_reply_err{ err=enodata };
       _E ->
+        ?DEB2("   other error, returning ~p",_E),
         #fuse_reply_err{ err=eio }
     end,
-
-%    Reply=make_read_reply(Info,Offset,Size),
-%    #fuse_reply_buf{buf=list_to_binary("hej\0"),size=Size},
-%        eof ->
-%            #fuse_reply_err{err=eof};
-%        {error=Error} ->
-%            #fuse_reply_err{err=Error}
-%    end,
     {Reply,State}.
 
 
@@ -695,15 +683,15 @@ readdir(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
         DirEntryList = 
           case Offset<length(OpenFile) of
             true ->
-              take_while 
-                (fun (E, { Total, Max }) -> 
-                  Cur = fuserlsrv:dirent_size (E),
-                  if 
-                    Total + Cur =< Max ->
-                      { continue, { Total + Cur, Max } };
-                    true ->
-                      stop
-                  end
+              take_while( 
+                 fun (E, { Total, Max }) -> 
+                   Cur = fuserlsrv:dirent_size (E),
+                   if 
+                     Total + Cur =< Max ->
+                       { continue, { Total + Cur, Max } };
+                     true ->
+                       stop
+                   end
                  end,
                    { 2, Size },
                    lists:nthtail(Offset,OpenFile) 
@@ -711,6 +699,7 @@ readdir(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
             false ->
                 []
         end,
+        ?DEB2("   returning ~p",DirEntryList),
         #fuse_reply_direntrylist{ direntrylist = DirEntryList };
     none ->
         #fuse_reply_err{err=enoent} % XXX: What should this REALLY return when the file is not open for this user?
@@ -2159,23 +2148,6 @@ has_group_perms(Mode,Mask) ->
 %%--------------------------------------------------------------------------
 has_user_perms(Mode,Mask) ->
   Mode band ?S_IRWXU bsr 6 band Mask/=0.
-
-%% It seems I created these two filters to filter out directly on dets matches. However, since I also will be needing the inode numbers for the children, this at the end of the day seems like a bad approach.
-andfilter(InList,DetsMatch) ->
-  lists:foldr(
-    fun([F],Acc) -> 
-      case dets:match(?ATTR_DB,{F,DetsMatch}) of 
-        "" -> Acc; 
-        _ -> [F|Acc] 
-      end 
-    end, 
-    [], 
-    InList
-  ).
-
-orfilter(InList,DetsMatch) ->
-  InList2 = dets:match(?ATTR_DB,{'$1',DetsMatch}),
-  gb_sets:to_list(gb_sets:union(gb_sets:from_list(InList),gb_sets:from_list(InList2))).
 
 
 %%%=========================================================================
