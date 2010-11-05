@@ -108,20 +108,10 @@
          dump_inodes/0,
          dump_finodes/0,
          dump_inode_entries/0]).
-%-export([attr_tools:remove_from_start/2]).
--export([make_unduplicate_tree/1]).
-
 
 %%%=========================================================================
 %%% temporary exports for testing functionality.
 %%%=========================================================================
-
--export([
-    lookup_open_file/1,
-    set_open_file/2,
-    remove_open_file/1,
-    forget_open_file/1
-        ]).
 
 
 %%%=========================================================================
@@ -220,7 +210,7 @@ init({MirrorDir,DB}) ->
   ?DEB2("   mirroring dir ~p",MirrorDir),
   tree_srv:new(inodes), % contains inode entries
   tree_srv:new(keys), % contains a list of all attribute keys with associated inodes
-  ets:new(open_files,[named_table,set,public]),
+  attr_open:init(),
   tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
   ?DEB1("   created inode and key trees"),
   inode:initiate(ino), % the inode table
@@ -364,7 +354,7 @@ flush(_Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
   ?DEBL(">forget inode: ~p",[Inode]),
-  forget_open_file(Inode),
+  attr_open:forget(Inode),
   {#fuse_reply_none{},State}.
 
 %%--------------------------------------------------------------------------
@@ -577,7 +567,7 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %            case file:open(Path,[read,raw]) of
                 {ok,IoDevice} ->
                     MyFino=inode:get(fino),
-                    set_open_file({MyFino,Inode},#open_external_file{io_device=IoDevice,path=Path}),
+                    attr_open:set(MyFino,Inode,#open_external_file{io_device=IoDevice,path=Path}),
                     #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
                 {error,Error} ->
                     #fuse_reply_err{err=Error}
@@ -606,7 +596,7 @@ opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io
   ?DEB1("  Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
   MyFIno=inode:get(fino),
-  set_open_file({MyFIno,Inode},direntries(Inode)),
+  attr_open:set(MyFIno,Inode,direntries(Inode)),
   {#fuse_reply_open{ fuse_file_info = FI#fuse_file_info{fh=MyFIno} }, State}.
 
 %%--------------------------------------------------------------------------
@@ -624,7 +614,7 @@ read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB2("|  FI: ~p", Fuse_File_Info),
     #fuse_file_info{fh=FIno}=Fuse_File_Info,
     ?DEB2("   looking up fino ~p",FIno),
-    {value,File}=lookup_open_file(FIno),
+    {value,File}=attr_open:lookup(FIno),
     ?DEB1("   extracting io_device"),
     #open_external_file{io_device=IoDevice}=File,
     ?DEB1("   got file and iodevice, reading..."),
@@ -681,7 +671,7 @@ readdir(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB2("|  FI: ~p",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   Reply=
-    case lookup_open_file(FIno) of 
+    case attr_open:lookup(FIno) of 
       {value, OpenFile} ->
         DirEntryList = 
           case Offset<length(OpenFile) of
@@ -724,7 +714,7 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
-  remove_open_file(FIno),
+  attr_open:remove(FIno),
   ?DEB1(">release"),
   ?DEB2("|  Ctx:~p",Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
@@ -742,7 +732,7 @@ releasedir(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB2("|  Inode: ~p ",Inode),
   ?DEB2("|  FI: ~p",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
-  remove_open_file(FIno),
+  attr_open:remove(FIno),
   {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -1655,35 +1645,6 @@ generate_logic_dir({GrandParent,_Parent}=Predecessor,X) ->
   ?LCLD(X).
 
 %%--------------------------------------------------------------------------
-%% lookup_open_file gets the open file corresponding to the inode provided.
-%% returns like gb_trees:lookup
-%%--------------------------------------------------------------------------
-lookup_open_file(FIno) ->
-  case ets:match(open_files,{{FIno,'_'},'$1'}) of
-    "" -> none;
-    [[File]] -> {value,File}
-  end.
-
-%%--------------------------------------------------------------------------
-%% set_open_file returns a state with the open file for the provided inode
-%% changed to the FileContents provided.
-%%--------------------------------------------------------------------------
-set_open_file({_FIno,_Inode}=Token,FileContents) ->
-  ets:insert(open_files,{Token,FileContents}).
-
-%%--------------------------------------------------------------------------
-%% remove_open_file removes the file from the current context. Used for closedir.
-%%--------------------------------------------------------------------------
-remove_open_file(FIno) ->
-  ets:match_delete(open_files,{{FIno,'_'},'_'}).
-
-%%--------------------------------------------------------------------------
-%% forget_open_file removes an open file from the table, for all Ctx-es.
-%%--------------------------------------------------------------------------
-forget_open_file(Inode) ->
-  ets:match_delete(open_files,{{'_',Inode},'_'}).
-
-%%--------------------------------------------------------------------------
 %% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
 %%--------------------------------------------------------------------------
 add_new_attribute(Path,FIno,FEntry,Attr) ->
@@ -1772,57 +1733,14 @@ remove_old_attribute_key(Path,Inode,AName) ->
     Matches
   ).
 
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-dir(Stat) ->
-  NewMode=(Stat#stat.st_mode band 8#777) bor ?STD_DIR_MODE,
-  ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
-  Stat#stat{st_mode=NewMode}.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
   ?DEB2("   generating ext info for ~p",Path),
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
-  merge_duplicates(lists:flatten(ExtInfo0)). % Going from a list of lists of tuples to a list of tuples.
+  attr_tools:merge_duplicates(lists:flatten(ExtInfo0)). % Going from a list of lists of tuples to a list of tuples.
 
-%%--------------------------------------------------------------------------
-%% Takes in a [{"foo","bar},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
-%%  a [{"foo","bar,baz"},{"etaoin","shrdlu"}]
-%%--------------------------------------------------------------------------
-%% Algorithm: enter each tuple into a gb_tree, merging if item exists. Finally convert to list and return.
-%% or enter each tuple into a dict, adding new values as I go along.
-%% or create a tree with my own insertion algorithm.
-
-merge_duplicates(List) ->
-  ?DEB2(" indata: ~p",List),
-  Tree=make_unduplicate_tree(List),
-  gb_trees:to_list(Tree).
-
-%make_duplicate_tree([],Tree) ->
-    %Tree;
-
-%make_duplicate_tree([Item|Items],{Item2,Low,High}) ->
-    %case string 
-
-%make_duplicate_tree([Item|Items]) ->
-    %make_duplicate_tree(Items,{Item,nil,nil}).
-
-make_unduplicate_tree(List) ->
-  make_unduplicate_tree(List,gb_trees:empty()).
-
-make_unduplicate_tree([],Tree) -> Tree;
-
-make_unduplicate_tree([{Key,Value}|Items],Tree) ->
-  Values=
-    case gb_trees:lookup(Key,Tree) of
-      {value,Vals} ->
-        Vals++","++Value;
-      none ->
-        Value
-    end,
-  NewTree=gb_trees:enter(Key,Values,Tree),
-  make_unduplicate_tree(Items,NewTree).
 
 
 %%--------------------------------------------------------------------------
@@ -2012,7 +1930,7 @@ append_key_dir(KeyDir,ValDir,Stat) ->
           name=KeyDir,
           children=[{ValDir,ChildIno}],
           %XXX: Give the user some way of setting a standard 
-          stat=dir(Stat#stat{st_ino=MyInode}), 
+          stat=attr_tools:dir(Stat#stat{st_ino=MyInode}), 
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
         };
@@ -2038,7 +1956,7 @@ append_value_dir(Key,Value,ChildName,Stat) ->
           type=#attribute_dir{atype=value},
           name={Key,Value},
           children=[{ChildName,ChildIno}],
-          stat=dir(Stat#stat{st_ino=MyInode}),
+          stat=attr_tools:dir(Stat#stat{st_ino=MyInode}),
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
         };

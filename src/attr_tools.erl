@@ -6,7 +6,9 @@
 -export([keymergeunique/2,
          remove_from_start/2,
          take_while/3,
-         test_access/3
+         test_access/3,
+         merge_duplicates/1,
+         dir/1
         ]).
 
 %%--------------------------------------------------------------------------
@@ -110,3 +112,39 @@ has_user_perms(Mode,Mask) ->
   Mode band ?S_IRWXU bsr 6 band Mask/=0.
 
 
+%%--------------------------------------------------------------------------
+%% Takes in a [{"foo","bar},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
+%%  a [{"foo","bar,baz"},{"etaoin","shrdlu"}]
+%%--------------------------------------------------------------------------
+%% Algorithm: enter each tuple into a gb_tree, merging if item exists. Finally convert to list and return.
+%% or enter each tuple into a dict, adding new values as I go along.
+%% or create a tree with my own insertion algorithm.
+
+merge_duplicates(List) ->
+  ?DEB2(" indata: ~p",List),
+  Tree=make_unduplicate_tree(List),
+  gb_trees:to_list(Tree).
+
+
+make_unduplicate_tree(List) ->
+  make_unduplicate_tree(List,gb_trees:empty()).
+
+make_unduplicate_tree([],Tree) -> Tree;
+
+make_unduplicate_tree([{Key,Value}|Items],Tree) ->
+  Values=
+    case gb_trees:lookup(Key,Tree) of
+      {value,Vals} ->
+        Vals++","++Value;
+      none ->
+        Value
+    end,
+  NewTree=gb_trees:enter(Key,Values,Tree),
+  make_unduplicate_tree(Items,NewTree).
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+dir(Stat) ->
+  NewMode=(Stat#stat.st_mode band 8#777) bor ?STD_DIR_MODE,
+  ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
+  Stat#stat{st_mode=NewMode}.
