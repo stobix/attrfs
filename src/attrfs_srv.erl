@@ -104,12 +104,11 @@
 %%% debug function exports
 %%%=========================================================================
 
--export([keymergeunique/2]).
 -export([dump_entries/1,
          dump_inodes/0,
          dump_finodes/0,
          dump_inode_entries/0]).
-%-export([remove_from_start/2]).
+%-export([attr_tools:remove_from_start/2]).
 -export([make_unduplicate_tree/1]).
 
 
@@ -215,21 +214,24 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 init({MirrorDir,DB}) ->
+  % initiating databases, servers and so on.
   ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   ?DEB2("   mirroring dir ~p",MirrorDir),
   tree_srv:new(inodes), % contains inode entries
-  tree_srv:new(keys), % contains a list of all keys with associated inodes
+  tree_srv:new(keys), % contains a list of all attribute keys with associated inodes
   ets:new(open_files,[named_table,set,public]),
   tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
   ?DEB1("   created inode and key trees"),
   inode:initiate(ino), % the inode table
   inode:initiate(fino), % the open files "inode" table
+  % getting inodes for base folders
   RootIno=inode:get(root,ino),
   RealIno=inode:get(?REAL_FOLDR,ino),
   AttribIno=inode:get(?ATTR_FOLDR,ino),
   ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
+  % creating base folders.
   RootEntry=
     #inode_entry{
       name=root,
@@ -239,7 +241,7 @@ init({MirrorDir,DB}) ->
       stat=
         #stat{
           st_mode=8#755 bor ?S_IFDIR,
-          st_ino=inode:get(root,ino)
+          st_ino=RootIno
         },
         ext_info=[],
         ext_io=ext_info_to_ext_io([])
@@ -247,11 +249,12 @@ init({MirrorDir,DB}) ->
   ?DEB1("   updating root inode entry"),
   tree_srv:enter(RootIno,RootEntry,inodes),
   ?DEB2("   making inode entries for ~p",MirrorDir),
+
   AttributeEntry=
     #inode_entry{
       name=?ATTR_FOLDR,
       dir_name=?ATTR_FOLDR,
-      children=tree_srv:to_list(keys),
+      children=[],
       type=internal_dir,
       stat=#stat{ 
           % For now I'll set all access here, and limit access on a per-user-basis.
@@ -296,7 +299,7 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
   ?DEB2("|  Ctx: ~p ",Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
   ?DEB2("|  Mask: ~p ",Mask),
-  Reply=test_access(Inode,Mask,Ctx),
+  Reply=attr_tools:test_access(Inode,Mask,Ctx),
   {#fuse_reply_err{err=Reply},State}.
 
 %%--------------------------------------------------------------------------
@@ -405,7 +408,7 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 %%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
-  RawName=remove_from_start(binary_to_list(BName),"user."),
+  RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEBL(">getxattr, name:~p, size:~p, inode:~p",[RawName,Size,Inode]),
   Name=
     case string:str(RawName,"system")==1 of
@@ -683,7 +686,7 @@ readdir(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
         DirEntryList = 
           case Offset<length(OpenFile) of
             true ->
-              take_while( 
+              attr_tools:take_while( 
                  fun (E, { Total, Max }) -> 
                    Cur = fuserlsrv:dirent_size (E),
                    if 
@@ -747,7 +750,7 @@ releasedir(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
-  Name=remove_from_start(binary_to_list(BName),"user."),
+  Name=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEB1(">removexattr"),
   ?DEB2("|  _Ctx:~p",_Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
@@ -958,7 +961,7 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
         lists:foreach(
           fun(Value) -> 
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
-            add_new_attribute(Path,Inode,Entry,{remove_from_start(Key,"user."),Value})
+            add_new_attribute(Path,Inode,Entry,{attr_tools:remove_from_start(Key,"user."),Value})
           end,
           Values),
         #fuse_reply_err{err=ok};
@@ -1458,7 +1461,7 @@ remove_empty_dir(ParentIno,DirName) ->
 append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
   {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
   Children=ParentEntry#inode_entry.children,
-  NewChildren=keymergeunique(NewChild,Children),
+  NewChildren=attr_tools:keymergeunique(NewChild,Children),
   NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
   tree_srv:enter(ParentIno,NewParentEntry,inodes).
 
@@ -1516,7 +1519,7 @@ lookup_children(Inode) ->
             MyChildren = filter_children(GParent,Entry#inode_entry.children),
             ?DEB1("    combining children"),
             % Lets push the logic dirs to the childrens list, removing old logic dirs.
-            MyFinalChildren=lists:foldl(fun(Item,Acc) -> keymergeunique(Item,Acc) end, MyChildren,MyLogicDirs),
+            MyFinalChildren=lists:foldl(fun(Item,Acc) -> attr_tools:keymergeunique(Item,Acc) end, MyChildren,MyLogicDirs),
             ?DEB2("    children: ~p",MyFinalChildren),
             MyFinalChildren;
           #dir_link{link=Ino} ->
@@ -2017,7 +2020,7 @@ append_key_dir(KeyDir,ValDir,Stat) ->
         ?DEBL("   merging ~p into ~p",[{ValDir,ChildIno},OldEntry#inode_entry.children]),
         OldEntry#inode_entry{
           children=
-            keymergeunique({ValDir,ChildIno},OldEntry#inode_entry.children)
+            attr_tools:keymergeunique({ValDir,ChildIno},OldEntry#inode_entry.children)
         }
     end,
   tree_srv:enter(MyInode,NewEntry,inodes).
@@ -2043,112 +2046,11 @@ append_value_dir(Key,Value,ChildName,Stat) ->
         ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
         OldEntry#inode_entry{
           children=
-            keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children)
+            attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children)
         }
     end,
   ?DEB1("  entering new entry into server"),
   tree_srv:enter(MyInode,NewEntry,inodes).
-
-%%--------------------------------------------------------------------------
-%seems like lists:keymerge won't do what I ask it, so I build my own...
-%%--------------------------------------------------------------------------
-keymergeunique(Tuple,TupleList) ->
-  keymerge(Tuple,TupleList,[]).
-
-keymerge(Tuple,[],FilteredList) ->
-  [Tuple|FilteredList];
-
-keymerge(Tuple={Key,_Value},[{Key,_}|TupleList],FilteredList) ->
-  keymerge(Tuple,TupleList,FilteredList);
-
-keymerge(Tuple={_Key,_Value},[OtherTuple|TupleList],FilteredList) ->
-  keymerge(Tuple,TupleList,[OtherTuple|FilteredList]).
-
-%%--------------------------------------------------------------------------
-%% (This one I stole from fuserlproc.)
-%% this take_while runs the function F until it returns stop
-%% Good for taking items from list where the number of list items taken
-%% are dependent on the individual size of each item.
-%%--------------------------------------------------------------------------
-take_while (_, _, []) -> 
-  [];
-take_while (F, Acc, [ H | T ]) ->
-  case F (H, Acc) of
-    { continue, NewAcc } ->
-      [ H | take_while (F, NewAcc, T) ];
-    stop ->
-      []
-  end.
-
-%%--------------------------------------------------------------------------
-%% removes string2 from the beginning of string1, if applicable. Returns what was left of string1
-%%--------------------------------------------------------------------------
-remove_from_start(String1,[]) -> String1;
-remove_from_start([],_String2) -> []; %String2;
-remove_from_start([C1|String1],[C2|String2]) when C1 == C2 ->
-  remove_from_start(String1,String2);
-remove_from_start([C1|String1],[C2|_String2]) when C1 /= C2 ->
-  [C1|String1].
-
-%%--------------------------------------------------------------------------
-%% @spec (boolean(),A,B) -> A|B.
-%% @doc Takes a boolean and redefines the meanings of true and false.
-%% Example: transmogrify(is_foo(X),good,{error,no_foo}) will return either 
-%% good or {error, no_foo}, depending on whether is_foo(X) returns true or 
-%% false.
-%%--------------------------------------------------------------------------
-transmogrify(TrueOrFalse,NewTrue,NewFalse) ->
-  if 
-    TrueOrFalse -> 
-      ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewTrue]),
-      NewTrue;
-    true -> 
-      ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewFalse]),
-      NewFalse
-  end.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-test_access(Inode,Mask,Ctx) ->
-  ?DEB1("   checking access..."),
-  case tree_srv:lookup(Inode,inodes) of
-    {value, Entry} ->
-      % Can I use the mask like this?
-      case Mask of
-        ?F_OK ->
-          ?DEB1("   file existing"),
-          ok;
-        _ -> 
-          transmogrify(has_rwx_access(Entry,Mask,Ctx),ok,eacces)
-      end;
-    none ->
-      ?DEB1("   file does not exist!"),
-      enoent
-  end.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-has_rwx_access(Entry,Mask,Ctx) ->
-  #stat{st_mode=Mode,st_uid=Uid,st_gid=Gid}=Entry#inode_entry.stat,
-  has_other_perms(Mode,Mask)
-    orelse Gid==Ctx#fuse_ctx.gid andalso has_group_perms(Mode,Mask)
-    orelse Uid==Ctx#fuse_ctx.uid andalso has_user_perms(Mode,Mask).
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-has_other_perms(Mode,Mask) ->
-  Mode band ?S_IRWXO band Mask/=0.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-has_group_perms(Mode,Mask) ->
-  Mode band ?S_IRWXG bsr 3 band Mask/=0.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-has_user_perms(Mode,Mask) ->
-  Mode band ?S_IRWXU bsr 6 band Mask/=0.
-
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS
