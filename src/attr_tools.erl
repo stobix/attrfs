@@ -1,5 +1,33 @@
 -module(attr_tools).
 
+%%%=========================================================================
+%%%                                 LICENSE
+%%%=========================================================================
+%%%
+%%%  This program is free software; you can redistribute it and/or modify
+%%%  it under the terms of the GNU General Public License as published by
+%%%  the Free Software Foundation; either version 2 of the License, or
+%%%  (at your option) any later version.
+%%%
+%%%  This program is distributed in the hope that it will be useful,
+%%%  but WITHOUT ANY WARRANTY; without even the implied warranty of
+%%%  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%%%  GNU Library General Public License for more details.
+%%%
+%%%  You should have received a copy of the GNU General Public License
+%%%  along with this program; if not, write to the Free Software
+%%%  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+%%%
+%%%=========================================================================
+
+%%%=========================================================================
+%%%                                  META
+%%%=========================================================================
+%%% @author Joel Ericson <joel.mikael.ericson@gmail.com>
+%%%
+%%% @copyright Copylefted using some GNU license or other.
+%%%
+%%% @version 1.0
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
@@ -147,7 +175,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dir(Stat) ->
-  NewMode=(Stat#stat.st_mode band 8#777) bor ?STD_DIR_MODE,
+  NewMode= ?STD_DIR_MODE,
   ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
 

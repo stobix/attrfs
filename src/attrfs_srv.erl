@@ -27,7 +27,7 @@
 %%%
 %%% @copyright Copylefted using some GNU license or other.
 %%%
-%%% @version 0.9
+%%% @version 1.0
 %%%-------------------------------------------------------------------------
 %%% @doc This is the attrfs fuserl server.
 %%% Attrfs is a file system that is used to sort files into several virtual
@@ -269,6 +269,7 @@ init({MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
   ?DEB1(">terminate"),
+  ?DEB1("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
   ?DEB2("|  _Reason: ~p",_Reason),
   ?DEB2("   Closing database \"~p\"",?ATTR_DB),
   dets:close(?ATTR_DB).

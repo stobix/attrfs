@@ -1,5 +1,33 @@
 -module(attr_ext).
 
+%%%=========================================================================
+%%%                                 LICENSE
+%%%=========================================================================
+%%%
+%%%  This program is free software; you can redistribute it and/or modify
+%%%  it under the terms of the GNU General Public License as published by
+%%%  the Free Software Foundation; either version 2 of the License, or
+%%%  (at your option) any later version.
+%%%
+%%%  This program is distributed in the hope that it will be useful,
+%%%  but WITHOUT ANY WARRANTY; without even the implied warranty of
+%%%  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%%%  GNU Library General Public License for more details.
+%%%
+%%%  You should have received a copy of the GNU General Public License
+%%%  along with this program; if not, write to the Free Software
+%%%  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+%%%
+%%%=========================================================================
+
+%%%=========================================================================
+%%%                                  META
+%%%=========================================================================
+%%% @author Joel Ericson <joel.mikael.ericson@gmail.com>
+%%%
+%%% @copyright Copylefted using some GNU license or other.
+%%%
+%%% @version 1.0
 -export([add_new_attribute/4,
          rehash_ext_from_db/2,
          append_attribute/3,
@@ -64,6 +92,7 @@ append_key_dir(KeyDir,ValDir,Stat) ->
     case tree_srv:lookup(MyInode,inodes) of
       % No entry found, creating new attribute entry.
       none ->
+        ?DEBL("   adding new attribute key folder ~p",[KeyDir]),
         #inode_entry{
           type=#attribute_dir{atype=key},
           name=KeyDir,
@@ -91,6 +120,7 @@ append_value_dir(Key,Value,ChildName,Stat) ->
     case tree_srv:lookup(MyInode,inodes) of
       % No entry found, creating new attribute entry.
       none ->
+        ?DEBL("   adding new attribute value folder ~p",[{Key,Value}]),
         #inode_entry{
           type=#attribute_dir{atype=value},
           name={Key,Value},

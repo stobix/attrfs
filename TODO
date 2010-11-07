@@ -1,7 +1,7 @@
 
-Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
+☐ Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
 
-Make the app terminate when fusermount -u mountdir
+☐ Make the app terminate when fusermount -u mountdir
 
 include support for 
     ☑ mkdir, 
@@ -71,7 +71,9 @@ include support for
 ☐ Include support for search directories:
     ☐ Special directories 
         ☑ AND, OR, BUTNOT, 
+        ☐ NOT which negates the next folder choise
         ☐ AND<key folder> , BUTNOT <key folder> etc for every value folder.
+        ☐ parentheses, to be able to do a/b OR (c/d AND e/f) and such
         
         % ls attribs/Foo/Bar
             Etaoin
@@ -89,9 +91,10 @@ include support for
             ...
 
     ☐ A new root directory tree for "search dirs" with special syntax:
-        ☐ (Foo:Bar & Foo:Baz) | (Etaoin:(Shrdlu & Foo)|Blah:*)
+        ☐ (Foo/Bar & Foo/Baz) | (Etaoin/(Shrdlu & Foo)|Blah/*)
         ☐ Regex?
 
+☐ make one able to remove attribute key directories
 
 ☐ make setxattr unset old attribute value folders when adding new ones.
 

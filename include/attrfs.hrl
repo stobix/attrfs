@@ -38,9 +38,9 @@
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
--define(UEXEC(X), X#stat{st_mode=(X#stat.st_mode bor 8#100)}).
+-define(UEXEC(X), (X#stat{st_mode=(X#stat.st_mode bor 8#100)})).
 
--define(STD_DIR_MODE, ?S_IFDIR band 8#755).
+-define(STD_DIR_MODE, (?S_IFDIR bor 8#755)).
 
 -record(initargs,
         {dir::string()}).
