@@ -12,7 +12,7 @@
 direntries(Inode) ->
   ?DEB1("    Creating direntries"),
   ?DEB1("     Getting child entries"),
-  {value,Children}=attr_tools:lookup_children(Inode),
+  {value,Children}=attr_lookup:children(Inode),
   ?DEBL("     Converting children ~p for ~p",[Children,Inode]),
   direntrify(Children).
 

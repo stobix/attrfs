@@ -472,7 +472,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
   Child=binary_to_list(BinaryChild),
   ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
   Reply=
-    case lookup:children(ParentInode) of
+    case attr_lookup:children(ParentInode) of
       {value,Children} ->
         ?DEBL("   Got children for ~p: ~p",[ParentInode, Children]),
         case lists:keysearch(Child,1,Children) of
