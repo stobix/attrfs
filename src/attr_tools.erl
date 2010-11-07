@@ -8,7 +8,9 @@
          take_while/3,
          test_access/3,
          merge_duplicates/1,
-         dir/1
+         dir/1,
+         datetime_to_epoch/1,
+         statify_file_info/1
         ]).
 
 %%--------------------------------------------------------------------------
@@ -148,3 +150,31 @@ dir(Stat) ->
   NewMode=(Stat#stat.st_mode band 8#777) bor ?STD_DIR_MODE,
   ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
+
+%%--------------------------------------------------------------------------
+%% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
+%%--------------------------------------------------------------------------
+datetime_to_epoch(DateTime) ->
+  calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
+
+%%--------------------------------------------------------------------------
+%% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
+%%--------------------------------------------------------------------------
+statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
+  ?DEBL("    converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
+  #stat{
+    st_dev= {MajorDevice,MinorDevice},
+    st_ino=Inode,
+    st_mode=Mode,
+    st_nlink=Links,
+    st_uid=UID,
+    st_gid=GID,
+    %st_rdev
+    st_size=Size,
+    %st_blksize,
+    %st_blocks,
+    st_atime=datetime_to_epoch(Atime),
+    st_mtime=datetime_to_epoch(Mtime),
+    st_ctime=datetime_to_epoch(Ctime)
+  }.
+

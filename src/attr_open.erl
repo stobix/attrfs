@@ -1,5 +1,8 @@
 -module(attr_open).
 
+-include("../include/attrfs.hrl").
+-include("../include/debug.hrl").
+
 -export([init/0,
        lookup/1,
        set/3,

@@ -174,12 +174,12 @@
 
 
 %these I stole from fuserlproc. Maybe they'll come in handy.
--define (DIRATTR (X), #stat{ st_ino = (X), 
-                             st_mode = ?S_IFDIR bor 8#0555, 
-                             st_nlink = 1 }).
-
-
--define(STAT (X,Y,Z), #stat{ st_ino = (X),
-                             st_mode = (Y),
-                             st_nlink = Z
-                                 }.
+%-define (DIRATTR (X), #stat{ st_ino = (X), 
+%                             st_mode = ?S_IFDIR bor 8#0555, 
+%                             st_nlink = 1 }).
+%
+%
+%-define(STAT (X,Y,Z), #stat{ st_ino = (X),
+%                             st_mode = (Y),
+%                             st_nlink = Z
+%                                 }.

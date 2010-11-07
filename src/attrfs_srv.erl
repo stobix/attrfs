@@ -234,7 +234,7 @@ init({MirrorDir,DB}) ->
           st_ino=RootIno
         },
         ext_info=[],
-        ext_io=ext_info_to_ext_io([])
+        ext_io=attr_ext:ext_info_to_ext_io([])
     },
   ?DEB1("   updating root inode entry"),
   tree_srv:enter(RootIno,RootEntry,inodes),
@@ -254,7 +254,7 @@ init({MirrorDir,DB}) ->
           st_ino=AttribIno
         },
       ext_info=[],
-      ext_io=ext_info_to_ext_io([])
+      ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AttribIno,AttributeEntry,inodes),
   % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
@@ -320,7 +320,7 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
             #attribute_dir{atype=value} ->
               ?DEB1("Parent is value dir. All is ok."),
               % Adding a new attribute is the same as creating an attribute folder file entry.
-              add_new_attribute(Path,Inode,Entry,ParentEntry#inode_entry.name),
+              attr_ext:add_new_attribute(Path,Inode,Entry,ParentEntry#inode_entry.name),
               {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
               #fuse_reply_create{
                 fuse_file_info=FileInfo,
@@ -472,7 +472,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
   Child=binary_to_list(BinaryChild),
   ?DEBL(">lookup Parent: ~p Name: ~p",[ParentInode,Child]),
   Reply=
-    case lookup_children(ParentInode) of
+    case lookup:children(ParentInode) of
       {value,Children} ->
         ?DEBL("   Got children for ~p: ~p",[ParentInode, Children]),
         case lists:keysearch(Child,1,Children) of
@@ -525,7 +525,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
           none ->
             ParentName=Parent#inode_entry.name,
             ParentType=Parent#inode_entry.type,
-            make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode);
+            attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode);
           _ -> #fuse_reply_err{err=eexist}
         end
     end,
@@ -596,7 +596,7 @@ opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io
   ?DEB1("  Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
   MyFIno=inode:get(fino),
-  attr_open:set(MyFIno,Inode,direntries(Inode)),
+  attr_open:set(MyFIno,Inode,attr_opendir:direntries(Inode)),
   {#fuse_reply_open{ fuse_file_info = FI#fuse_file_info{fh=MyFIno} }, State}.
 
 %%--------------------------------------------------------------------------
@@ -620,7 +620,7 @@ read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
     ?DEB1("   got file and iodevice, reading..."),
     Reply=case file:pread(IoDevice,Offset,Size) of
       {ok, Data} ->
-        ?DEB2("   data ~p read, returning",Data),
+        ?DEB1("   data read, returning"),
         #fuse_reply_buf{ buf = Data, size=erlang:size(Data) };
       eof ->
         ?DEB1("   eof reached, returning nodata"),
@@ -630,34 +630,6 @@ read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
         #fuse_reply_err{ err=eio }
     end,
     {Reply,State}.
-
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_read_reply(Info,Offset,Size) ->
-  %% This section I stole from fuserlprocsrv.erl. 
-  %% It works there, why doesn't it work here??
-  IoList = io_lib:format("~p.~n",[ Info ]),
-  Len = erlang:iolist_size (IoList),
-  if
-    Offset < Len ->
-      if
-        Offset + Size > Len ->
-          Take = Len - Offset,
-          <<_:Offset/binary, Data:Take/binary, _/binary>> = 
-            erlang:iolist_to_binary (IoList);
-        true ->
-          <<_:Offset/binary, Data:Size/binary, _/binary>> = 
-            erlang:iolist_to_binary (IoList)
-      end;
-    true ->
-      Data = <<>>
-  end,
-  ErlSize=erlang:size (Data),
-  ?DEBL("   replying with data: ~p + size ~p",[Data,ErlSize]),
-  #fuse_reply_buf{ buf=Data,size=ErlSize}.
-  %% end of stolen code.
-
 
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
@@ -748,7 +720,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
-      remove_old_attribute_key(Path,Inode,Name),
+      attr_remove:remove_old_attribute_key(Path,Inode,Name),
       ?DEB1("   Removed attribute, if any, from database and inode entry"),
       {#fuse_reply_err{err=ok},State};
     _ ->
@@ -791,7 +763,7 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
         enoent;
       {value,NewAttribEntry} ->
         ?DEBL("   new parent type: ~p",[NewAttribEntry#inode_entry.type]),
-        make_rename_reply(
+        attr_rename:make_rename_reply(
           ParentInoEntry#inode_entry.type,
           ParentInoEntry#inode_entry.name,
           ParentInoEntry,NewParentIno,Name,NewName)
@@ -817,7 +789,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
     case PType of
       #attribute_dir{} ->
         Name=binary_to_list(BName),
-        remove_child_from_parent(Name,PName),
+        attr_remove:remove_child_from_parent(Name,PName),
         inode:release(inode:get(Name,ino),ino),
         ok;
       internal_dir ->
@@ -825,7 +797,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
           ?ATTR_FOLDR ->
             Name=binary_to_list(BName),
             ?DEBL("   Removing attribute key folder ~p",[Name]),
-            remove_child_from_parent(Name,PName),
+            attr_remove:remove_child_from_parent(Name,PName),
             inode:release(inode:get(Name,ino),ino),
             ok;
           _ ->
@@ -951,7 +923,7 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
         lists:foreach(
           fun(Value) -> 
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
-            add_new_attribute(Path,Inode,Entry,{attr_tools:remove_from_start(Key,"user."),Value})
+            attr_ext:add_new_attribute(Path,Inode,Entry,{attr_tools:remove_from_start(Key,"user."),Value})
           end,
           Values),
         #fuse_reply_err{err=ok};
@@ -1038,7 +1010,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
               case Type of 
                 #external_file{path=Path} ->
                   ?DEBL("Removing ~p from ~p", [ParentEntry#inode_entry.name,Name]),
-                  remove_old_attribute_value(Path,Inode,ParentName),
+                  attr_remove:remove_old_attribute_value(Path,Inode,ParentName),
                   #fuse_reply_err{err=ok};
                 _ ->
                   #fuse_reply_err{err=enotsup}
@@ -1103,730 +1075,15 @@ getattr_internal(Inode,Continuation) ->
 %% Mkdir internal functions
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-make_dir(_Ctx,_ParentInode,_ParentName,#external_dir{},_Name,_Mode) ->
-  ?DEB1("   external dir, not supported"),
-  #fuse_reply_err{err=enotsup};
-
-
-make_dir(Ctx,ParentInode,ParentName,DirType=#attribute_dir{},Name,Mode) ->
-  AttrDirType=DirType#attribute_dir.atype,
-  make_attr_child_dir(Ctx,ParentInode,AttrDirType,ParentName,Name,Mode);
-
-
-make_dir(Ctx,ParentInode,ParentName,internal_dir,Name,Mode) ->
-  make_internal_child_dir(Ctx,ParentInode,ParentName,Name,Mode).
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_attr_child_dir(_Ctx,_ParentInode,value,_ValueParentName,_Name,_Mode) ->
-  ?DEB1("   NOT creating a subvalue dir"),
-  %this is where I create a subvalue dir, when these are supported.
-  % subvalue dir name {{Key,Val},Name}, I guess.
-  % Inode=make_general_dir(Ctx,ParentInode,Name,Mode),
-  #fuse_reply_err{err=enotsup};
-
-make_attr_child_dir(Ctx,ParentInode,key,Key,Name,Mode) ->
-  ?DEB1("   creating an attribute value dir"),
-  % create value directory here.
-  MyInode=inode:get({Key,Name},ino),
-  Stat=make_general_dir(Ctx,ParentInode,MyInode,{Key,Name},Name,Mode,#attribute_dir{atype=value}),
-  ?DEB1("   returning new dir"),
-  #fuse_reply_entry{
-    fuse_entry_param=
-      #fuse_entry_param{
-        ino=MyInode,
-        generation=1,
-        attr=Stat,
-        attr_timeout_ms=1000,
-        entry_timeout_ms=1000
-      }
-  }.
-
-make_internal_child_dir(_Ctx,_ParentInode,root,_Name,_Mode) ->
-  ?DEB1("   creating of new directory type not supported"),
-  #fuse_reply_err{err=enotsup};
-
-make_internal_child_dir(_Ctx,_ParentInode,?REAL_FOLDR,_Name,_Mode) ->
-  ?DEB1("   creating of external dirs not supported"),
-  #fuse_reply_err{err=enotsup};
-
-make_internal_child_dir(Ctx,ParentInode,?ATTR_FOLDR,Name,Mode) ->
-  % This is where I add an attribute key folder.
-  ?DEB1("   creating an attribute key dir"),
-  MyInode=inode:get(Name,ino),
-  Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Name,Mode,#attribute_dir{atype=key}),
-  ?DEB1("   returning new dir"),
-  tree_srv:enter(Name,MyInode,keys),
-  #fuse_reply_entry{
-    fuse_entry_param=
-      #fuse_entry_param{
-        ino=MyInode,
-        generation=0,
-        attr=Stat,
-        attr_timeout_ms=1000,
-        entry_timeout_ms=1000
-      }
-  };
-
-make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
-  #fuse_reply_err{err=enotsup}.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_general_dir(Ctx,ParentInode,MyInode,Name,DirName,Mode,DirType) ->
-  ?DEBL("   creating new directory entry called ~p",[Name]),
-  {MegaNow,NormalNow,_} = now(),
-  Now=MegaNow*1000000+NormalNow,
-  ?DEBL("   atime etc: ~p",[Now]),
-  #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
-  DirStat=
-    #stat{
-      st_mode=Mode,
-      st_ino=MyInode,
-%        st_nlink=1, % FIXME: Make this accurate.
-      st_uid=Uid,
-      st_gid=Gid,
-      st_atime=Now,
-      st_ctime=Now,
-      st_mtime=Now
-    },
-  DirEntry=#inode_entry{
-    name=Name,
-    dir_name=DirName,
-    stat=DirStat,
-    ext_info=[],
-    ext_io=ext_info_to_ext_io([]),
-    type=DirType,
-    children=[]
-  },
-  insert_entry(ParentInode,DirEntry),
-  DirStat.
-
- 
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-%% rename internal functions
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_rename_reply(#external_dir{},_OldAttribName,_OldAttribEntry,NewAttribIno,File,_NewValueName) ->
-  ?DEB1("   old parent is an external dir"),
-  {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno,inodes),
-  ?DEB1("   got new attribute folder entry"),
-  case NewAttribEntry#inode_entry.type of
-    #attribute_dir{atype=value} ->
-      ?DEB1("   new parent is a value dir"),
-      FileIno=inode:is_numbered(File,ino),
-      {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-      case FileEntry#inode_entry.type of
-        %external dir, attribute dir, external file
-        #external_file{} ->
-          ?DEB1("   external dir, attribute dir, external file"),
-          ?DEB1("   all ok, copying."),
-          make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
-        _ -> 
-          ?DEB1("   external dir, attribute dir, BOGUS"),
-          enotsup
-      end;
-    _ -> 
-      ?DEB1("   external dir, BOGUS, _"),
-      enotsup
-  end;
-
-
-make_rename_reply(#attribute_dir{},_OldAttribName,OldAttribEntry,NewAttribIno,OldValueName,NewValueName) ->
-  ?DEB1("   old parent is an attribute dir"),
-  {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno,inodes),
-  case NewAttribEntry#inode_entry.type of
-    #attribute_dir{atype=value} ->
-      ?DEB1("   new parent is a value dir"),
-      {OldValueName,FileIno}=lists:keyfind(OldValueName,1,OldAttribEntry#inode_entry.children),
-      {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-      case FileEntry#inode_entry.type of
-        #external_file{} ->
-          ?DEB1("   attribute dir, value dir, external file"),
-          ?DEB1("   copying"),
-          make_rename_file_reply(NewAttribIno,FileIno,FileEntry);
-        #attribute_dir{} ->
-          ?DEB1("   attribute dir, value dir, attribute dir"),
-          ?DEB1("   moving"),
-          make_rename_value_to_value_dir_reply(NewAttribEntry,FileIno,FileEntry,NewValueName);
-        _ -> 
-          ?DEB1("   attribute dir, value dir, BOGUS"),
-          enotsup
-      end;
-    #attribute_dir{atype=key} ->
-      ?DEB1("   new parent is a key dir, preparing to copy."),
-      {OldValueName,FileIno}=lists:keyfind(OldValueName,1,OldAttribEntry#inode_entry.children),
-      {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-      case FileEntry#inode_entry.type of
-        #attribute_dir{atype=value} ->
-          ?DEB1("   attribute dir, key dir, value dir"),
-          ?DEB1("   moving"),
-          make_rename_value_to_value_dir_reply(NewAttribEntry,FileIno,FileEntry,NewValueName);
-        _ -> 
-          ?DEB1("   attribute dir, key dir, BOGUS"),
-          ?DEB2("   BOGUS: ~p",FileEntry#inode_entry.type),
-          enotsup
-      end;
-    internal_dir ->
-      ?DEB1("   moving from attribute value folder to attribute key folder not yet supported"),
-      enotsup;
-        % This will be supported either when I check for subdirs, or when I allow files attributes with empty values.
-%            case NewAttribEntry#inode_entry.name of
-%                ?ATTR_FOLDR ->
-%                    FileIno=inode:is_numbered(File),
-%                    {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-%                    case FileEntry#inode_entry.type of
-%                        #attribute_dir{} ->
-%                            ?DEB1("   attribute dir, \"attribs\", attribute dir"),
-%                            ?DEB1("   moving"),
-%                            make_rename_key_dir_reply(OldAttribEntry,FileIno,FileEntry,NewValueName);
-%                        _ -> 
-%                            ?DEB1("   attribute dir, \"attribs\", BOGUS"),
-%                            enotsup
-%                    end;
-%
-%                _ -> 
-%                    ?DEB1("   attribute dir, BOGUS internal dir, _"),
-%                    enotsup
-%            end;
-    _ ->
-      ?DEB1("   attribute dir, BOGUS, _"),
-      ?DEB2("   BOGUS: ~p",NewAttribEntry),
-      enotsup
-  end;
-
-make_rename_reply(internal_dir,?ATTR_FOLDR,_OldAttribEntry,NewAttribIno,File,NewValueName) ->
-  ?DEB1("   old parent is an internal dir"),
-  {value,NewAttribEntry}=tree_srv:lookup(NewAttribIno,inodes),
-  case NewAttribEntry#inode_entry.type of
-        %% These will be supported when I make deep attributes.
-%        #attribute_dir{type=value}} ->
-%        #attribute_dir{type=key} ->
-    internal_dir ->
-      case NewAttribEntry#inode_entry.name of
-        ?ATTR_FOLDR ->
-          FileIno=inode:is_numbered(File,ino),
-          {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
-          case FileEntry#inode_entry.type of
-            #attribute_dir{} ->
-              ?DEB1("   \"attribs\", \"attribs\", attribute dir"),
-              ?DEB1("   moving"),
-              make_rename_key_to_key_dir_reply(FileIno,FileEntry,NewValueName);
-            _ -> 
-              ?DEB1("   \"attribs\", \"attribs\", BOGUS"),
-              enotsup
-          end;
-        _ -> 
-          ?DEB1("   attribute dir, BOGUS internal dir, _"),
-          enotsup
-      end;
-    _ ->
-      ?DEB1("   attribute dir, BOGUS, _"),
-      enotsup
-  end;
-
-make_rename_reply(_DirType,_OldAttribName,_OldAttribEntry,_NewAttribIno,_File,_NewValueName) ->
-  ?DEB2("   ~p, _, _",_DirType),
-  ?DEB1("   not allowed"),
-  enotsup.
-
-%% Since the attribute folder already exists, things needn't get overly coplicated here...
-make_rename_file_reply(NewAttribIno,FileInode,FileEntry) ->
-  ?DEB1("   copying file"),
-  Path=(FileEntry#inode_entry.type)#external_file.path,
-  Attribute=inode:is_named(NewAttribIno,ino),
-  case Attribute of
-    {_Key,_Value} ->
-      add_new_attribute(Path,FileInode,FileEntry,Attribute),
-      ok;
-    _Key ->
-      % Valueless attributes are not supported for now. 
-      % Takes some restructuring to get to work, I think.
-      enotsup 
-  end.
-
-make_rename_value_to_value_dir_reply(NewKeyEntry,ValueIno,OldValueEntry,NewValueName) ->
-  ?DEB1("   moving value dir"),
-  %TODO: if there is more than one value subdirectory under the current key for a file, fix so that this will NOT remove _all_ directories (or add them again)
-  OldAttribName={OldKeyName,OldValueName}=OldValueEntry#inode_entry.name,
-  NewKeyName=NewKeyEntry#inode_entry.name,
-  NewAttribName={NewKeyName,NewValueName}, % To support multiple subattributes, this needs to be changed.
-  NewValueEntry=OldValueEntry#inode_entry{name=NewAttribName},
-  ?DEBL("   moving ~p to ~p",[OldAttribName,NewAttribName]),
-  lists:foreach(
-    fun({_FileName,FileInode}) ->
-      {value,FileEntry}=tree_srv:lookup(FileInode,inodes),
-      FilePath=(FileEntry#inode_entry.type)#external_file.path,
-      remove_old_attribute_key(FilePath,FileInode,OldKeyName),
-      add_new_attribute(FilePath,FileInode,FileEntry,NewAttribName)
-    end,
-    OldValueEntry#inode_entry.children
-  ),
-  ?DEBL("    removing ~p from the ~p directory", [OldValueName,OldKeyName]),
-  KeyIno=inode:is_numbered(OldKeyName,ino),
-  remove_empty_dir(KeyIno,OldValueName),
-  ?DEBL("    adding ~p to ~p directory", [NewValueName,NewKeyName]),
-  tree_srv:enter(ValueIno,NewValueEntry,inodes),
-  ?DEB2("    adding ~p to inode list",NewAttribName),
-  append_child({NewValueName,ValueIno},KeyIno),
-  ?DEB1("    moving inode number"),
-  inode:rename(OldAttribName,NewAttribName,ino),
-  ok.
-
-%%--------------------------------------------------------------------------
-%% So, this will take an attribute directory, move it into a "key position" (as a direct child to ?ATTR_FOLDR), and consequently change the attribute names of all subfolders and subfolder file attributes, unless this is done with subsequent calls to rename by the OS.
-%%--------------------------------------------------------------------------
-make_rename_key_to_key_dir_reply(KeyIno,OldKeyEntry,NewKeyName) ->
-  OldKeyName=OldKeyEntry#inode_entry.name,
-  ?DEBL("   moving key dir ~p to ~p",[OldKeyName,NewKeyName]),
-  NewKeyEntry=OldKeyEntry#inode_entry{name=NewKeyName},
-  Children=OldKeyEntry#inode_entry.children,
-  ?DEBL("    renaming child attribute key ~p to ~p for ~p",[OldKeyName,NewKeyName,Children]),
-  lists:foreach(
-    fun({AttribName,AttribInode}) ->
-      {value,AttribEntry}=tree_srv:lookup(AttribInode,inodes),
-      make_rename_value_to_value_dir_reply(NewKeyEntry,AttribInode,AttribEntry,AttribName)
-    end,
-    Children
-  ),
-  ?DEB2("    removing ~p from attribute directory", OldKeyName),
-  AttrsIno=inode:is_numbered(?ATTR_FOLDR,ino),
-  remove_empty_dir(AttrsIno,OldKeyName),
-  ?DEB2("    adding ~p to inode tree and attribute directory", NewKeyName),
-  tree_srv:enter(KeyIno,NewKeyEntry,inodes),
-  append_child({NewKeyName,KeyIno},AttrsIno),
-  ?DEB1("    moving inode number"),
-  inode:rename(OldKeyName,NewKeyName,ino),
-  ok.
 
 %%%=========================================================================
 %%%                       SHARED UTILITY FUNCTIONS
 %%%=========================================================================
 
-%%--------------------------------------------------------------------------
-%insert entry Entry with into the file system tree under ParentInode. Returns new inode.
-%%--------------------------------------------------------------------------
-insert_entry(ParentInode,ChildEntry) ->
-  ?DEBL("    inserting new entry as child for ~p",[ParentInode]),
-  {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
-
-  InoName=ChildEntry#inode_entry.name,
-  ChildInode=inode:get(InoName,ino),
-  ChildName=
-    case ChildEntry#inode_entry.type of
-      #attribute_dir{atype=value} ->
-        {_,Name} = InoName,
-        Name;
-      _ -> InoName
-    end,
-  NewChildren=[{ChildName,ChildInode}|ParentEntry#inode_entry.children],
-  tree_srv:enter(ParentInode,ParentEntry#inode_entry{children=NewChildren},inodes),
-  tree_srv:enter(ChildInode,ChildEntry,inodes),
-  ChildInode.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-remove_empty_dir(ParentIno,DirName) ->
-  ?DEBL("   removing empty dir ~p from parent ~p",[DirName,ParentIno]),
-  {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
-  case lists:keytake(DirName,1,ParentEntry#inode_entry.children) of
-    {value,{_DeletedChild,ChildIno},NewChildren} ->
-      NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
-      tree_srv:enter(ParentIno,NewParentEntry,inodes),
-      tree_srv:delete_any(ChildIno,inodes),
-      ok;
-    _ -> 
-      % Found no old entry; nothing needs to be done.
-      ?DEB1("   dir not a child of parent! not removing!!"),
-      enoent
-  end.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
-  {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
-  Children=ParentEntry#inode_entry.children,
-  NewChildren=attr_tools:keymergeunique(NewChild,Children),
-  NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
-  tree_srv:enter(ParentIno,NewParentEntry,inodes).
-
-%%--------------------------------------------------------------------------
-%% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
-%%--------------------------------------------------------------------------
-datetime_to_epoch(DateTime) ->
-  calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
-
-%%--------------------------------------------------------------------------
-%% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
-%%--------------------------------------------------------------------------
-statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-  ?DEBL("    converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
-  #stat{
-    st_dev= {MajorDevice,MinorDevice},
-    st_ino=Inode,
-    st_mode=Mode,
-    st_nlink=Links,
-    st_uid=UID,
-    st_gid=GID,
-    %st_rdev
-    st_size=Size,
-    %st_blksize,
-    %st_blocks,
-    st_atime=datetime_to_epoch(Atime),
-    st_mtime=datetime_to_epoch(Mtime),
-    st_ctime=datetime_to_epoch(Ctime)
-  }.
 
 
 
-%%--------------------------------------------------------------------------
-%% lookup_children returns the children for the inode, if the inode is 
-%% present. Returns like gb_trees:lookup
-%%--------------------------------------------------------------------------
-lookup_children(Inode) ->
-  ?DEB2("  >lookup_children ~p",Inode),
-  case tree_srv:lookup(Inode,inodes) of
-    {value, Entry} -> 
-      Name=Entry#inode_entry.name,
-      ?DEBL("    got an entry: ~p",[Name]),
-      Children=
-        case Entry#inode_entry.type of
-          logic_dir ->
-            % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
-            ?DEBL("    ~p: logical dir: ~p",[Inode,Name]),
-            generate_logic_attribute_dir_children(Name);
-          #attribute_dir{atype=value} ->
-            ?DEB1("    value dir"),
-            {GParent,_Parent}=Name,
-            ?DEB1("    generating lodic dirs"),
-            MyLogicDirs = generate_logic_dirs(Name),
-            ?DEB1("    filtering children"),
-            MyChildren = filter_children(GParent,Entry#inode_entry.children),
-            ?DEB1("    combining children"),
-            % Lets push the logic dirs to the childrens list, removing old logic dirs.
-            MyFinalChildren=lists:foldl(fun(Item,Acc) -> attr_tools:keymergeunique(Item,Acc) end, MyChildren,MyLogicDirs),
-            ?DEB2("    children: ~p",MyFinalChildren),
-            MyFinalChildren;
-          #dir_link{link=Ino} ->
-            ?DEB1("     dir link"),
-            MyChildren=generate_dir_link_children(Ino,Name),
-            ?DEB2("     generated children: ~p",MyChildren),
-            MyChildren;
-          _DirType ->
-            ?DEB2("    other dir: ~p",_DirType),
-            Entry#inode_entry.children
-        end,
-      {value,Children};
-    none -> none
-  end.
 
-
-generate_dir_link_children(Ino,Name) ->
-  ?DEB1("generate_dir_link_children"),
-  {value,Entry}=tree_srv:lookup(Ino,inodes),
-  EntryType=Entry#inode_entry.type,
-  LinkChildren0=filter_children(Ino,Name),
-  LinkChildren = case EntryType of
-    #attribute_dir{atype=value} ->
-      ?DEB1("Filtering out bogus logical connectives"),
-      filter:filter(LinkChildren0,"BUTNOT",[{"AND",any},{"OR",any},{"BUTNOT",any}]);
-    _ ->
-      LinkChildren0
-  end,
-  ?DEB2("    converting children: ~p",LinkChildren),
-  %XXX: When looking for ONE entry, generating ALL seems stupid.
-  ConvertedChildren=lists:map(
-    fun({MyName,Inode}) ->
-      MyInode=inode:get({Name,MyName},ino),
-      case tree_srv:lookup(MyInode,inodes) of
-        {value,_MyEntry} ->
-          % For now, I return the children of the linked to entry, if already generated.
-          {MyName,MyInode};
-        none ->
-          % No entry found, generating children from the dir linked with, if a dir,
-          % and returning linked to file entry if file.
-          {value,MyLinkEntry}=tree_srv:lookup(Inode,inodes),
-          case MyLinkEntry#inode_entry.type of
-            #attribute_dir{} ->
-              MyEntry=
-                MyLinkEntry#inode_entry{
-                  name={Name,MyName},
-                  children=[],
-                  type=#dir_link{link=Inode},
-                  links=[]
-                },
-                tree_srv:enter(MyInode,MyEntry,inodes),
-                {MyName,MyInode};
-              _ ->
-                {MyName,Inode}
-          end
-      end
-    end,LinkChildren),
-  case EntryType of
-    #attribute_dir{atype=value} ->
-      LogicDirs=generate_logic_dirs(Name),
-      ConvertedChildren++LogicDirs;
-    _ ->
-      ConvertedChildren
-  end.
-
-filter_children(Ino,{{{_KeyVal,_Connective}=Logic,_Parent},_Me}) ->
-  {value,Children}=lookup_children(Ino),
-  filter_children(Logic,Children);
-
-
-filter_children({{Key,_Val}=KeyValPair,Connective},LastChildrenUnfiltered) when (Connective == "AND") or (Connective == "OR") or (Connective == "BUTNOT") ->
-  case inode:is_numbered(KeyValPair,ino) of
-    false -> false;
-    Ino -> 
-      {value,PrevChildrenUnfiltered} = lookup_children(Ino),
-      PrevChildren = filter_children(Key,PrevChildrenUnfiltered),
-      ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,LastChildrenUnfiltered,Connective]),
-      LastChildren = filter:filter(PrevChildren,Connective,LastChildrenUnfiltered),
-      LastChildren
-  end;
-
-filter_children(_Grandparent,LastChildrenUnfiltered) -> 
-  LastChildrenUnfiltered.
-
-generate_logic_attribute_dir_children(LogicName) ->
-  % get entry, change inodes and names, return.
-  ?DEB1("     getting attributes entry "),
-  PIno=inode:get(?ATTR_FOLDR,ino),
-  {value,PEntry} = tree_srv:lookup(PIno,inodes),
-  ?DEB1("     transforming children"),
-  lists:map(
-    fun({Name,Inode}) ->
-      {value,Entry}=tree_srv:lookup(Inode,inodes),
-      case Entry#inode_entry.type of
-        #attribute_dir{} ->
-          LinkEntry=Entry#inode_entry{
-            dir_name=Name,
-            name={LogicName,Name},
-            links=[],
-            generated=false,
-            type=#dir_link{link=Inode}},
-          LinkIno=inode:get(LinkEntry#inode_entry.name,ino),
-          tree_srv:enter(LinkIno,LinkEntry,inodes),
-          {Name,LinkIno};
-        #external_file{} ->
-          {Name,Inode}
-      end
-    end,
-    PEntry#inode_entry.children
-  ).
-
--define(LD(X) , generate_logic_dir(Predecessor,X)).
-
-generate_logic_dirs({_Grandparent,_Parent}=Predecessor) ->
-  [
-    ?LD("AND"),
-    ?LD("OR"),
-    ?LD("BUTNOT")
-  ].
-
--define(LDIR(X) , {Predecessor,X}).
--define(LINO(X) , inode:get(?LDIR(X),ino)).
--define(LCLD(X) , {X,?LINO(X)}).
-
-generate_logic_dir({GrandParent,_Parent}=Predecessor,X) ->
-  ?DEB2("     generating lodic dir \"~p\"",X),
-  ?DEB1("      getting entry"),
-  {value,GPEntry}=tree_srv:lookup(inode:get(GrandParent,ino),inodes),
-  ?DEB1("      generating new entry"),
-  Entry=GPEntry#inode_entry{dir_name=X,name=?LDIR(X),type=logic_dir,children=[]},
-  ?DEB1("      saving new entry"),
-  tree_srv:enter(?LINO(X),Entry,inodes),
-  ?LCLD(X).
-
-%%--------------------------------------------------------------------------
-%% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
-%%--------------------------------------------------------------------------
-add_new_attribute(Path,FIno,FEntry,Attr) ->
-  ?DEB1("  >add_new_attribute"),
-  % Add the new attribute pair, if non-existent.
-  ?DEBL("   inserting (~p)~p into database, if nonexistent",[Path,Attr]),
-  length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
-    (ok=dets:insert(?ATTR_DB,{Path,Attr})),
-  ?DEBL("   new database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
-  #inode_entry{stat=Stat,name=FName}=FEntry,
-  ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
-  append_attribute(Attr,FName,?UEXEC(Stat)),
-  ?DEB1("   creating new ext info"),
-  rehash_ext_from_db(FIno,Path).
-
-
-
-%%--------------------------------------------------------------------------
-%% Updates 
-%%--------------------------------------------------------------------------
-rehash_ext_from_db(Inode,Path) ->
-  {ExtInfo,ExtIo}=generate_ext_info_io(Path),
-  {value,Entry}=tree_srv:lookup(Inode,inodes),
-  NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
-  tree_srv:enter(Inode,NewEntry,inodes).
-
-%%--------------------------------------------------------------------------
-%% remove_old_attribute_value
-%% Path: The external path for the file in the db.
-%% Inode: The internal inode of the file.
-%% Attribute: The {Key,Value} pair to be removed.
-%%--------------------------------------------------------------------------
-remove_old_attribute_value(Path,Inode,{_Key,_Value}=Attribute) ->
-  % Database handling
-  Matches=dets:match(?ATTR_DB,{Path,Attribute}),
-  case length(Matches)>0 of
-    true ->
-      ?DEBL("Removing ~p for ~p from database", [Attribute,Path]),
-      dets:match_delete(?ATTR_DB,{Path,Attribute});
-    false ->
-      ?DEB1("No data base entry to remove!")
-  end,
-  % File attribute handling
-  rehash_ext_from_db(Inode,Path),
-  % Attribute dir handling
-  remove_child_from_parent(inode:is_named(Inode,ino),Attribute).
-
-
-remove_child_from_parent(ChildName,ParentName) ->
-  Inode=inode:get(ParentName,ino),
-  {value,Entry}=tree_srv:lookup(Inode,inodes),
-  Children=Entry#inode_entry.children,
-  NewChildren=lists:keydelete(ChildName,1,Children),
-  NewEntry=Entry#inode_entry{children=NewChildren},
-  tree_srv:enter(Inode,NewEntry,inodes).
-
-%%--------------------------------------------------------------------------
-%% remove_old_attribute_key
-%%  * removes the {path,attribute} entry from the attribute database;
-%%  * removes the file entry from the attributes/attrName/attrVal/ folder
-%%  * removes the attribute from the file entry
-%%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
-%%--------------------------------------------------------------------------
-
-remove_old_attribute_key(Path,Inode,AName) ->
-  ?DEBL("    deleting ~p from ~p",[AName,Path]),
-  % Database handling
-  Matches=dets:match(?ATTR_DB,{Path,{AName,'$1'}}),
-  case length(Matches)>0 of
-    true -> 
-      ?DEBL("   removing the following items (if any): ~p",[Matches]),
-      dets:match_delete(?ATTR_DB,{Path,{AName,'_'}});
-    false -> 
-      ?DEB1("   found no items to remove, doing nothing"),
-      ok
-  end,
-  ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{AName,'$1'}})]),
-  % Updating ext io using the filtered ext info
-  rehash_ext_from_db(Inode,Path),
-  % removing file child from attribute folder entry
-  FName=inode:is_named(Inode,ino),
-  lists:foreach(
-    fun(AValue) -> 
-      remove_child_from_parent(FName,{AName,AValue})
-    end,
-    Matches
-  ).
-
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-generate_ext_info(Path) ->
-  ?DEB2("   generating ext info for ~p",Path),
-  ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
-  attr_tools:merge_duplicates(lists:flatten(ExtInfo0)). % Going from a list of lists of tuples to a list of tuples.
-
-
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-generate_ext_info_io(Path) ->
-  ?DEB2("   generating ext info for ~p",Path),
-  ExtInfo=generate_ext_info(Path),
-  ?DEB2("   generating ext io for ~p",ExtInfo),
-  ExtIo=ext_info_to_ext_io(ExtInfo),
-  {ExtInfo,ExtIo}.
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-ext_info_to_ext_io(InternalExtInfoTupleList) ->
-  ?DEB1("   Creating ext_io"),
-  ext_info_to_ext_io(InternalExtInfoTupleList,[]).
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-ext_info_to_ext_io([],B) -> 
-  B0=B++"\0",
-  B0len=length(B0),
-  ?DEB1("   Done creating ext_io"),
-  ?DEBL("   Final string: \"~p\", size: ~p",[B0,B0len]),
-  {B0len,B0};
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
-  Name0=
-    case string:str(Name,"system")==1 of
-      false ->
-        ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
-        "user."++Name++"\0";
-      true -> 
-        ?DEB2("    Adding zero to end of name ~p",Name),
-        Name++"\0"
-    end,
-  ?DEB1("    Appending name to namelist"),
-  NewString=String++Name0,
-  ?DEB1("    Recursion"),
-  ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
-
-
-%%--------------------------------------------------------------------------
-%% Gets the children for the inode from the inode list, and runs direntrify
-%% on it.
-%%--------------------------------------------------------------------------
-direntries(Inode) ->
-  ?DEB1("    Creating direntries"),
-  ?DEB1("     Getting child entries"),
-  {value,Children}=lookup_children(Inode),
-  ?DEBL("     Converting children ~p for ~p",[Children,Inode]),
-  direntrify(Children).
-
-
-%%--------------------------------------------------------------------------
-%% direntrify takes a [{Name,Inode}] and returns a [fuserl:#{direntry}]
-%%--------------------------------------------------------------------------
-direntrify([]) -> 
-  ?DEB1("    Done converting children"),
-  [];
-
-direntrify([{Name,Inode}|Children]) ->
-  ?DEB2("    Getting entry for child ~p",{Name,Inode}),
-  {value,Child}=tree_srv:lookup(Inode,inodes),
-  ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
-  ChildStats=Child#inode_entry.stat,
-  ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
-  Direntry= #direntry{name=Name ,stat=ChildStats },
-  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
-  Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-  ?DEB2("    Appending child ~p to list",{Name,Inode}),
-  [Direntry1|direntrify(Children)].
-
-%%--------------------------------------------------------------------------
-%% find runs SearchFun for one element at a time in the provided list,
-%% until SearchFun returns {true,Value} or true, whereupon it returns this.
-%%--------------------------------------------------------------------------
-find(_,[]) -> false;
-find(SearchFun,[Item|Items]) ->
-  case SearchFun(Item) of
-    {true,Value} -> {true,Value};
-    true -> true;
-    _ -> find(SearchFun,Items)
-  end.
 
 
 %%--------------------------------------------------------------------------
@@ -1855,7 +1112,7 @@ make_inode_list({Path,Name}) ->
             {error,not_supported} % for now
         end,
       ?DEB2("    Generating ext info for ~p",Path),
-      {ExtInfo,ExtIo}=generate_ext_info_io(Path), 
+      {ExtInfo,ExtIo}=attr_ext:generate_ext_info_io(Path), 
       ?DEB2("     ext info: ~p", ExtInfo),
       % XXX: This will break if provided with a local date and time that does not
       % exist. Shouldn't be much of a problem.
@@ -1866,7 +1123,7 @@ make_inode_list({Path,Name}) ->
       ?DEB2("    ctime:~p~n",EpochCtime),
       ?DEB2("    mtime:~p~n",EpochMtime),
       MyStat=
-        statify_file_info(
+        attr_tools:statify_file_info(
           FileInfo#file_info{
             inode=inode:get(Name,ino),
             atime=EpochAtime,
@@ -1887,7 +1144,7 @@ make_inode_list({Path,Name}) ->
       ?DEB2("    looking up ext folders for ~p",Name),
       ExtFolders=lists:flatten(dets:match(?ATTR_DB,{Path,'$1'})),
       ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
-      lists:foreach(fun(Attr) -> append_attribute(Attr,Name,?UEXEC(MyStat)) end,ExtFolders),
+      lists:foreach(fun(Attr) -> attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) end,ExtFolders),
       ?DEB1("    recursing for all real subdirs"),
       lists:foreach(fun({ChildName,_Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children);
     E ->
@@ -1898,77 +1155,6 @@ make_inode_list({Path,Name}) ->
   end.
 
 
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-append_attribute({Key,Val},Name,Stat) ->
-  ?DEBL("    appending ~p/~p",[{Key,Val},Name]),
-  append_value_dir(Key,Val,Name,Stat),
-  ?DEBL("    appending ~p/~p",[Key,Val]),
-  append_key_dir(Key,Val,Stat),
-  tree_srv:enter(Key,inode:get(Key,ino),keys),
-  AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
-  ?DEB1("   getting attribute folder inode entry"),
-  {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
-  ?DEB1("   getting attribute folder children"),
-  AttrChildren=tree_srv:to_list(keys), 
-  ?DEB1("   creating new inode entry"),
-  NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
-  ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
-  tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-append_key_dir(KeyDir,ValDir,Stat) ->
-  ChildIno=inode:get({KeyDir,ValDir},ino),
-  MyInode=inode:get(KeyDir,ino),
-  NewEntry=
-    case tree_srv:lookup(MyInode,inodes) of
-      % No entry found, creating new attribute entry.
-      none ->
-        #inode_entry{
-          type=#attribute_dir{atype=key},
-          name=KeyDir,
-          children=[{ValDir,ChildIno}],
-          %XXX: Give the user some way of setting a standard 
-          stat=attr_tools:dir(Stat#stat{st_ino=MyInode}), 
-          ext_info=[],
-          ext_io=ext_info_to_ext_io([])
-        };
-      {value,OldEntry} ->
-        ?DEBL("   merging ~p into ~p",[{ValDir,ChildIno},OldEntry#inode_entry.children]),
-        OldEntry#inode_entry{
-          children=
-            attr_tools:keymergeunique({ValDir,ChildIno},OldEntry#inode_entry.children)
-        }
-    end,
-  tree_srv:enter(MyInode,NewEntry,inodes).
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-append_value_dir(Key,Value,ChildName,Stat) ->
-  ChildIno=inode:get(ChildName,ino),
-  MyInode=inode:get({Key,Value},ino),
-  NewEntry=
-    case tree_srv:lookup(MyInode,inodes) of
-      % No entry found, creating new attribute entry.
-      none ->
-        #inode_entry{
-          type=#attribute_dir{atype=value},
-          name={Key,Value},
-          children=[{ChildName,ChildIno}],
-          stat=attr_tools:dir(Stat#stat{st_ino=MyInode}),
-          ext_info=[],
-          ext_io=ext_info_to_ext_io([])
-        };
-      {value,OldEntry} ->
-        ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
-        OldEntry#inode_entry{
-          children=
-            attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children)
-        }
-    end,
-  ?DEB1("  entering new entry into server"),
-  tree_srv:enter(MyInode,NewEntry,inodes).
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS
