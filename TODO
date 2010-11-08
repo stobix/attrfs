@@ -119,4 +119,4 @@ include support for
 ☑ Apparently, linux calls open before calling setattr. What to do with open? Assign fh.
 
 
-
+☐ what is wrong with the logical subdirs? Do I point sequentially all the way down to the original, or do I point directly to the original from all?

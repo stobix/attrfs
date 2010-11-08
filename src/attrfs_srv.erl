@@ -204,17 +204,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 init({MirrorDir,DB}) ->
-  % initiating databases, servers and so on.
-  ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
-  {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
-  ?DEB2("   mirroring dir ~p",MirrorDir),
-  tree_srv:new(inodes), % contains inode entries
-  tree_srv:new(keys), % contains a list of all attribute keys with associated inodes
-  attr_open:init(),
-  tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
-  ?DEB1("   created inode and key trees"),
-  inode:initiate(ino), % the inode table
-  inode:initiate(fino), % the open files "inode" table
+  initiate_servers(DB,MirrorDir),
   % getting inodes for base folders
   RootIno=inode:get(root,ino),
   RealIno=inode:get(?REAL_FOLDR,ino),
@@ -225,7 +215,6 @@ init({MirrorDir,DB}) ->
   RootEntry=
     #inode_entry{
       name=root,
-      dir_name=root,
       children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR,AttribIno}],
       type=internal_dir, %XXX: Really ok to let this have the same type as attribute dirs?
       stat=
@@ -243,7 +232,6 @@ init({MirrorDir,DB}) ->
   AttributeEntry=
     #inode_entry{
       name=?ATTR_FOLDR,
-      dir_name=?ATTR_FOLDR,
       children=[],
       type=internal_dir,
       stat=#stat{ 
@@ -262,6 +250,22 @@ init({MirrorDir,DB}) ->
   ?DEB1("   attribute inode list made"),
   State=[],
   {ok,State}.
+
+
+%add_dir(Name,DirName,DirType,Children,
+
+initiate_servers(DB,MirrorDir) ->
+  % initiating databases, servers and so on.
+  ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
+  {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
+  ?DEB2("   mirroring dir ~p",MirrorDir),
+  tree_srv:new(inodes), % contains inode entries
+  tree_srv:new(keys), % contains a list of all attribute keys with associated inodes
+  attr_open:init(),
+  tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
+  ?DEB1("   created inode and key trees"),
+  inode:initiate(ino), % the inode table
+  inode:initiate(fino). % the open files "inode" table
 
 %%--------------------------------------------------------------------------
 %% The analog to Module:terminate/2 in gen_server.

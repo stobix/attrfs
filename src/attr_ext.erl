@@ -139,6 +139,33 @@ append_value_dir(Key,Value,ChildName,Stat) ->
   ?DEB1("  entering new entry into server"),
   tree_srv:enter(MyInode,NewEntry,inodes).
 
+
+% this function assumes that the _child_ exists, and creates parents as neccessary. 
+
+append_dir(ChildName=[Child|Parent],Stat) ->
+  ChildIno=inode_get(ChildName,ino),
+  ParentIno=inode_get(Parent,ino),
+    case tree_srv:lookup(Parent,inodes) of
+      % No entry found, creating new attribute entry.
+      none ->
+        ?DEBL("   adding new attribute value folder ~p",[ChildName]),
+        #inode_entry{
+          type=attribute_dir,
+          name=Parent,
+          children=[{ChildName,ChildIno}],
+          stat=attr_tools:dir(Stat#stat{st_ino=ParentIno}),
+          ext_info=[],
+          ext_io=ext_info_to_ext_io([])
+        };
+      {value,OldEntry} ->
+        ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
+        OldEntry#inode_entry{
+          children=
+            attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children)
+        }
+    end,
+  ?DEB1("  entering new entry into server"),
+  tree_srv:enter(MyInode,NewEntry,inodes).
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
