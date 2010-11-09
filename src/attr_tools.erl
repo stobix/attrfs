@@ -38,8 +38,22 @@
          merge_duplicates/1,
          dir/1,
          datetime_to_epoch/1,
-         statify_file_info/1
+         statify_file_info/1,
+         flatten1/1
         ]).
+
+
+%%--------------------------------------------------------------------------
+%% flatten1 removes one list layer from a file. [[a],[[B]]] -> [a,[B]].
+%%--------------------------------------------------------------------------
+flatten1([[A]|As]) ->
+  [A|flatten1(As)];
+
+flatten1([A|As]) ->
+  [A|flatten1(As)];
+
+flatten1([]) ->
+  [].
 
 %%--------------------------------------------------------------------------
 %seems like lists:keymerge won't do what I ask it, so I build my own...

@@ -205,6 +205,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 %%--------------------------------------------------------------------------
 init({MirrorDir,DB}) ->
   attr_init:init({MirrorDir,DB}),
+  State=[],
   {ok,State}.
 
 
@@ -868,11 +869,12 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
-        Keys=string:tokens(Key,?KEY_SEP),
-        Attr=[Value|lists:reverse(Keys)],
+        Syek=string:tokens(Key,?KEY_SEP),
+        Keys=lists:revese(Syek),
         lists:foreach(
           fun(Value) -> 
-            ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
+            Attr=[Value|lists:reverse(Keys)],
+            ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
             attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
           end,
           Values),

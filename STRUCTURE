@@ -5,7 +5,8 @@ Each attribute directory contains logical connectives pointing to the ?ATTR_FOLD
 converted to new structure
 ☑ attr_lookup
 ☑ filter
-☐ attrfs_srv
+☑ attrfs_srv
+☑ attr_init
 ☐ attr_remove
 ☐ attr_rename
 ☐ attr_mkdir
