@@ -163,10 +163,10 @@ start_link({MountDir,MirrorDir,DB}) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-%% Things are initiated here instead of init so that no calls to the file system will be made before the file system is constructed.
-%% Maybe this is an unneccessary precaution?
+%% In here, I mostly check for dirs needed to start fuserlsrv.
 %%--------------------------------------------------------------------------
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
+
   ?DEB1(">start_link"),
   ?DEB1("   checkning if dirs are ok..."),
   ?DEB2("    ~p...",Dir),
@@ -264,8 +264,8 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
           ?DEB1("Filename linked to a real file."),
           {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
           case ParentEntry#inode_entry.type of
-            #attribute_dir{atype=value} ->
-              ?DEB1("Parent is value dir. All is ok."),
+            attribute_dir ->
+              ?DEB1("Parent is an attribute dir. All is ok."),
               % Adding a new attribute is the same as creating an attribute folder file entry.
               attr_ext:add_new_attribute(Path,Inode,Entry,ParentEntry#inode_entry.name),
               {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
@@ -732,9 +732,10 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
   PType=PEntry#inode_entry.type,
   PName=PEntry#inode_entry.name,
   ?DEBL("   parent type ~p",[PType]),
+  % So I don't have to lookup two entries, I match the parent type instead of the child type.
   Reply=
     case PType of
-      #attribute_dir{} ->
+      attribute_dir ->
         Name=binary_to_list(BName),
         attr_remove:remove_child_from_parent(Name,PName),
         inode:release(inode:get(Name,ino),ino),
@@ -861,16 +862,18 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
       false -> RawKey
     end,
 
-  Values=string:tokens(RawValue,","),
+  Values=string:tokens(RawValue,?VAL_SEP),
   ?DEB2("   got values: ~p",Values),
 
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
+        Keys=string:tokens(Key,?KEY_SEP),
+        Attr=[Value|lists:reverse(Keys)],
         lists:foreach(
           fun(Value) -> 
             ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
-            attr_ext:add_new_attribute(Path,Inode,Entry,{attr_tools:remove_from_start(Key,"user."),Value})
+            attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
           end,
           Values),
         #fuse_reply_err{err=ok};
@@ -937,7 +940,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
   ?DEBL("parent type ~p",[ParentType]),
     Reply=
       case ParentType of
-        #attribute_dir{atype=value} ->
+        attribute_dir ->
           Name=binary_to_list(BName),
           ParentChildren=ParentEntry#inode_entry.children,
           case lists:keyfind(Name,1,ParentChildren) of

@@ -1,0 +1,14 @@
+Structure of attribute directories: [Child,Parent,...,Eldest]
+Each attribute directory contains logical connectives pointing to the ?ATTR_FOLDR folder, and will also have links pointing to .. 
+
+
+converted to new structure
+☑ attr_lookup
+☑ filter
+☐ attrfs_srv
+☐ attr_remove
+☐ attr_rename
+☐ attr_mkdir
+☑ attr_ext
+☐ attr_open
+☐ attr_tools

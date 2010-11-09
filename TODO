@@ -8,6 +8,7 @@ include support for
     ☑ rmdir, 
     ☑ rename 
     ☐ and others? to change attributes.
+    ☐ link
 
 
 ☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.

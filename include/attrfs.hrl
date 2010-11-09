@@ -82,6 +82,10 @@
     {link::inode_number() % the inode linked to.
     }).
 
+-define(KEY_SEP,"/").
+-define(VAL_SEP,",").
+
+
 -type parent()::name().
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.

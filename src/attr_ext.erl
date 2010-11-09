@@ -54,7 +54,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
   ?DEBL("   inserting (~p)~p into database, if nonexistent",[Path,Attr]),
   length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
     (ok=dets:insert(?ATTR_DB,{Path,Attr})),
-  ?DEBL("   new database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
+  ?DEBL("   database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
   #inode_entry{stat=Stat,name=FName}=FEntry,
   ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
   append_attribute(Attr,FName,?UEXEC(Stat)),
