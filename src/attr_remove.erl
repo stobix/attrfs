@@ -41,7 +41,7 @@
 %% Inode: The internal inode of the file.
 %% Attribute: The {Key,Value} pair to be removed.
 %%--------------------------------------------------------------------------
-remove_old_attribute_value(Path,Inode,{_Key,_Value}=Attribute) ->
+remove_old_attribute_value(Path,Inode,Attribute) ->
   % Database handling
   Matches=dets:match(?ATTR_DB,{Path,Attribute}),
   case length(Matches)>0 of
@@ -64,6 +64,12 @@ remove_child_from_parent(ChildName,ParentName) ->
   NewEntry=Entry#inode_entry{children=NewChildren},
   tree_srv:enter(Inode,NewEntry,inodes).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%
+%%%% COMBINE THESE ^ v ?  Since value dirs can have dirs, a recursive "remove all subdirs" should be needed.
+%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_key
 %%  * removes the {path,attribute} entry from the attribute database;
@@ -72,26 +78,27 @@ remove_child_from_parent(ChildName,ParentName) ->
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
 %%--------------------------------------------------------------------------
 
+
 remove_old_attribute_key(Path,Inode,AName) ->
   ?DEBL("    deleting ~p from ~p",[AName,Path]),
   % Database handling
-  Matches=dets:match(?ATTR_DB,{Path,{AName,'$1'}}),
+  Matches=dets:match(?ATTR_DB,{Path,['$1'|AName]}),
   case length(Matches)>0 of
     true -> 
       ?DEBL("   removing the following items (if any): ~p",[Matches]),
-      dets:match_delete(?ATTR_DB,{Path,{AName,'_'}});
+      dets:match_delete(?ATTR_DB,{Path,['_'|AName,'_']});
     false -> 
       ?DEB1("   found no items to remove, doing nothing"),
       ok
   end,
-  ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,{AName,'$1'}})]),
+  ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,['$1'|AName]})]),
   % Updating ext io using the filtered ext info
   attr_ext:rehash_ext_from_db(Inode,Path),
   % removing file child from attribute folder entry
   FName=inode:is_named(Inode,ino),
   lists:foreach(
     fun(AValue) -> 
-      remove_child_from_parent(FName,{AName,AValue})
+      remove_child_from_parent(FName,[AValue|AName])
     end,
     Matches
   ).
