@@ -35,13 +35,23 @@
          remove_child_from_parent/2,
          remove_old_attribute_key/3,
          remove_empty_dir/2]).
+
+remove_child_from_parent(ChildName,ParentName) ->
+  Inode=inode:get(ParentName,ino),
+  {value,Entry}=tree_srv:lookup(Inode,inodes),
+  Children=Entry#inode_entry.children,
+  NewChildren=lists:keydelete(ChildName,1,Children),
+  NewEntry=Entry#inode_entry{children=NewChildren},
+  tree_srv:enter(Inode,NewEntry,inodes).
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_value
 %% Path: The external path for the file in the db.
 %% Inode: The internal inode of the file.
 %% Attribute: The {Key,Value} pair to be removed.
 %%--------------------------------------------------------------------------
-remove_old_attribute_value(Path,Inode,Attribute) ->
+%% this function removes files from attribute folders. If a file is removed from an attribute folder, it does NOT affect the other subfolders of the attribute containing this folder.
+%% Removing the file from attribs/foo/ does not remove the file from attribs/foo/bar
+remove_file_from_attribute(Path,Inode,Attribute) ->
   % Database handling
   Matches=dets:match(?ATTR_DB,{Path,Attribute}),
   case length(Matches)>0 of
@@ -56,19 +66,27 @@ remove_old_attribute_value(Path,Inode,Attribute) ->
   % Attribute dir handling
   remove_child_from_parent(inode:is_named(Inode,ino),Attribute).
 
-remove_child_from_parent(ChildName,ParentName) ->
-  Inode=inode:get(ParentName,ino),
-  {value,Entry}=tree_srv:lookup(Inode,inodes),
-  Children=Entry#inode_entry.children,
-  NewChildren=lists:keydelete(ChildName,1,Children),
-  NewEntry=Entry#inode_entry{children=NewChildren},
-  tree_srv:enter(Inode,NewEntry,inodes).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%
 %%%% COMBINE THESE ^ v ?  Since value dirs can have dirs, a recursive "remove all subdirs" should be needed.
 %%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+remove_old_attribute(Path,Inode,Attr) ->
+    Matches=dets:match(?ATTR_DB,{Path,Attr}),
+    case length(Matches) > 0 of
+        true ->
+            ?DEB1("Items found"),
+            get_children(Attr),
+            Ino=inode:get(Attr),
+            Entry=tree_srv:lookup(Ino,inodes),
+            Children=#inode_entry.children,
+
+            ?DEBL("Items found, removing ~p",[Matches]),
+
+
+remove_file_from_attribute
 
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_key
@@ -78,7 +96,8 @@ remove_child_from_parent(ChildName,ParentName) ->
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
 %%--------------------------------------------------------------------------
 
-
+% this one was used for removing attributes. Removing the attribute key removes the file from all direct subdirs where it resides
+% attr -r foo fil when attribute foo has the value ",bar,baz" should remove fil from both attribs/foo attribs/foo/bar and attribs/foo/baz
 remove_old_attribute_key(Path,Inode,AName) ->
   ?DEBL("    deleting ~p from ~p",[AName,Path]),
   % Database handling

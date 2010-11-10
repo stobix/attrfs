@@ -1,4 +1,4 @@
-Structure of attribute directories: [Child,Parent,...,Eldest]
+New structure of attribute directories: [Child,Parent,...Elder,Eldest]
 Each attribute directory contains logical connectives pointing to the ?ATTR_FOLDR folder, and will also have links pointing to .. 
 
 
