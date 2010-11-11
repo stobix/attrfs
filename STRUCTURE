@@ -7,7 +7,7 @@ converted to new structure
 ☑ filter
 ☑ attrfs_srv
 ☑ attr_init
-☐ attr_remove
+☑ attr_remove
 ☐ attr_rename
 ☐ attr_mkdir
 ☑ attr_ext

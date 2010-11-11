@@ -51,7 +51,7 @@ remove_child_from_parent(ChildName,ParentName) ->
 %%--------------------------------------------------------------------------
 %% this function removes files from attribute folders. If a file is removed from an attribute folder, it does NOT affect the other subfolders of the attribute containing this folder.
 %% Removing the file from attribs/foo/ does not remove the file from attribs/foo/bar
-remove_file_from_attribute(Path,Inode,Attribute) ->
+remove_attribute(Path,Inode,Attribute) ->
   % Database handling
   Matches=dets:match(?ATTR_DB,{Path,Attribute}),
   case length(Matches)>0 of
@@ -69,36 +69,25 @@ remove_file_from_attribute(Path,Inode,Attribute) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%
-%%%% COMBINE THESE ^ v ?  Since value dirs can have dirs, a recursive "remove all subdirs" should be needed.
+%%%% COMBINE THESE ^ v ?  
+%%%% Is there a reason in my new system that does not separate between keys and values to have these functions separated?
+%%%% Shold the key removing be recursive, or just remove the appropriate attribute and leave the rest as they are. Is there a point to having a key removing function? 
+%%%% Yes, there is. A key removing function that calls the attribute removing function for each value the key has is needed, since attr -r key deletes ALL values that have the corresponding key.
+%%%% Since subdir keys and corresponding values are not the same key attribute pair, they will NOT be removed. Hence, the function be NOT recursive.
 %%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-remove_old_attribute(Path,Inode,Attr) ->
-    Matches=dets:match(?ATTR_DB,{Path,Attr}),
-    case length(Matches) > 0 of
-        true ->
-            ?DEB1("Items found"),
-            get_children(Attr),
-            Ino=inode:get(Attr),
-            Entry=tree_srv:lookup(Ino,inodes),
-            Children=#inode_entry.children,
-
-            ?DEBL("Items found, removing ~p",[Matches]),
-
-
-remove_file_from_attribute
-
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_key
-%%  * removes the {path,attribute} entry from the attribute database;
-%%  * removes the file entry from the attributes/attrName/attrVal/ folder
+%%  * removes all entries from the attribute database one dir deeper than the  key
+%%  * removes the file entry from all attributes/attr/Name/attrVal/ folders
 %%  * removes the attribute from the file entry
 %%  * does NOT remove the possibly empty attrName/attrVal folder from the attributes branch of the file system
 %%--------------------------------------------------------------------------
 
 % this one was used for removing attributes. Removing the attribute key removes the file from all direct subdirs where it resides
 % attr -r foo fil when attribute foo has the value ",bar,baz" should remove fil from both attribs/foo attribs/foo/bar and attribs/foo/baz
-remove_old_attribute_key(Path,Inode,AName) ->
+remove_key_values(Path,Inode,AName) ->
   ?DEBL("    deleting ~p from ~p",[AName,Path]),
   % Database handling
   Matches=dets:match(?ATTR_DB,{Path,['$1'|AName]}),

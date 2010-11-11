@@ -668,7 +668,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
-      attr_remove:remove_old_attribute_key(Path,Inode,Name),
+      attr_remove:remove_key_values(Path,Inode,Name),
       ?DEB1("   Removed attribute, if any, from database and inode entry"),
       {#fuse_reply_err{err=ok},State};
     _ ->
@@ -962,7 +962,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
               case Type of 
                 #external_file{path=Path} ->
                   ?DEBL("Removing ~p from ~p", [ParentEntry#inode_entry.name,Name]),
-                  attr_remove:remove_old_attribute_value(Path,Inode,ParentName),
+                  attr_remove:remove_attribute(Path,Inode,ParentName),
                   #fuse_reply_err{err=ok};
                 _ ->
                   #fuse_reply_err{err=enotsup}
