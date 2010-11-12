@@ -47,7 +47,7 @@ remove_child_from_parent(ChildName,ParentName) ->
 %% remove_old_attribute_value
 %% Path: The external path for the file in the db.
 %% Inode: The internal inode of the file.
-%% Attribute: The {Key,Value} pair to be removed.
+%% Attribute: The [Value|Key] attribute to remove from the dir.
 %%--------------------------------------------------------------------------
 %% this function removes files from attribute folders. If a file is removed from an attribute folder, it does NOT affect the other subfolders of the attribute containing this folder.
 %% Removing the file from attribs/foo/ does not remove the file from attribs/foo/bar
@@ -66,19 +66,12 @@ remove_attribute(Path,Inode,Attribute) ->
   % Attribute dir handling
   remove_child_from_parent(inode:is_named(Inode,ino),Attribute).
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%
-%%%% COMBINE THESE ^ v ?  
-%%%% Is there a reason in my new system that does not separate between keys and values to have these functions separated?
-%%%% Shold the key removing be recursive, or just remove the appropriate attribute and leave the rest as they are. Is there a point to having a key removing function? 
-%%%% Yes, there is. A key removing function that calls the attribute removing function for each value the key has is needed, since attr -r key deletes ALL values that have the corresponding key.
-%%%% Since subdir keys and corresponding values are not the same key attribute pair, they will NOT be removed. Hence, the function be NOT recursive.
-%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_key
+%% Path: The external path for the file in the db.
+%% Inode: The internal inode of the file.
+%% Key: The Key whose values are to be removed.
+%%--------------------------------------------------------------------------
 %%  * removes all entries from the attribute database one dir deeper than the  key
 %%  * removes the file entry from all attributes/attr/Name/attrVal/ folders
 %%  * removes the attribute from the file entry

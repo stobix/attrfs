@@ -702,20 +702,7 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
   ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
-  {value,ParentInoEntry}=tree_srv:lookup(ParentIno,inodes),
-  ?DEBL("   parent_type: ~p",[ParentInoEntry#inode_entry.type]),
-  Reply=
-    case tree_srv:lookup(NewParentIno,inodes) of
-      none -> 
-        ?DEB1("   new parent nonexistent!"),
-        enoent;
-      {value,NewAttribEntry} ->
-        ?DEBL("   new parent type: ~p",[NewAttribEntry#inode_entry.type]),
-        attr_rename:make_rename_reply(
-          ParentInoEntry#inode_entry.type,
-          ParentInoEntry#inode_entry.name,
-          ParentInoEntry,NewParentIno,Name,NewName)
-    end,
+  Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
 
 
