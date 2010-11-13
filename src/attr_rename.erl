@@ -61,9 +61,9 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
           FIno ->
             {value,FEntry}=tree_srv:lookup(FIno,inodes),
             FType=FEntry#inode_entry.type,
-            attr_rename:rename_internal(
+            rename_internal(
               PType,NPType,FType,PName,NPName,
-              NewParentIno,NPEntry,FIno,FEntry)
+              NewParentIno,NPEntry,FIno,FEntry,NewName)
         end
     end.
 
