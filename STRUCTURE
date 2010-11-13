@@ -1,17 +1,3 @@
 New structure of attribute directories: [Child,Parent,...Elder,Eldest]
 Each attribute directory contains logical connectives pointing to the ?ATTR_FOLDR folder, and will also have links pointing to .. 
 Addendum: the ?ATTR_FOLDR will no longer be an internal_dir but an attribute_dir with the internal name of []
-
-
-converted to new structure
-☑ attr_lookup
-☑ filter
-☑ attrfs_srv
-☑ attr_init
-☑ attr_remove
-☑ attr_ext
-☑ attr_rename
-☑ attr_mkdir
-☑ attr_open
-
-☐ attr_tools

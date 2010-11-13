@@ -170,6 +170,10 @@ merge_duplicates(List) ->
   gb_trees:to_list(Tree).
 
 
+%%--------------------------------------------------------------------------
+%% Takes a [{Key,Val}] and transforms it into a gb_tree where each key only has one val.
+%% If the list contains several identical keys, their values are combined using "," as a separator.
+%%--------------------------------------------------------------------------
 make_unduplicate_tree(List) ->
   make_unduplicate_tree(List,gb_trees:empty()).
 
@@ -187,6 +191,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
   make_unduplicate_tree(Items,NewTree).
 
 %%--------------------------------------------------------------------------
+%% makes the stat a directory stat
 %%--------------------------------------------------------------------------
 dir(Stat) ->
   NewMode= ?STD_DIR_MODE,
