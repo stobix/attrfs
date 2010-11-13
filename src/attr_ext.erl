@@ -67,13 +67,13 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 append_attribute(Parent,Name,Stat) ->
-  ?DEBL("    appending ~p/~p",[Key,Val]),
+  ?DEBL("    appending ~p/~p",[Parent,Name]),
   append([Name|Parent],Stat),
-  ?DEBL("    appending ~p/~p",[[Val|Key],Name]),
   %%XXX: Is this still valid?
   tree_srv:enter(Parent,inode:get(Parent,ino),keys),
   %tree_srv:enter(getkey(Parent),inode:get(Parent,ino),keys),
-  AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
+%  AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
+  AttributesFolderIno=inode:get([],ino),
   ?DEB1("   getting attribute folder inode entry"),
   {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
   ?DEB1("   getting attribute folder children"),

@@ -728,17 +728,6 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
         attr_remove:remove_child_from_parent(Name,PName),
         inode:release(inode:get(Name,ino),ino),
         ok;
-      internal_dir ->
-        case PName of
-          ?ATTR_FOLDR ->
-            Name=binary_to_list(BName),
-            ?DEBL("   Removing attribute key folder ~p",[Name]),
-            attr_remove:remove_child_from_parent(Name,PName),
-            inode:release(inode:get(Name,ino),ino),
-            ok;
-          _ ->
-            enotsup
-        end;
       _ ->
         enotsup
     end,

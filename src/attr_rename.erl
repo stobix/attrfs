@@ -132,7 +132,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   KeyIno=inode:is_numbered(OldKeyName,ino),
   ValueIno=inode:is_numbered(OldValueName,ino),
   attr_remove:remove_empty_dir(KeyIno,OldValueName),
-  ?DEBL("    adding ~p to ~p directory", [NewValueName,NewKeyName]),
+  ?DEBL("    adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
   ?DEB2("    adding ~p to inode list",NewAttribName),
   append_child({NewValueName,ValueIno},KeyIno),

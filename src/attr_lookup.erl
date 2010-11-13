@@ -93,8 +93,8 @@ children(#inode_entry{}=Entry) ->
     case Entry#inode_entry.type of
       logic_dir ->
         % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
-        ?DEBL("    ~p: logical dir: ~p",[Inode,Name]),
-        generate_logic_attribute_dir_children(Name,?ATTR_FOLDR);
+        generate_logic_attribute_dir_children(Name,[]);
+        %generate_logic_attribute_dir_children(Name,?ATTR_FOLDR);
 
       attribute_dir ->
         ?DEB1("    attribute dir; generating lodic dirs"),
