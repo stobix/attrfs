@@ -47,7 +47,7 @@ init({MirrorDir,DB}) ->
     #inode_entry{
       name=root,
       children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR,AttribIno}],
-      type=internal_dir, %XXX: Really ok to let this have the same type as attribute dirs?
+      type=internal_dir, 
       stat=
         #stat{
           st_mode=8#755 bor ?S_IFDIR,
@@ -62,9 +62,9 @@ init({MirrorDir,DB}) ->
 
   AttributeEntry=
     #inode_entry{
-      name=?ATTR_FOLDR,
+      name=[],
       children=[],
-      type=internal_dir,
+      type=attribute_dir,
       stat=#stat{ 
           % For now I'll set all access here, and limit access on a per-user-basis.
           % Maybe even make this folder "magic", so that different users think that they own it?

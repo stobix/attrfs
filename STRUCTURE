@@ -10,8 +10,8 @@ converted to new structure
 ☑ attr_init
 ☑ attr_remove
 ☑ attr_ext
+☑ attr_rename
+☑ attr_mkdir
+☑ attr_open
 
-☐ attr_rename
-☐ attr_mkdir
-☐ attr_open
 ☐ attr_tools

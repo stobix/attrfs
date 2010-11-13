@@ -34,87 +34,38 @@
 
 -export([make_dir/6]).
 
-make_dir(_Ctx,_ParentInode,_ParentName,#external_dir{},_Name,_Mode) ->
-  ?DEB1("   external dir, not supported"),
-  #fuse_reply_err{err=enotsup};
+make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
+  make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
 
-
-make_dir(Ctx,ParentInode,ParentName,DirType=#attribute_dir{},Name,Mode) ->
-  AttrDirType=DirType#attribute_dir.atype,
-  make_attr_child_dir(Ctx,ParentInode,AttrDirType,ParentName,Name,Mode);
-
-
-make_dir(Ctx,ParentInode,ParentName,internal_dir,Name,Mode) ->
-  make_internal_child_dir(Ctx,ParentInode,ParentName,Name,Mode).
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_attr_child_dir(Ctx,ParentInode,value,ValueParentName,Name,Mode) ->
-  ?DEB1("   NOT creating a subvalue dir"),
-  MyName={ValueParentName,Name},
-  MyInode=inode:get(MyName,ino),
-  Stat=make_general_dir(Ctx,ParentInode,MyInode,MyName,Mode,#attribute_dir{atype=value}),
-  #fuse_reply_entry{
-    fuse_entry_param=
-      #fuse_entry_param{
-        ino=MyInode,
-        generation=1,
-        attr=Stat,
-        attr_timeout_ms=1000,
-        entry_timeout_ms=1000
-      }
-  }.
-  %this is where I create a subvalue dir, when these are supported.
-  % subvalue dir name {{Key,Val},Name}, I guess.
-  % Inode=make_general_dir(Ctx,ParentInode,Name,Mode),
-
-make_attr_child_dir(Ctx,ParentInode,key,Key,Name,Mode) ->
-  ?DEB1("   creating an attribute value dir"),
-  % create value directory here.
-  MyInode=inode:get({Key,Name},ino),
-  Stat=make_general_dir(Ctx,ParentInode,MyInode,{Key,Name},Mode,#attribute_dir{atype=value}),
-  ?DEB1("   returning new dir"),
-  #fuse_reply_entry{
-    fuse_entry_param=
-      #fuse_entry_param{
-        ino=MyInode,
-        generation=1,
-        attr=Stat,
-        attr_timeout_ms=1000,
-        entry_timeout_ms=1000
-      }
-  }.
-
-make_internal_child_dir(_Ctx,_ParentInode,root,_Name,_Mode) ->
-  ?DEB1("   creating of new directory type not supported"),
-  #fuse_reply_err{err=enotsup};
-
-make_internal_child_dir(_Ctx,_ParentInode,?REAL_FOLDR,_Name,_Mode) ->
-  ?DEB1("   creating of external dirs not supported"),
-  #fuse_reply_err{err=enotsup};
-
-make_internal_child_dir(Ctx,ParentInode,?ATTR_FOLDR,Name,Mode) ->
-  % This is where I add an attribute key folder.
-  ?DEB1("   creating an attribute key dir"),
-  MyInode=inode:get(Name,ino),
-  Stat=make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,#attribute_dir{atype=key}),
-  ?DEB1("   returning new dir"),
-  tree_srv:enter(Name,MyInode,keys),
-  #fuse_reply_entry{
-    fuse_entry_param=
-      #fuse_entry_param{
-        ino=MyInode,
-        generation=0,
-        attr=Stat,
-        attr_timeout_ms=1000,
-        entry_timeout_ms=1000
-      }
-  };
-
-make_internal_child_dir(_Ctx,_ParentInode,_,_Name,_Mode) ->
+make_dir(_Ctx,_ParentInode,_ParentName,DirType,_Name,_Mode) ->
+  ?DEB2("   ~p , not supported",DirType),
   #fuse_reply_err{err=enotsup}.
 
+
 %%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+
+make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode) ->
+  ?DEB1("   Creating an attribute dir"),
+  MyName=[Name|ParentName],
+  MyInode=inode:get(MyName,ino),
+  Stat=make_general_dir(Ctx,ParentInode,MyInode,MyName,Mode,attribute_dir),
+  Param=make_param(MyInode,Stat),
+  #fuse_reply_entry{
+    fuse_entry_param=Param
+  }.
+
+make_param(Ino,Stat) ->
+  #fuse_entry_param{
+    ino=Ino,
+    generation=1,
+    attr=Stat,
+    attr_timeout_ms=1000,
+    entry_timeout_ms=1000
+  }.
+
+%%--------------------------------------------------------------------------
+%% Creates a dir inode entry of type DirType and inserts it into the inode table as a child of ParentInode; Creates and returns dirstats with actual time info, and the UID and GID provided in CTX and the mode provided in Mode.
 %%--------------------------------------------------------------------------
 make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
   ?DEBL("   creating new directory entry called ~p",[Name]),
@@ -155,8 +106,8 @@ insert_entry(ParentInode,ChildEntry) ->
   ChildInode=inode:get(InoName,ino),
   ChildName=
     case ChildEntry#inode_entry.type of
-      #attribute_dir{atype=value} ->
-        {_,Name} = InoName,
+      attribute_dir ->
+        [Name|Parents] = InoName,
         Name;
       _ -> InoName
     end,
