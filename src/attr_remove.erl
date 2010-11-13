@@ -31,9 +31,9 @@
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
--export([remove_old_attribute_value/3,
+-export([remove_attribute/3,
          remove_child_from_parent/2,
-         remove_old_attribute_key/3,
+         remove_key_values/3,
          remove_empty_dir/2]).
 
 remove_child_from_parent(ChildName,ParentName) ->
@@ -87,7 +87,7 @@ remove_key_values(Path,Inode,AName) ->
   case length(Matches)>0 of
     true -> 
       ?DEBL("   removing the following items (if any): ~p",[Matches]),
-      dets:match_delete(?ATTR_DB,{Path,['_'|AName,'_']});
+      dets:match_delete(?ATTR_DB,{Path,['_'|AName]});
     false -> 
       ?DEB1("   found no items to remove, doing nothing"),
       ok

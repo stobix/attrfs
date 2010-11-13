@@ -68,9 +68,11 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 %%--------------------------------------------------------------------------
 append_attribute(Parent,Name,Stat) ->
   ?DEBL("    appending ~p/~p",[Key,Val]),
-  append_dir([Name|Parent],Stat),
+  append([Name|Parent],Stat),
   ?DEBL("    appending ~p/~p",[[Val|Key],Name]),
-  tree_srv:enter(getkey(Parent),inode:get(Key,ino),keys),
+  %%XXX: Is this still valid?
+  tree_srv:enter(Parent,inode:get(Parent,ino),keys),
+  %tree_srv:enter(getkey(Parent),inode:get(Parent,ino),keys),
   AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
   ?DEB1("   getting attribute folder inode entry"),
   {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
@@ -82,41 +84,45 @@ append_attribute(Parent,Name,Stat) ->
   tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
 
 
+
+%% Is this function useful?
 getkey([A|[]]) -> A;
 getkey([A,B])->getkey(B).
 
 
-append([],Stat) ->
-  ?DEB1("  done checking parent dirs")
+%% this function creates directory parents recursively if unexistent, updating
+%% the lists of children along the way.
 
-%% this function creates directory parents recursively if unexistent, updating the lists of children along the way.
+append([],Stat) ->
+  ?DEB1("  done checking parent dirs");
+
 
 append(ChildName=[Child|Parent],Stat) ->
-  ChildIno=inode_get(ChildName,ino),
-  ParentIno=inode_get(Parent,ino),
-    case tree_srv:lookup(Parent,inodes) of
-      % No entry found, creating new attribute entry.
-      none ->
-        ?DEBL("   adding new attribute folder ~p",[ChildName]),
-        PEntry=
-          #inode_entry{
-            type=attribute_dir,
-            name=Parent,
-            children=[{ChildName,ChildIno}],
-            stat=attr_tools:dir(Stat#stat{st_ino=ParentIno}),
-            ext_info=[],
-            ext_io=ext_info_to_ext_io([])
-          },
-        ?DEB1("  entering new entry into server"),
-        tree_srv:enter(ParentIno,PEntry,inodes),
-        ?DEB1("  checking parent"),
-        append_dir(Parent,Stat);
-      {value,OldEntry} ->
-        ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
-        NewChildren=attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children,
-        NewEntry=OldEntry#inode_entry{children=NewChildren},
-        tree_srv:enter(ParentIno,NewEntry,inodes)
-    end.
+  ChildIno=inode:get(ChildName,ino),
+  ParentIno=inode:get(Parent,ino),
+  case tree_srv:lookup(Parent,inodes) of
+    % No entry found, creating new attribute entry.
+    none ->
+      ?DEBL("   adding new attribute folder ~p",[ChildName]),
+      PEntry=
+        #inode_entry{
+          type=attribute_dir,
+          name=Parent,
+          children=[{ChildName,ChildIno}],
+          stat=attr_tools:dir(Stat#stat{st_ino=ParentIno}),
+          ext_info=[],
+          ext_io=ext_info_to_ext_io([])
+        },
+      ?DEB1("  entering new entry into server"),
+      tree_srv:enter(ParentIno,PEntry,inodes),
+      ?DEB1("  checking parent"),
+      append(Parent,Stat);
+    {value,OldEntry} ->
+      ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
+      NewChildren=attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children),
+      NewEntry=OldEntry#inode_entry{children=NewChildren},
+      tree_srv:enter(ParentIno,NewEntry,inodes)
+  end.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
