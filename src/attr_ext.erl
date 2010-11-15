@@ -32,7 +32,9 @@
          rehash_ext_from_db/2,
          append_attribute/3,
          generate_ext_info_io/1,
-         ext_info_to_ext_io/1]).
+         ext_info_to_ext_io/1,
+         keyvalue/1]).
+
 
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
@@ -50,8 +52,8 @@ rehash_ext_from_db(Inode,Path) ->
 %%--------------------------------------------------------------------------
 add_new_attribute(Path,FIno,FEntry,Attr) ->
   ?DEB1("  >add_new_attribute"),
-  % Add the new attribute pair, if non-existent.
-  ?DEBL("   inserting (~p)~p into database, if nonexistent",[Path,Attr]),
+  % Add the new attribute, if non-existent.
+  ?DEBL("   inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
   length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
     (ok=dets:insert(?ATTR_DB,{Path,Attr})),
   ?DEBL("   database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
@@ -129,8 +131,39 @@ append(ChildName=[Child|Parent],Stat) ->
 generate_ext_info(Path) ->
   ?DEB2("   generating ext info for ~p",Path),
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
-  attr_tools:merge_duplicates(lists:flatten(ExtInfo0)). % Going from a list of lists of tuples to a list of tuples.
+  ExtInfo1=convert(ExtInfo0),
+  attr_tools:merge_duplicates(ExtInfo1). % Going from a list of lists of tuples to a list of tuples.
 
+
+convert(LList) ->
+    convert1(attr_tools:flatten1(LList)).
+
+
+convert1([]) -> [];
+convert1([A|As]) ->
+    [keyvalue(A)|convert1(As)].
+
+% A key AND value less attribute will make this function crash, and it should.
+
+% A valueless key will have an empty string as value
+keyvalue([A|[]]) ->
+    {A,""};
+
+% All other attributes are converted from [long,list,of,key,words,value] to {"long/list/of/key/words",value}
+keyvalue(A) ->
+    RA=lists:reverse(A),
+    lists:foldl(
+        fun(X,{[],[]}) ->
+            ?DEB2("init: ~p",X),
+            {[],X};
+           (X,{[],Z}) ->
+            {X,Z};
+           (X,{Y,Z}) ->
+            ?DEBL("recurs: ~p,~p,~p",[X,Y,Z]),
+            {X++"/"++Y,Z}
+        end,
+        {[],[]},
+        RA).
 
 
 %%--------------------------------------------------------------------------

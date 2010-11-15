@@ -87,9 +87,9 @@ rename_internal(_,_,_,PName,NPName,NewAttribIno,NewAttribEntry,FileIno,FileEntry
 
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 copy_file(NPIno,FIno,FEntry) ->
-  ?DEB1("   copying file"),
   Path=(FEntry#inode_entry.type)#external_file.path,
   Attribute=inode:is_named(NPIno,ino),
+  ?DEBL("   copying file ~p into ~p",[FEntry#inode_entry.name,Attribute]),
   attr_ext:add_new_attribute(Path,FIno,FEntry,Attribute).
 
 %%--------------------------------------------------------------------------
