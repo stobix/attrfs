@@ -144,7 +144,7 @@ generate_dir_link_children(Ino,Name) ->
   %XXX: When looking for ONE entry, generating ALL seems stupid.
   ConvertedChildren=lists:map(
     fun({MyName,Inode}) ->
-      MyInode=inode:get({Name,MyName},ino),
+      MyInode=inode:n2i({Name,MyName},ino),
       case tree_srv:lookup(MyInode,inodes) of
         {value,_MyEntry} ->
           % For now, I return the children of the linked to entry, if already generated.
@@ -266,7 +266,7 @@ link_ino({_,Entry}) ->
 generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
   ?DEB1("     getting attributes entry "),
-  MIno=inode:get(MirrorDir,ino),
+  MIno=inode:n2i(MirrorDir,ino),
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
   ?DEB1("     transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
@@ -280,7 +280,7 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
             links=[],
             generated=false,
             type=#dir_link{link=Inode}},
-          LinkIno=inode:get(LinkEntry#inode_entry.name,ino),
+          LinkIno=inode:n2i(LinkEntry#inode_entry.name,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
           {Name,LinkIno};
         #external_file{} ->
@@ -308,7 +308,7 @@ generate_logic_dirs(Predecessor) ->
 generate_logic_dir(Parent,X) ->
   ?DEB2("     generating lodic dir \"~p\"",X),
   ?DEB1("      getting entry"),
-  {value,PEntry}=tree_srv:lookup(inode:get(Parent,ino),inodes),
+  {value,PEntry}=tree_srv:lookup(inode:n2i(Parent,ino),inodes),
   ?DEB1("      generating new entry"),
   Name=[X|Parent],
   Ino=inode:get(Name,ino),

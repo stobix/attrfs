@@ -157,7 +157,7 @@ has_user_perms(Mode,Mask) ->
 
 
 %%--------------------------------------------------------------------------
-%% Takes in a [{"foo","bar},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
+%% Takes in a [{"foo","bar"},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
 %%  a [{"foo","bar,baz"},{"etaoin","shrdlu"}]
 %%--------------------------------------------------------------------------
 %% Algorithm: enter each tuple into a gb_tree, merging if item exists. Finally convert to list and return.

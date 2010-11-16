@@ -40,15 +40,14 @@ init({MirrorDir,DB}) ->
   RootIno=inode:get(root,ino),
   RealIno=inode:get(?REAL_FOLDR,ino),
 %  AttribIno=inode:get(?ATTR_FOLDR,ino),
-  AttribIno=inode:get([],ino),
+  AttribIno=inode:get(?ATTR_FOLDR_NAME,ino),
   ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.
   RootEntry=
     #inode_entry{
       name=root,
-%      children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR_FS_NAME,AttribIno}],
-      children=[{?REAL_FOLDR,RealIno},{"attribs",AttribIno}],
+      children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR_FS_NAME,AttribIno}],
       type=internal_dir, 
       stat=
         #stat{
