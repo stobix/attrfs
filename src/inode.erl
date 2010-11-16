@@ -35,6 +35,7 @@
 -behaviour(gen_server).
 
 -export([get/1,release/2]).
+-export([find/2,name/3,number/2]).
 -export([get/2,is_named/2,is_numbered/2,is_used/2]).
 -export([reset/1,reset/2,list_bound/1]).
 -export([rename/3]).
@@ -113,7 +114,7 @@ initiate(N,Server) ->
 
 %%----------------------------------------------
 %% @doc counts the number of occupied inodes.
-%% @spec () -> non_neg_integer().
+%% @spec (server()) -> non_neg_integer().
 %% @end
 %%----------------------------------------------
 count_occupied(Server) ->
@@ -121,7 +122,7 @@ count_occupied(Server) ->
 
 %%----------------------------------------------
 %% @doc Returns an unused integer.
-%% @spec () -> Number::unique_integer().
+%% @spec (server()) -> Number::unique_integer().
 %% @end
 %%----------------------------------------------
 get(Server) ->
@@ -130,7 +131,7 @@ get(Server) ->
 %%----------------------------------------------
 %% @doc On first run, assosicate a unique integer with Name.
 %%     On sequential runs, return the integer associated with Name.
-%% @spec (term())-> Number::non_neg_integer().
+%% @spec (term(),server())-> Number::non_neg_integer().
 %% @end
 %%----------------------------------------------
 get(Name,Server) ->
@@ -143,22 +144,68 @@ get(Name,Server) ->
     Number -> Number
   end.
 
+%%----------------------------------------------
+%% @doc Returns the inode number associated with Name.
+%%     Crashes if no association exists.
+%% @spec (term(),server())-> Number::non_neg_integer()|{error, {not_numbered,Name}}.
+%% @end
+%%----------------------------------------------
+find(Name,Server) ->
+  case is_numbered(Name,Server) of
+    false ->
+      {error, {not_numbered,Name}};
+    True ->
+      True
+  end.
+
+%%----------------------------------------------
+%% @doc Creates a link between a name and an inode number.
+%%     Crashes if the inode number is already bound.
+%% @spec (term(),server())-> Number::non_neg_integer() | { error, {is_numbered,Name}}.
+%% @end
+%%----------------------------------------------
+number(Name,Server) ->
+  case is_numbered(Name,Server) of
+    false ->
+      ?MODULE:get(Name,Server);
+    True ->
+      {error, {is_numbered, {Name,True}}}
+  end.
 
 
 %%----------------------------------------------
+%% @doc Creates a link between a name and an inode number.
+%%     Crashes if the inode number is already bound.
+%% @spec (non_neg_integer(),term(),server())-> ok.
+%% @end
+%%----------------------------------------------
+name(Number,Name,Server) ->
+  case is_named(Number,Server) of
+    false ->
+      gen_server:call(?MODULE,{register,Name,Number,Server});
+    True ->
+      {error,{is_named,{Name,True},Number}}
+  end.
+
+%%----------------------------------------------
 %% @doc Checks whether Number has a named associated with it. Returs either false, or the associated name.
-%% @spec (non_neg_integer()) -> false|Name::term().
+%% @spec (non_neg_integer(),server()) -> false|Name::term().
 %% @end
 %%----------------------------------------------
 is_named(Number,Server) ->
   gen_server:call(?MODULE,{is_named,Number,Server}).
 
+%%----------------------------------------------
+%% @doc Substitute the OldName-OldInode link with a NewName-OldInode link.
+%% @spec (term(),server())-> ok
+%% @end
+%%----------------------------------------------
 rename(OldName,NewName,Server) ->
   gen_server:cast(?MODULE,{rename,OldName,NewName,Server}).
 
 %%----------------------------------------------
 %% @doc Checks whether Name has a number associated with it. Returs either false, or the associated number.
-%% @spec (term()) -> false|Name::uniqe_integer().
+%% @spec (term(),server()) -> false|Name::uniqe_integer().
 %% @end
 %%----------------------------------------------
 is_numbered(Name,Server) ->
@@ -166,7 +213,7 @@ is_numbered(Name,Server) ->
 
 %%----------------------------------------------
 %% @doc Checks whether Number is currently in use. Returns either false or true.
-%% @spec (term()) -> bool().
+%% @spec (term(),server()) -> bool().
 %% @end
 %%----------------------------------------------
 is_used(Number,Server) ->
@@ -175,7 +222,7 @@ is_used(Number,Server) ->
 %%----------------------------------------------
 %% @doc Makes the number Number no longer occupied.
 %%      Releases any name association with Number, and makes Number free to get returned by a call to get/0 or get/1.
-%% @spec (term()) -> false|Name::unique_integer().
+%% @spec (term(),server()) -> false|Name::unique_integer().
 %% @end
 %%----------------------------------------------
 release(Number,Server) ->
@@ -183,7 +230,7 @@ release(Number,Server) ->
 
 %%----------------------------------------------
 %% @doc Resets the counter. Forgets all name bindings.
-%% @spec () -> ok.
+%% @spec (server()) -> ok.
 %% @end
 %%----------------------------------------------
 reset(Server) ->
@@ -191,7 +238,7 @@ reset(Server) ->
 
 %%----------------------------------------------
 %% @doc Resets the counter. Forgets all name bindings. Starts anew at number Number.
-%% @spec (Number) -> ok.
+%% @spec (Number,server()) -> ok.
 %% @end
 %%----------------------------------------------
 reset(Number,Server) ->
@@ -199,7 +246,7 @@ reset(Number,Server) ->
 
 %%----------------------------------------------
 %% @doc Lists all integers bound to a term.
-%% @spec () -> [{term(),unique_integer()}].
+%% @spec (server()) -> [{term(),unique_integer()}].
 %% @end
 %%----------------------------------------------
 list_bound(Server) ->
@@ -242,8 +289,6 @@ handle_call({get,Server},_From,State) ->
   {value,S}=gb_trees:lookup(Server,State),
   {Reply,NewS}=get__(S),
   {reply,Reply,gb_trees:enter(Server,NewS,State)}.
-
-
 
 handle_cast({rename,OldName,NewName,Server},State) ->
   {value,S}=gb_trees:lookup(Server,State),
@@ -295,11 +340,11 @@ is_named_(Number,{_,_,Reserved}) ->
       {Name,Number} -> Name
     end.
 
-get__({CurrentHighest,[],_Reserved}) ->
-  {CurrentHighest,{CurrentHighest+1,[],_Reserved}};
+get__({CurrentHighest,[],Reserved}) ->
+  {CurrentHighest,{CurrentHighest+1,[],Reserved}};
 
-get__({CurrentHighest,[Free|Frees],_Reserved}) ->
-  {Free, {CurrentHighest,Frees,_Reserved}}.
+get__({CurrentHighest,[Free|Frees],Reserved}) ->
+  {Free, {CurrentHighest,Frees,Reserved}}.
 
 rename__(OldName,NewName,{CurrentHighest,Frees,Reserved}=Status) ->
   case lists:keytake(OldName,1,Reserved) of
