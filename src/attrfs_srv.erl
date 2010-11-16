@@ -836,7 +836,7 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   Key=
     case string:str(RawKey,"system")==1 of
       true -> "."++RawKey;
-      false -> RawKey
+      false -> attr_tools:remove_from_start(RawKey,"user.")
     end,
 
   Values=string:tokens(RawValue,?VAL_SEP),
@@ -845,8 +845,11 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
+        ?DEB1("   entry is an external file"),
         Syek=string:tokens(Key,?KEY_SEP),
-        Keys=lists:revese(Syek),
+        ?DEB2("   tokenized key: ~p",[Syek]),
+        Keys=lists:reverse(Syek),
+        ?DEBL("   key to be inserted: ~p",[Keys]),
         lists:foreach(
           fun(Value) -> 
             Attr=[Value|lists:reverse(Keys)],
