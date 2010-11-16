@@ -32,8 +32,8 @@
 
 -define(ROOT_FOLDR, root).
 -define(REAL_FOLDR, "real").
-%-define(ATTR_FOLDR, []).
-%-define(ATTR_FOLDR_FS_NAME, "attribs").
+-define(ATTR_FOLDR_NAME, []).
+-define(ATTR_FOLDR_FS_NAME, "attribs").
 -define(SRCH_FOLDR, "search").
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()

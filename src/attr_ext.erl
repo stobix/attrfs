@@ -72,10 +72,8 @@ append_attribute(Parent,Name,Stat) ->
   ?DEBL("    appending ~p/~p",[Parent,Name]),
   append([Name|Parent],Stat),
   %%XXX: Is this still valid?
-  tree_srv:enter(Parent,inode:get(Parent,ino),keys),
-  %tree_srv:enter(getkey(Parent),inode:get(Parent,ino),keys),
-%  AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
-  AttributesFolderIno=inode:get([],ino),
+  tree_srv:enter(Parent,inode:n2i(Parent,ino),keys),
+  AttributesFolderIno=inode:n2i([],ino),
   ?DEB1("   getting attribute folder inode entry"),
   {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
   ?DEB1("   getting attribute folder children"),
@@ -86,20 +84,14 @@ append_attribute(Parent,Name,Stat) ->
   tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
 
 
-
-%% Is this function useful?
-getkey([A|[]]) -> A;
-getkey([A,B])->getkey(B).
-
-
 %% this function creates directory parents recursively if unexistent, updating
 %% the lists of children along the way.
 
-append([],Stat) ->
+append([],_Stat) ->
   ?DEB1("  done checking parent dirs");
 
 
-append(ChildName=[Child|Parent],Stat) ->
+append(ChildName=[_Child|Parent],Stat) ->
   ChildIno=inode:get(ChildName,ino),
   ParentIno=inode:get(Parent,ino),
   case tree_srv:lookup(Parent,inodes) of
@@ -118,7 +110,9 @@ append(ChildName=[Child|Parent],Stat) ->
       ?DEB1("  entering new entry into server"),
       tree_srv:enter(ParentIno,PEntry,inodes),
       ?DEB1("  checking parent"),
-      append(Parent,Stat);
+      append(Parent,Stat),
+      ?DEB1("  appending child"),
+      append(ChildName,Stat); % Since I now have a parent, this will not create an infinite loop.
     {value,OldEntry} ->
       ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
       NewChildren=attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children),

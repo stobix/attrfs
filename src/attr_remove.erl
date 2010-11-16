@@ -37,7 +37,7 @@
          remove_empty_dir/2]).
 
 remove_child_from_parent(ChildName,ParentName) ->
-  Inode=inode:get(ParentName,ino),
+  Inode=inode:n2i(ParentName,ino),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   Children=Entry#inode_entry.children,
   NewChildren=lists:keydelete(ChildName,1,Children),
@@ -64,7 +64,7 @@ remove_attribute(Path,Inode,Attribute) ->
   % File attribute handling
   attr_ext:rehash_ext_from_db(Inode,Path),
   % Attribute dir handling
-  remove_child_from_parent(inode:is_named(Inode,ino),Attribute).
+  remove_child_from_parent(inode:i2n(Inode,ino),Attribute).
 
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_key
@@ -96,7 +96,7 @@ remove_key_values(Path,Inode,AName) ->
   % Updating ext io using the filtered ext info
   attr_ext:rehash_ext_from_db(Inode,Path),
   % removing file child from attribute folder entry
-  FName=inode:is_named(Inode,ino),
+  FName=inode:i2n(Inode,ino),
   lists:foreach(
     fun(AValue) -> 
       remove_child_from_parent(FName,[AValue|AName])

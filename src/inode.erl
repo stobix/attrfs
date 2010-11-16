@@ -35,7 +35,7 @@
 -behaviour(gen_server).
 
 -export([get/1,release/2]).
--export([find/2,name/3,number/2]).
+-export([n2i/2,i2n/2,name/3,number/2]).
 -export([get/2,is_named/2,is_numbered/2,is_used/2]).
 -export([reset/1,reset/2,list_bound/1]).
 -export([rename/3]).
@@ -150,13 +150,29 @@ get(Name,Server) ->
 %% @spec (term(),server())-> Number::non_neg_integer()|{error, {not_numbered,Name}}.
 %% @end
 %%----------------------------------------------
-find(Name,Server) ->
+n2i(Name,Server) ->
   case is_numbered(Name,Server) of
     false ->
       {error, {not_numbered,Name}};
     True ->
       True
   end.
+
+%%----------------------------------------------
+%% @doc Returns the inode number associated with Name.
+%%     Crashes if no association exists.
+%% @spec (term(),server())-> Name::Term()|{error, {not_named,Number}}.
+%% @end
+%%----------------------------------------------
+
+i2n(Number,Server) ->
+  case is_named(Number,Server) of
+    false ->
+      {error, {not_named,Number}};
+    True ->
+      True
+  end.
+
 
 %%----------------------------------------------
 %% @doc Creates a link between a name and an inode number.
