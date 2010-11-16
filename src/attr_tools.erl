@@ -39,7 +39,8 @@
          dir/1,
          datetime_to_epoch/1,
          statify_file_info/1,
-         flatten1/1
+         flatten1/1,
+         append_child/2
         ]).
 
 
@@ -224,4 +225,32 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
     st_mtime=datetime_to_epoch(Mtime),
     st_ctime=datetime_to_epoch(Ctime)
   }.
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+append_child(NewChild={_ChildName,_ChildIno},ParentEntry=#inode_entry{}) ->
+  PName=ParentEntry#inode_entry.name,
+  ?DEBL(" »append_child: Child: ~p Parent: ~p",[NewChild,ParentEntry#inode_entry.name]),
+  Children=ParentEntry#inode_entry.children,
+  ?DEB2("     children: ~p",Children),
+  NewChildren=attr_tools:keymergeunique(NewChild,Children),
+  ?DEB2("     merged children: ~p",NewChildren),
+  NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
+  ?DEB1("     created new parent entry"),
+  ParentIno=inode:n2i(PName,ino),
+  ?DEB2("     parent inode: ~p",ParentIno),
+  tree_srv:enter(ParentIno,NewParentEntry,inodes),
+  ?DEB1("     new parent inserted");
+
+append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
+  ?DEBL(" »append_child: ~p (~p)",[NewChild,ParentIno]),
+  case tree_srv:lookup(ParentIno,inodes) of
+    {value,ParentEntry} -> 
+        ?DEB1("   got parent entry"),
+        append_child(NewChild,ParentEntry);
+    none ->
+        ?DEB1("   DID NOT get parent entry"),
+        throw({error,{parent_unbound,ParentIno}})
+  end.
+
 

@@ -68,11 +68,11 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-append_attribute(Parent,Name,Stat) ->
-  ?DEBL("    appending ~p/~p",[Parent,Name]),
-  append([Name|Parent],Stat),
+append_attribute(Attr,FName,Stat) ->
+  ?DEBL("    appending ~p/~p",[Attr,FName]),
+  append(Attr,FName,Stat),
   %%XXX: Is this still valid?
-  tree_srv:enter(Parent,inode:n2i(Parent,ino),keys),
+  tree_srv:enter(Attr,inode:n2i(Attr,ino),keys),
   AttributesFolderIno=inode:n2i([],ino),
   ?DEB1("   getting attribute folder inode entry"),
   {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
@@ -87,17 +87,14 @@ append_attribute(Parent,Name,Stat) ->
 %% this function creates directory parents recursively if unexistent, updating
 %% the lists of children along the way.
 
-append([],_Stat) ->
-  ?DEB1("  done checking parent dirs");
-
-
-append(ChildName=[_Child|Parent],Stat) ->
-  ChildIno=inode:get(ChildName,ino),
+append(Parent,ChildName,Stat) ->
+  ?DEBL(" »append ~p",[ChildName]),
+  ChildIno=inode:n2i(ChildName,ino),
   ParentIno=inode:get(Parent,ino),
-  case tree_srv:lookup(Parent,inodes) of
+  case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry.
     none ->
-      ?DEBL("   adding new attribute folder ~p",[ChildName]),
+      ?DEBL("   adding new attribute folder ~p",[Parent]),
       PEntry=
         #inode_entry{
           type=attribute_dir,
@@ -109,15 +106,12 @@ append(ChildName=[_Child|Parent],Stat) ->
         },
       ?DEB1("  entering new entry into server"),
       tree_srv:enter(ParentIno,PEntry,inodes),
-      ?DEB1("  checking parent"),
-      append(Parent,Stat),
-      ?DEB1("  appending child"),
-      append(ChildName,Stat); % Since I now have a parent, this will not create an infinite loop.
-    {value,OldEntry} ->
-      ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
-      NewChildren=attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children),
-      NewEntry=OldEntry#inode_entry{children=NewChildren},
-      tree_srv:enter(ParentIno,NewEntry,inodes)
+      [_|GrandParent]=Parent, %Since attribute folder names are defined recursively.
+      ?DEBL("  checking parent of parent (~p)",[GrandParent]),
+      append(GrandParent,Parent,Stat);
+    {value,PEntry} ->
+      ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},PEntry#inode_entry.children]),
+      attr_tools:append_child({ChildName,ChildIno},PEntry)
   end.
 
 %%--------------------------------------------------------------------------
@@ -143,9 +137,9 @@ convert1([A|As]) ->
 keyvalue([A|[]]) ->
     {A,""};
 
-% All other attributes are converted from [long,list,of,key,words,value] to {"long/list/of/key/words",value}
+% All other attributes are converted from [value,words,key,of,list,long] to {"long/list/of/key/words",value}
 keyvalue(A) ->
-    RA=lists:reverse(A),
+%    RA=lists:reverse(A),
     lists:foldl(
         fun(X,{[],[]}) ->
             ?DEB2("init: ~p",X),
@@ -157,7 +151,7 @@ keyvalue(A) ->
             {X++"/"++Y,Z}
         end,
         {[],[]},
-        RA).
+        A).
 
 
 %%--------------------------------------------------------------------------

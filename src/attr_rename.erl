@@ -135,7 +135,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEBL("    adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
   ?DEB2("    adding ~p to inode list",NewAttribName),
-  append_child({NewValueName,ValueIno},KeyIno),
+  attr_tools:append_child({NewValueName,ValueIno},KeyIno),
   ?DEB1("    moving inode number"),
   inode:rename(OldAttribName,NewAttribName,ino),
   ok.
@@ -151,14 +151,5 @@ move_child(attribute_dir,ChildInode,ChildEntry,_OldParentEntry,NewParentEntry) -
   move_attribute_dir(NewParentEntry,ChildEntry,ChildEntry#inode_entry.name).
 
 
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
-  {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
-  Children=ParentEntry#inode_entry.children,
-  NewChildren=attr_tools:keymergeunique(NewChild,Children),
-  NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
-  tree_srv:enter(ParentIno,NewParentEntry,inodes).
 
 

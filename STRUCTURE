@@ -44,7 +44,7 @@ attr_rename.erl
 
 
 attr_tools.erl
- app common tools, without side effects
+ tools used by more than one sub module.
 filter.erl
  used to combine the contents of two directories given a logical connective
 
