@@ -141,17 +141,17 @@ generate_dir_link_children(Ino,Name) ->
       ConvertedChildren=lists:map(
         fun({_MyName,_Inode,logic_dir}=E) ->
           E;
-           ({MyName,Inode,MyType}) ->
+           ({MyName,Inode,Type}) ->
           MyInode=inode:get([MyName|Name],ino),
           case tree_srv:lookup(MyInode,inodes) of
             {value,_MyEntry} ->
               % For now, I return the children of the linked to entry, if already generated.
-              {MyName,MyInode,MyType};
+              {MyName,MyInode,Type};
             none ->
               % No entry found, generating children from the dir linked with, if a dir,
               % and returning linked to file entry if file.
               {value,MyLinkEntry}=tree_srv:lookup(Inode,inodes),
-              case MyLinkEntry#inode_entry.type of
+              case Type of
                 attribute_dir ->
                   MyType=#dir_link{link=Inode},
                   MyEntry=
