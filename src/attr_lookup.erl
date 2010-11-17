@@ -132,49 +132,44 @@ generate_dir_link_children(Ino,Name) ->
   ?DEB1("generate_dir_link_children"),
   {value,Entry}=tree_srv:lookup(Ino,inodes),
   EntryType=Entry#inode_entry.type,
-  LinkChildren0=filter_children_entry(Entry,Name),
-  LinkChildren = case EntryType of
-    attribute_dir ->
-      ?DEB1("Filtering out bogus logical connectives"),
-      filter:filter(LinkChildren0,"BUTNOT",[{"AND",any},{"OR",any},{"BUTNOT",any}]);
-    _ ->
-      LinkChildren0
-  end,
-  ?DEB2("    converting children: ~p",LinkChildren),
-  %XXX: When looking for ONE entry, generating ALL seems stupid.
-  ConvertedChildren=lists:map(
-    fun({MyName,Inode}) ->
-      MyInode=inode:n2i({Name,MyName},ino),
-      case tree_srv:lookup(MyInode,inodes) of
-        {value,_MyEntry} ->
-          % For now, I return the children of the linked to entry, if already generated.
-          {MyName,MyInode};
-        none ->
-          % No entry found, generating children from the dir linked with, if a dir,
-          % and returning linked to file entry if file.
-          {value,MyLinkEntry}=tree_srv:lookup(Inode,inodes),
-          case MyLinkEntry#inode_entry.type of
-            attribute_dir ->
-              MyEntry=
-                MyLinkEntry#inode_entry{
-                  name={Name,MyName},
-                  children=[],
-                  type=#dir_link{link=Inode},
-                  links=[]
-                },
-                tree_srv:enter(MyInode,MyEntry,inodes),
-                {MyName,MyInode};
-              _ ->
-                {MyName,Inode}
-          end
-      end
-    end,LinkChildren),
   case EntryType of
     attribute_dir ->
+      LinkChildren0=filter_children_entry(Entry,Name),
+      ?DEB1("Filtering out bogus logical connectives"),
+      LinkChildren=filter:filter(LinkChildren0,"BUTNOT",[{"AND",any},{"OR",any},{"BUTNOT",any}]),
+      ?DEB2("    converting children: ~p",LinkChildren),
+      ConvertedChildren=lists:map(
+        fun({MyName,Inode}) ->
+          MyInode=inode:get([MyName|Name],ino),
+          case tree_srv:lookup(MyInode,inodes) of
+            {value,_MyEntry} ->
+              % For now, I return the children of the linked to entry, if already generated.
+              {MyName,MyInode};
+            none ->
+              % No entry found, generating children from the dir linked with, if a dir,
+              % and returning linked to file entry if file.
+              {value,MyLinkEntry}=tree_srv:lookup(Inode,inodes),
+              case MyLinkEntry#inode_entry.type of
+                attribute_dir ->
+                  MyEntry=
+                    MyLinkEntry#inode_entry{
+                      name={Name,MyName},
+                      children=[],
+                      type=#dir_link{link=Inode},
+                      links=[]
+                    },
+                    tree_srv:enter(MyInode,MyEntry,inodes),
+                    {MyName,MyInode};
+                  _ ->
+                    {MyName,Inode}
+              end
+          end
+        end,
+        LinkChildren),
       LogicDirs=generate_logic_dirs(Name),
       ConvertedChildren++LogicDirs;
     _ ->
-      ConvertedChildren
+    #inode_entry.children
   end.
 
 

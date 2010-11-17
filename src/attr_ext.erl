@@ -70,31 +70,20 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 %%--------------------------------------------------------------------------
 append_attribute(Attr,FName,Stat) ->
   ?DEBL("    appending ~p/~p",[Attr,FName]),
-  append(Attr,FName,Stat),
-  %%XXX: Is this still valid?
-  tree_srv:enter(Attr,inode:n2i(Attr,ino),keys),
-  AttributesFolderIno=inode:n2i([],ino),
-  ?DEB1("   getting attribute folder inode entry"),
-  {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
-  ?DEB1("   getting attribute folder children"),
-  AttrChildren=tree_srv:to_list(keys), 
-  ?DEB1("   creating new inode entry"),
-  NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
-  ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
-  tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
+  append(Attr,FName,FName,Stat).
 
 
 %% this function creates directory parents recursively if unexistent, updating
 %% the lists of children along the way.
 
-append(Parent,ChildName,Stat) ->
-  ?DEBL(" »append ~p",[ChildName]),
-  ChildIno=inode:n2i(ChildName,ino),
+append(Parent,ChildInoName,ChildName,Stat) ->
+  ?DEBL(" »append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
+  ChildIno=inode:n2i(ChildInoName,ino),
   ParentIno=inode:get(Parent,ino),
   case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry.
     none ->
-      ?DEBL("   adding new attribute folder ~p",[Parent]),
+      ?DEBL("   adding new attribute folder ~p with the child {~p,~p}",[Parent,ChildName,ChildIno]),
       PEntry=
         #inode_entry{
           type=attribute_dir,
@@ -106,9 +95,9 @@ append(Parent,ChildName,Stat) ->
         },
       ?DEB1("  entering new entry into server"),
       tree_srv:enter(ParentIno,PEntry,inodes),
-      [_|GrandParent]=Parent, %Since attribute folder names are defined recursively.
+      [PName|GrandParent]=Parent, %Since attribute folder names are defined recursively.
       ?DEBL("  checking parent of parent (~p)",[GrandParent]),
-      append(GrandParent,Parent,Stat);
+      append(GrandParent,Parent,PName,Stat);
     {value,PEntry} ->
       ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},PEntry#inode_entry.children]),
       attr_tools:append_child({ChildName,ChildIno},PEntry)
