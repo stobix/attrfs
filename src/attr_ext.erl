@@ -32,8 +32,7 @@
          rehash_ext_from_db/2,
          append_attribute/3,
          generate_ext_info_io/1,
-         ext_info_to_ext_io/1,
-         keyvalue/1]).
+         ext_info_to_ext_io/1]).
 
 
 -include("../include/attrfs.hrl").
@@ -111,7 +110,6 @@ generate_ext_info(Path) ->
   ExtInfo1=convert(ExtInfo0),
   attr_tools:merge_duplicates(ExtInfo1). % Going from a list of lists of tuples to a list of tuples.
 
-
 convert(LList) ->
     convert1(attr_tools:flatten1(LList)).
 
@@ -128,7 +126,6 @@ keyvalue([A|[]]) ->
 
 % All other attributes are converted from [value,words,key,of,list,long] to {"long/list/of/key/words",value}
 keyvalue(A) ->
-%    RA=lists:reverse(A),
     lists:foldl(
         fun(X,{[],[]}) ->
             ?DEB2("init: ~p",X),

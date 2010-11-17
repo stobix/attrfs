@@ -236,32 +236,15 @@ filter_children(_,LastChildrenUnfiltered) ->
   LastChildrenUnfiltered.
 
 
-
-parse({A,B}) when ?CONNS(B) ->
-  [{null,B}|parse(A)];
-
-
-parse({A,B}) ->
-  [{B,null}|parse(A)];
-   
-
-parse(A) ->
-  {A,null}.
-
-
-combine(A,{B,C}) ->
-  {combine(A,B),C};
-
-combine(A,C) ->
-  {A,C}.
-
 link_ino({_,Entry}) ->
   (Entry#inode_entry.type)#dir_link.link.
 
 generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
-  ?DEB1("     getting attributes entry "),
+
   MIno=inode:n2i(MirrorDir,ino),
+  ?DEB2("     attributes ino: ~p",MIno),
+  ?DEB1("     getting attributes entry "),
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
   ?DEB1("     transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
@@ -270,12 +253,14 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
       {value,Entry}=tree_srv:lookup(Inode,inodes),
       case Entry#inode_entry.type of
         attribute_dir ->
+          LinkName=[Name|LogicName],
           LinkEntry=Entry#inode_entry{
-            name=[Name|LogicName],
+            name=LinkName,
             links=[],
             generated=false,
             type=#dir_link{link=Inode}},
-          LinkIno=inode:n2i(LinkEntry#inode_entry.name,ino),
+          ?DEB2("    getting or setting inode number of ~p",[Name|LogicName]),
+          LinkIno=inode:get(LinkName,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
           {Name,LinkIno};
         #external_file{} ->

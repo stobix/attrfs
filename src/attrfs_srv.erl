@@ -164,7 +164,7 @@ start_link({MountDir,MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 %% In here, I mostly check for dirs needed to start fuserlsrv.
-%%--------------------------------------------------------------------------
+%--------------------------------------------------------------------------
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 
   ?DEB1(">start_link"),
@@ -216,7 +216,7 @@ init({MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
   ?DEB1(">terminate"),
-  ?DEB1("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
+  ?DEB1("~n~nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX~n~n"),
   ?DEB2("|  _Reason: ~p",_Reason),
   ?DEB2("   Closing database \"~p\"",?ATTR_DB),
   dets:close(?ATTR_DB).
@@ -852,7 +852,7 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
         ?DEBL("   key to be inserted: ~p",[Keys]),
         lists:foreach(
           fun(Value) -> 
-            Attr=[Value|lists:reverse(Keys)],
+            Attr=[Value|Keys],
             ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
             attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
           end,

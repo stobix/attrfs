@@ -23,7 +23,7 @@ include support for
 
 ☑ include support for reading files!
 
-☐ make closedir do something useful.
+☑ make closedir do something useful.
 
 ☑ Include support for "multi-valued attributes":
     % attr -s "Foo" -V "Etaoin,Shrdlu" Baz.file
@@ -37,7 +37,7 @@ include support for
 ☑ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
 
 ☐ Include support for "deep attributes":
-    % attr -s "Foo/Bar" -V "Etaoin" Baz.file
+  ☑  % attr -s "Foo/Bar" -V "Etaoin" Baz.file
     =>
     % ls attribs/Foo/Bar/Etaoin -R
     Baz.file
@@ -46,6 +46,8 @@ include support for
     =>
     % ls attribs/Bla
     Baz
+
+  ☐ Make logical dirs ignore directories when filtering.
 
 ☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
     % attr -s "Foo" -V "" Bar.file
