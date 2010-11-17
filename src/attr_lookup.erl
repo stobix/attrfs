@@ -51,22 +51,22 @@ direntries(Inode) ->
 
 
 %%--------------------------------------------------------------------------
-%% direntrify takes a [{Name,Inode}] and returns a [fuserl:#{direntry}]
+%% direntrify takes a [{Name,Inode,Type}] and returns a [fuserl:#{direntry}]
 %%--------------------------------------------------------------------------
 direntrify([]) -> 
   ?DEB1("    Done converting children"),
   [];
 
-direntrify([{Name,Inode}|Children]) ->
-  ?DEB2("    Getting entry for child ~p",{Name,Inode}),
+direntrify([{Name,Inode,Type}|Children]) ->
+  ?DEB2("    Getting entry for child ~p",{Name,Inode,Type}),
   {value,Child}=tree_srv:lookup(Inode,inodes),
-  ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
+  ?DEB2("    Getting permissions for child ~p",{Name,Inode,Type}),
   ChildStats=Child#inode_entry.stat,
-  ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
+  ?DEB2("    Creating direntry for child ~p",{Name,Inode,Type}),
   Direntry= #direntry{name=Name ,stat=ChildStats },
-  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
+  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode,Type}),
   Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-  ?DEB2("    Appending child ~p to list",{Name,Inode}),
+  ?DEB2("    Appending child ~p to list",{Name,Inode,Type}),
   [Direntry1|direntrify(Children)].
 
 
@@ -134,34 +134,37 @@ generate_dir_link_children(Ino,Name) ->
   EntryType=Entry#inode_entry.type,
   case EntryType of
     attribute_dir ->
-      LinkChildren0=filter_children_entry(Entry,Name),
+      LinkChildren=filter_children_entry(Entry,Name),
       ?DEB1("Filtering out bogus logical connectives"),
-      LinkChildren=filter:filter(LinkChildren0,"BUTNOT",[{"AND",any},{"OR",any},{"BUTNOT",any}]),
+%     TODO: Replace the filter call with a built in feature of filter to always filter away logical dirs.
       ?DEB2("    converting children: ~p",LinkChildren),
       ConvertedChildren=lists:map(
-        fun({MyName,Inode}) ->
+        fun({_MyName,_Inode,logic_dir}=E) ->
+          E;
+           ({MyName,Inode,MyType}) ->
           MyInode=inode:get([MyName|Name],ino),
           case tree_srv:lookup(MyInode,inodes) of
             {value,_MyEntry} ->
               % For now, I return the children of the linked to entry, if already generated.
-              {MyName,MyInode};
+              {MyName,MyInode,MyType};
             none ->
               % No entry found, generating children from the dir linked with, if a dir,
               % and returning linked to file entry if file.
               {value,MyLinkEntry}=tree_srv:lookup(Inode,inodes),
               case MyLinkEntry#inode_entry.type of
                 attribute_dir ->
+                  MyType=#dir_link{link=Inode},
                   MyEntry=
                     MyLinkEntry#inode_entry{
-                      name={Name,MyName},
+                      name=[MyName|Name],
                       children=[],
-                      type=#dir_link{link=Inode},
+                      type=MyType,
                       links=[]
                     },
-                    tree_srv:enter(MyInode,MyEntry,inodes),
-                    {MyName,MyInode};
-                  _ ->
-                    {MyName,Inode}
+                  tree_srv:enter(MyInode,MyEntry,inodes),
+                  {MyName,MyInode,MyType};
+                Other ->
+                  {MyName,Inode,Other}
               end
           end
         end,
@@ -173,29 +176,6 @@ generate_dir_link_children(Ino,Name) ->
   end.
 
 
-
-%% {{{{{{{{{a,b},c},"AND"},d},e},"OR"},f},"butnot"},g} ->
-%% {{a,b},c}
-%% "AND"
-%% {d,e}
-%% "OR"
-%% f
-%% "butnot"
-%% g
-%%
-%% ==>
-%% [{{a,b},c},{d,e},f,g]
-%% ["AND","OR","butnot"]
-%% ==>
-%% 
-
-
-
-
-%filter_children(Ino,{{{_KeyVal,_Connective}=Logic,_Parent},_Me}) ->
-%  {value,Children}=children(Ino),
-%  filter_children(Logic,Children);
-
 %% Entry is an entry whose children are known. Name is a directory structure containing connectives to be used to filter
 
 filter_children_entry(InoOrEntry,Name) ->
@@ -206,17 +186,6 @@ filter_children_entry(InoOrEntry,Name) ->
 %% The first argument is a recursive list of ordered pairs, with the first element containing directory parents and the second containing the last element, a logic connective.
 %% LastChildrenUnfiltered is the children after the final logical connective in the list.
 %% XXX: This thing tails in the wrong way! This will consume much memory if we have very complicated connections.
-
-%filter_children({KeyValPair,Connective},LastChildrenUnfiltered) when ?CONNS(Connective) ->
-%  case inode:is_numbered(KeyValPair,ino) of
-%    false -> false;
-%    Ino -> 
-%      % Since directories are filtered when created, I need not filter the children of the parent anew.
-%      {value,PrevChildrenUnfiltered} = children(Ino),
-%      ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildrenUnfiltered,LastChildrenUnfiltered,Connective]),
-%      LastChildren = filter:filter(PrevChildrenUnfiltered,Connective,LastChildrenUnfiltered),
-%      LastChildren
-%  end;
 
 filter_children([Connective|Parents],Children) when ?CONNS(Connective) ->
   case inode:is_numbered(Parents,ino) of
@@ -249,22 +218,23 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
   ?DEB1("     transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
   lists:map(
-    fun({Name,Inode}) ->
-      {value,Entry}=tree_srv:lookup(Inode,inodes),
-      case Entry#inode_entry.type of
+    fun({Name,Inode,Type}) ->
+      case Type of
         attribute_dir ->
+          {value,Entry}=tree_srv:lookup(Inode,inodes),
           LinkName=[Name|LogicName],
+          LinkType=#dir_link{link=Inode},
           LinkEntry=Entry#inode_entry{
             name=LinkName,
             links=[],
             generated=false,
-            type=#dir_link{link=Inode}},
+            type=LinkType},
           ?DEB2("    getting or setting inode number of ~p",[Name|LogicName]),
           LinkIno=inode:get(LinkName,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
-          {Name,LinkIno};
-        #external_file{} ->
-          {Name,Inode}
+          {Name,LinkIno,LinkType};
+        #external_file{}=E ->
+          {Name,Inode,E}
       end
     end,
     MEntry#inode_entry.children
@@ -295,5 +265,5 @@ generate_logic_dir(Parent,X) ->
   Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[]},
   ?DEB1("      saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),
-  {X,Ino}.
+  {X,Ino,logic_dir}.
 
