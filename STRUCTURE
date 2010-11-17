@@ -3,68 +3,70 @@ Observe that this is in the opposite direction compared to the previous structur
 Each attribute directory contains logical connectives pointing to the ?ATTR_FOLDR folder, and will also have links pointing to .. 
 Addendum: the ?ATTR_FOLDR will no longer be an internal_dir but an attribute_dir with the internal name of []
 
+Structure change:
+We will go from the [{Name,Ino}] to a [{Name,Ino,Ftype}], because of the frequent need to ignore dirs when filtering dir children.
 
 Module structure:
 
-Attrfs:
+ Attrfs:
 
-attrfs.erl
- The main application file for this application.
-attrfs_srv.erl
- The module containing all the fuserl callbacks. The "top" model in the hiearchy of "attr_ models".
-attrfs_sup.erl
- The attrfs supervisor
+ attrfs.erl
+  The main application file for this application.
+ attrfs_srv.erl
+  The module containing all the fuserl callbacks. The "top" model in the hiearchy of "attr_ models".
+ attrfs_sup.erl
+  The attrfs supervisor
 
-Attrfs_srv sub modules:
- These are called directly from attrfs, and also there is some dependency between the sub modules.
-
-
-
-attr_ext.erl
- handles extinfo. called by various modules.
-attr_init.erl
- handles the initiation phases covered by attrfs_srv:init
-attr_lookup.erl
- called by the lookup fuserl callback
-attr_mkdir.erl
- called by the mkdir fuserl callback
-attr_opendir.erl
- called by the opendir fuserl callback
- contains specific calls used by opendir
- general open calls resides in attr_open
-attr_open.erl
- called by the open fuserl callback
- handles the list of open files and directories
-attr_remove.erl
- called by the remove fuserl callback
- handles removing of files and database entries
-attr_rename.erl
- called by the rename fuserl callback
- handles copying or moving files and attribute folders between attribute folders and files from the "real" folder to attribute folders below "attribs"
+ Attrfs_srv sub modules:
+  These are called directly from attrfs, and also there is some dependency between the sub modules.
 
 
-attr_tools.erl
- tools used by more than one sub module.
-filter.erl
- used to combine the contents of two directories given a logical connective
+
+ attr_ext.erl
+  handles extinfo. called by various modules.
+ attr_init.erl
+  handles the initiation phases covered by attrfs_srv:init
+ attr_lookup.erl
+  called by the lookup fuserl callback
+ attr_mkdir.erl
+  called by the mkdir fuserl callback
+ attr_opendir.erl
+  called by the opendir fuserl callback
+  contains specific calls used by opendir
+  general open calls resides in attr_open
+ attr_open.erl
+  called by the open fuserl callback
+  handles the list of open files and directories
+ attr_remove.erl
+  called by the remove fuserl callback
+  handles removing of files and database entries
+ attr_rename.erl
+  called by the rename fuserl callback
+  handles copying or moving files and attribute folders between attribute folders and files from the "real" folder to attribute folders below "attribs"
 
 
-gbd_trees.erl
- contains an implementation of a dual gb_tree; each entry has two keys and two trees. Not used yet.
+ attr_tools.erl
+  tools used by more than one sub module.
+ filter.erl
+  used to combine the contents of two directories given a logical connective
 
 
-Other included modules:
+ gbd_trees.erl
+  contains an implementation of a dual gb_tree; each entry has two keys and two trees. Not used yet.
 
-inode.erl
- An app to provide unique numbering of inodes, and binding of inodes to names.
-inode_sup.erl
- The supervisor of the inode app
 
-tree_srv.erl
- A gb_trees server app, containing trees to which you can add and remove items.
-tree_sup.erl
- The tree_srv supervisor
+ Other included modules:
 
-utils.erl
- A module containing "meta utils" for compiling and running the (or any) project.
+ inode.erl
+  An app to provide unique numbering of inodes, and binding of inodes to names.
+ inode_sup.erl
+  The supervisor of the inode app
+
+ tree_srv.erl
+  A gb_trees server app, containing trees to which you can add and remove items.
+ tree_sup.erl
+  The tree_srv supervisor
+
+ utils.erl
+  A module containing "meta utils" for compiling and running the (or any) project.
 

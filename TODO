@@ -48,6 +48,7 @@ include support for
     Baz
 
   ☐ Make logical dirs ignore directories when filtering.
+     Idea: Get it to work by going from {Name,Ino} to {Name,Ino,Ftype} for easy filtering.
 
 ☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
     % attr -s "Foo" -V "" Bar.file
