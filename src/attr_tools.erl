@@ -65,10 +65,10 @@ keymergeunique(Tuple,TupleList) ->
 keymerge(Tuple,[],FilteredList) ->
   [Tuple|FilteredList];
 
-keymerge(Tuple={Key,_Value},[{Key,_}|TupleList],FilteredList) ->
+keymerge(Tuple={Key,_Value,_Type},[{Key,_,_}|TupleList],FilteredList) ->
   keymerge(Tuple,TupleList,FilteredList);
 
-keymerge(Tuple={_Key,_Value},[OtherTuple|TupleList],FilteredList) ->
+keymerge(Tuple={_Key,_Value,_Type},[OtherTuple|TupleList],FilteredList) ->
   keymerge(Tuple,TupleList,[OtherTuple|FilteredList]).
 
 %%--------------------------------------------------------------------------
@@ -228,7 +228,7 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-append_child(NewChild={_ChildName,_ChildIno},ParentEntry=#inode_entry{}) ->
+append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry{}) ->
   PName=ParentEntry#inode_entry.name,
   ?DEBL(" »append_child: Child: ~p Parent: ~p",[NewChild,ParentEntry#inode_entry.name]),
   Children=ParentEntry#inode_entry.children,
@@ -242,7 +242,7 @@ append_child(NewChild={_ChildName,_ChildIno},ParentEntry=#inode_entry{}) ->
   tree_srv:enter(ParentIno,NewParentEntry,inodes),
   ?DEB1("     new parent inserted");
 
-append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
+append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
   ?DEBL(" »append_child: ~p (~p)",[NewChild,ParentIno]),
   case tree_srv:lookup(ParentIno,inodes) of
     {value,ParentEntry} -> 
@@ -252,5 +252,3 @@ append_child(NewChild={_ChildName,_ChildIno},ParentIno) ->
         ?DEB1("   DID NOT get parent entry"),
         throw({error,{parent_unbound,ParentIno}})
   end.
-
-

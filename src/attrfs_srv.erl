@@ -424,7 +424,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
       {value,Children} ->
         ?DEBL("   Got children for ~p: ~p",[ParentInode, Children]),
         case lists:keysearch(Child,1,Children) of
-          {value,{_,Inode}} ->
+          {value,{_,Inode,_}} ->
             ?DEB2("   Found child ~p",Child),
             {value,Entry} = tree_srv:lookup(Inode,inodes),
             ?DEB1("   Got child inode entry, returning..."),
@@ -445,16 +445,13 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 %% This will have different meanings depending on parent type:
 %% * #external_dir{}
 %%   creating dirs in the real file system not yet supported.
-%% * attr_dir where name is a string
-%%   this will create an attribute value with name {attr_dir name, value name}
-%% * attr_dir where name is a {string,string}
-%%   creating a dir inside a value dir will not be supported as long as I don't 
+%% * attr_dir 
+%%   this will create an attribute value with name [value name|attr_dir name]
 %%    support deep attributes.
 %% * internal_dir
-%%   this means we try to create a directory inside either /, /real or /attribs, 
+%%   this means we try to create a directory inside either /, or /real 
 %%    that is, either we try to create a new directory universe (not allowed),
-%%    a new real dir (maybe supported later) 
-%%    or a new attribute dir (certainly allowed)
+%%    or a new real dir (maybe supported later) 
 %%--------------------------------------------------------------------------
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
@@ -928,15 +925,13 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
             false -> 
               ?DEBL("~p not found in ~p",[Name,ParentChildren]),
               #fuse_reply_err{err=enoent};
-            {Name,Inode} ->
-              ?DEB1("~p found"),
+            {Name,Inode,Type} ->
+              ?DEB1("found"),
               %% Removing a file from an attribute folder is 
               %% ONLY ALMOST the same as removing the corresponding 
               %% attribute from the file; Removing a value subfolder
               %% is NOT the same as removing a whole attribute.
               %% Thus, I'm NOT calling removexattr here.
-              {value,Entry}=tree_srv:lookup(Inode,inodes),
-              Type=Entry#inode_entry.type,
               ?DEBL("child type ~p",[Type]),
               case Type of 
                 #external_file{path=Path} ->

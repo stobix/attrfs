@@ -104,14 +104,15 @@ insert_entry(ParentInode,ChildEntry) ->
 
   InoName=ChildEntry#inode_entry.name,
   ChildInode=inode:n2i(InoName,ino),
+  ChildType=ChildEntry#inode_entry.type, 
   ChildName=
-    case ChildEntry#inode_entry.type of
+    case ChildType of
       attribute_dir ->
         [Name|Parents] = InoName,
         Name;
       _ -> InoName
     end,
-  NewChildren=[{ChildName,ChildInode}|ParentEntry#inode_entry.children],
+  NewChildren=[{ChildName,ChildInode,ChildType}|ParentEntry#inode_entry.children],
   tree_srv:enter(ParentInode,ParentEntry#inode_entry{children=NewChildren},inodes),
   tree_srv:enter(ChildInode,ChildEntry,inodes),
   ChildInode.

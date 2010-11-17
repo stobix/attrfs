@@ -47,8 +47,6 @@
         {dir::string()}).
 
 -type inode_number()::pos_integer().
--type name_tuple()::{string(),inode_number()}.
--type name_list()::[name_tuple()].
 -type attrib_list()::[{string(), string()}].
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.
@@ -96,11 +94,13 @@
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 
+-type name_tuple()::{string(),inode_number(),file_type()}.
+-type name_list()::[name_tuple()].
 
 
 
 %% The name slot in the inode_entry record is normally a string, but is a {parentname,childname} for value dirs, and a {grandparentname,parentname,childname} for logical dirs.
--type inode_entry_name()::string()|{inode_entry_name(),inode_entry_name()}|{parent(),parent(),ltype()}.
+-type inode_entry_name()::string()|[string()]|atom().
 
 
 -record(inode_entry,

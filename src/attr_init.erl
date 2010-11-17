@@ -47,7 +47,7 @@ init({MirrorDir,DB}) ->
   RootEntry=
     #inode_entry{
       name=root,
-      children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR_FS_NAME,AttribIno}],
+      children=[{?REAL_FOLDR,RealIno,internal_dir},{?ATTR_FOLDR_FS_NAME,AttribIno,attribute_dir}],
       type=internal_dir, 
       stat=
         #stat{
@@ -106,7 +106,8 @@ make_inode_list({Path,Name}) ->
             ?DEB2("     directory entries:~p",ChildNames),
             NameInodePairs=
               lists:map(
-                fun(ChildName) -> {ChildName,inode:get(ChildName,ino)} end, 
+                        %XXX: I'm only allowed to set empty external file types here as long as I don't match against anything in the record anywhere in the program, or compensate for it later.
+                fun(ChildName) -> {ChildName,inode:get(ChildName,ino),#external_file{}} end, 
                 ChildNames
               ),
             {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path}};
@@ -152,7 +153,7 @@ make_inode_list({Path,Name}) ->
       ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
       lists:foreach(fun(Attr) -> attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) end,ExtFolders),
       ?DEB1("    recursing for all real subdirs"),
-      lists:foreach(fun({ChildName,_Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children);
+      lists:foreach(fun({ChildName,_Inode,_Type})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children);
     E ->
       ?DEBL("   got ~p when trying to read ~p.",[E,Path]),
       ?DEB1("   are you sure your app file is correctly configured?"),

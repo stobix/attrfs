@@ -79,15 +79,19 @@ append(Parent,ChildInoName,ChildName,Stat) ->
   ?DEBL(" »append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
   ChildIno=inode:n2i(ChildInoName,ino),
   ParentIno=inode:get(Parent,ino),
+  {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
+  ?DEB1("    got child entry"),
+  ChildType=ChildEntry#inode_entry.type,
+  ChildTriplet={ChildName,ChildIno,ChildType},
   case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry.
     none ->
-      ?DEBL("   adding new attribute folder ~p with the child {~p,~p}",[Parent,ChildName,ChildIno]),
+      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildTriplet]),
       PEntry=
         #inode_entry{
           type=attribute_dir,
           name=Parent,
-          children=[{ChildName,ChildIno}],
+          children=[ChildTriplet],
           stat=attr_tools:dir(Stat#stat{st_ino=ParentIno}),
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
@@ -98,8 +102,8 @@ append(Parent,ChildInoName,ChildName,Stat) ->
       ?DEBL("  checking parent of parent (~p)",[GrandParent]),
       append(GrandParent,Parent,PName,Stat);
     {value,PEntry} ->
-      ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},PEntry#inode_entry.children]),
-      attr_tools:append_child({ChildName,ChildIno},PEntry)
+      ?DEBL("   merging ~p into ~p",[ChildTriplet,PEntry#inode_entry.children]),
+      attr_tools:append_child(ChildTriplet,PEntry)
   end.
 
 %%--------------------------------------------------------------------------

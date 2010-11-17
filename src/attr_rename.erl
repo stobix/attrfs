@@ -118,9 +118,8 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEBL("   moving ~p to ~p",[OldAttribName,NewAttribName]),
   % I need to move the children before removing the entries of the parents from the current dir.
   lists:foreach(
-    fun({ChildName,ChildInode}) ->
+    fun({ChildName,ChildInode,ChildType}) ->
       {value,ChildEntry}=tree_srv:lookup(ChildInode,inodes),
-      ChildType=ChildEntry#inode_entry.type,
       move_child(ChildType,ChildInode,ChildEntry,OldValueEntry,NewValueEntry)
 
     end,
@@ -135,7 +134,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEBL("    adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
   ?DEB2("    adding ~p to inode list",NewAttribName),
-  attr_tools:append_child({NewValueName,ValueIno},KeyIno),
+  attr_tools:append_child({NewValueName,ValueIno,attribute_dir},KeyIno),
   ?DEB1("    moving inode number"),
   inode:rename(OldAttribName,NewAttribName,ino),
   ok.

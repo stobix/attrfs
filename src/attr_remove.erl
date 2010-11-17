@@ -110,7 +110,7 @@ remove_empty_dir(ParentIno,DirName) ->
   ?DEBL("   removing empty dir ~p from parent ~p",[DirName,ParentIno]),
   {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
   case lists:keytake(DirName,1,ParentEntry#inode_entry.children) of
-    {value,{_DeletedChild,ChildIno},NewChildren} ->
+    {value,{_DeletedChild,ChildIno,_ChildType},NewChildren} ->
       NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
       tree_srv:enter(ParentIno,NewParentEntry,inodes),
       tree_srv:delete_any(ChildIno,inodes),
