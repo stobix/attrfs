@@ -8,6 +8,7 @@ include support for
     ☑ rmdir, 
     ☑ rename 
     ☐ and others? to change attributes.
+    ☐ link
 
 
 ☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
@@ -22,7 +23,7 @@ include support for
 
 ☑ include support for reading files!
 
-☐ make closedir do something useful.
+☑ make closedir do something useful.
 
 ☑ Include support for "multi-valued attributes":
     % attr -s "Foo" -V "Etaoin,Shrdlu" Baz.file
@@ -36,7 +37,7 @@ include support for
 ☑ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
 
 ☐ Include support for "deep attributes":
-    % attr -s "Foo/Bar" -V "Etaoin" Baz.file
+  ☑  % attr -s "Foo/Bar" -V "Etaoin" Baz.file
     =>
     % ls attribs/Foo/Bar/Etaoin -R
     Baz.file
@@ -45,6 +46,9 @@ include support for
     =>
     % ls attribs/Bla
     Baz
+
+  ☐ Make logical dirs ignore directories when filtering.
+     Idea: Get it to work by going from {Name,Ino} to {Name,Ino,Ftype} for easy filtering.
 
 ☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
     % attr -s "Foo" -V "" Bar.file
@@ -119,4 +123,4 @@ include support for
 ☑ Apparently, linux calls open before calling setattr. What to do with open? Assign fh.
 
 
-
+☐ what is wrong with the logical subdirs? Do I point sequentially all the way down to the original, or do I point directly to the original from all?

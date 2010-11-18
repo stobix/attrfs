@@ -32,7 +32,8 @@
 
 -define(ROOT_FOLDR, root).
 -define(REAL_FOLDR, "real").
--define(ATTR_FOLDR, "attribs").
+-define(ATTR_FOLDR_NAME, []).
+-define(ATTR_FOLDR_FS_NAME, "attribs").
 -define(SRCH_FOLDR, "search").
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
@@ -46,8 +47,6 @@
         {dir::string()}).
 
 -type inode_number()::pos_integer().
--type name_tuple()::{string(),inode_number()}.
--type name_list()::[name_tuple()].
 -type attrib_list()::[{string(), string()}].
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.
@@ -66,18 +65,6 @@
         ,external_file_info::#file_info{} % file:#file_info{}
        }).
 
--type value_tuple()::{value_tuple()|string(),string()}.
-%-type attribute_type()::{key,string()}|{value,value_tuple()}.
--type attribute_type()::key|value.
-
--record(attribute_dir,
-       {atype::attribute_type()
-       }).
-
-
-
-
-
 -type ltype()::lnot| % this only resides in the top-level attribute folder, for now. Another solution would be to let not include the parent dir and the parent parent dir, so {not, "and", "Foo"} would mean the same that andnot mean here below.
                     % these are key-level conjunctions
                     land|
@@ -90,28 +77,30 @@
                     {p,landnot}|
                     {p,lornot}.
 
-%-record(logic_dir,
-        %{ltype::logic_type()
-        %}).
-
 -record(dir_link,
     {link::inode_number() % the inode linked to.
     }).
+
+-define(KEY_SEP,"/").
+-define(VAL_SEP,",").
+
 
 -type parent()::name().
 %% An internal file is a file without an external representation.
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
--type file_type()::#external_file{}|internal_file|#external_dir{}|#attribute_dir{}|internal_dir|logic_dir|#dir_link{}.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 
+-type name_tuple()::{string(),inode_number(),file_type()}.
+-type name_list()::[name_tuple()].
 
 
 
 %% The name slot in the inode_entry record is normally a string, but is a {parentname,childname} for value dirs, and a {grandparentname,parentname,childname} for logical dirs.
--type inode_entry_name()::string()|{inode_entry_name(),inode_entry_name()}|{parent(),parent(),ltype()}.
+-type inode_entry_name()::string()|[string()]|atom().
 
 
 -record(inode_entry,
@@ -122,13 +111,12 @@
         % {Key,ValueName}, where ValueName is the name shown to the fuse 
         % file system server.
         {
-        dir_name::string() % The name of the file in the file system
         % The unique name the file uses internally. 
-        % Given name=Name, iname=
         % Name, for normal files (How do I fix duplicates?)
         % {Parent, Name} for Attribute value dirs
-        % {Grandparent,Parent,Name} for logical dirs.
-        ,name::inode_entry_name() 
+        % {{Grandparent,Parent},Name} for logical dirs.
+        % maybe {Ggp,Gp,P,N} for parentheses foo/or/(/a/AND/B/)
+        name::inode_entry_name() 
         % children are the children of the file/dir
         ,children::name_list()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type

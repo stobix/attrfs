@@ -18,22 +18,22 @@ direntries(Inode) ->
 
 
 %%--------------------------------------------------------------------------
-%% direntrify takes a [{Name,Inode}] and returns a [fuserl:#{direntry}]
+%% direntrify takes a [{Name,Inode,Type}] and returns a [fuserl:#{direntry}]
 %%--------------------------------------------------------------------------
 direntrify([]) -> 
   ?DEB1("    Done converting children"),
   [];
 
-direntrify([{Name,Inode}|Children]) ->
-  ?DEB2("    Getting entry for child ~p",{Name,Inode}),
+direntrify([{Name,Inode,Type}|Children]) ->
+  ?DEB2("    Getting entry for child ~p",{Name,Inode,Type}),
   {value,Child}=tree_srv:lookup(Inode,inodes),
-  ?DEB2("    Getting permissions for child ~p",{Name,Inode}),
+  ?DEB2("    Getting permissions for child ~p",{Name,Inode,Type}),
   ChildStats=Child#inode_entry.stat,
-  ?DEB2("    Creating direntry for child ~p",{Name,Inode}),
+  ?DEB2("    Creating direntry for child ~p",{Name,Inode,Type}),
   Direntry= #direntry{name=Name ,stat=ChildStats },
-  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode}),
+  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode,Type}),
   Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-  ?DEB2("    Appending child ~p to list",{Name,Inode}),
+  ?DEB2("    Appending child ~p to list",{Name,Inode,Type}),
   [Direntry1|direntrify(Children)].
 
 

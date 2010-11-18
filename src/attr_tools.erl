@@ -38,8 +38,23 @@
          merge_duplicates/1,
          dir/1,
          datetime_to_epoch/1,
-         statify_file_info/1
+         statify_file_info/1,
+         flatten1/1,
+         append_child/2
         ]).
+
+
+%%--------------------------------------------------------------------------
+%% flatten1 removes one list layer from a file. [[a],[[B]]] -> [a,[B]].
+%%--------------------------------------------------------------------------
+flatten1([[A]|As]) ->
+  [A|flatten1(As)];
+
+flatten1([A|As]) ->
+  [A|flatten1(As)];
+
+flatten1([]) ->
+  [].
 
 %%--------------------------------------------------------------------------
 %seems like lists:keymerge won't do what I ask it, so I build my own...
@@ -50,10 +65,10 @@ keymergeunique(Tuple,TupleList) ->
 keymerge(Tuple,[],FilteredList) ->
   [Tuple|FilteredList];
 
-keymerge(Tuple={Key,_Value},[{Key,_}|TupleList],FilteredList) ->
+keymerge(Tuple={Key,_Value,_Type},[{Key,_,_}|TupleList],FilteredList) ->
   keymerge(Tuple,TupleList,FilteredList);
 
-keymerge(Tuple={_Key,_Value},[OtherTuple|TupleList],FilteredList) ->
+keymerge(Tuple={_Key,_Value,_Type},[OtherTuple|TupleList],FilteredList) ->
   keymerge(Tuple,TupleList,[OtherTuple|FilteredList]).
 
 %%--------------------------------------------------------------------------
@@ -143,7 +158,7 @@ has_user_perms(Mode,Mask) ->
 
 
 %%--------------------------------------------------------------------------
-%% Takes in a [{"foo","bar},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
+%% Takes in a [{"foo","bar"},{"foo","baz"},{"etaoin","shrdlu"}] and returns 
 %%  a [{"foo","bar,baz"},{"etaoin","shrdlu"}]
 %%--------------------------------------------------------------------------
 %% Algorithm: enter each tuple into a gb_tree, merging if item exists. Finally convert to list and return.
@@ -156,6 +171,10 @@ merge_duplicates(List) ->
   gb_trees:to_list(Tree).
 
 
+%%--------------------------------------------------------------------------
+%% Takes a [{Key,Val}] and transforms it into a gb_tree where each key only has one val.
+%% If the list contains several identical keys, their values are combined using "," as a separator.
+%%--------------------------------------------------------------------------
 make_unduplicate_tree(List) ->
   make_unduplicate_tree(List,gb_trees:empty()).
 
@@ -173,6 +192,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
   make_unduplicate_tree(Items,NewTree).
 
 %%--------------------------------------------------------------------------
+%% makes the stat a directory stat
 %%--------------------------------------------------------------------------
 dir(Stat) ->
   NewMode= ?STD_DIR_MODE,
@@ -206,3 +226,29 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
     st_ctime=datetime_to_epoch(Ctime)
   }.
 
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
+append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry{}) ->
+  PName=ParentEntry#inode_entry.name,
+  ?DEBL(" »append_child: Child: ~p Parent: ~p",[NewChild,ParentEntry#inode_entry.name]),
+  Children=ParentEntry#inode_entry.children,
+  ?DEB2("     children: ~p",Children),
+  NewChildren=attr_tools:keymergeunique(NewChild,Children),
+  ?DEB2("     merged children: ~p",NewChildren),
+  NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
+  ?DEB1("     created new parent entry"),
+  ParentIno=inode:n2i(PName,ino),
+  ?DEB2("     parent inode: ~p",ParentIno),
+  tree_srv:enter(ParentIno,NewParentEntry,inodes),
+  ?DEB1("     new parent inserted");
+
+append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
+  ?DEBL(" »append_child: ~p (~p)",[NewChild,ParentIno]),
+  case tree_srv:lookup(ParentIno,inodes) of
+    {value,ParentEntry} -> 
+        ?DEB1("   got parent entry"),
+        append_child(NewChild,ParentEntry);
+    none ->
+        ?DEB1("   DID NOT get parent entry"),
+        throw({error,{parent_unbound,ParentIno}})
+  end.

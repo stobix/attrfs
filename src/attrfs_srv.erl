@@ -163,10 +163,10 @@ start_link({MountDir,MirrorDir,DB}) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-%% Things are initiated here instead of init so that no calls to the file system will be made before the file system is constructed.
-%% Maybe this is an unneccessary precaution?
-%%--------------------------------------------------------------------------
+%% In here, I mostly check for dirs needed to start fuserlsrv.
+%--------------------------------------------------------------------------
 start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
+
   ?DEB1(">start_link"),
   ?DEB1("   checkning if dirs are ok..."),
   ?DEB2("    ~p...",Dir),
@@ -204,64 +204,11 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 init({MirrorDir,DB}) ->
-  % initiating databases, servers and so on.
-  ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
-  {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
-  ?DEB2("   mirroring dir ~p",MirrorDir),
-  tree_srv:new(inodes), % contains inode entries
-  tree_srv:new(keys), % contains a list of all attribute keys with associated inodes
-  attr_open:init(),
-  tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
-  ?DEB1("   created inode and key trees"),
-  inode:initiate(ino), % the inode table
-  inode:initiate(fino), % the open files "inode" table
-  % getting inodes for base folders
-  RootIno=inode:get(root,ino),
-  RealIno=inode:get(?REAL_FOLDR,ino),
-  AttribIno=inode:get(?ATTR_FOLDR,ino),
-  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
-  ?DEB1("   creating root entry"),
-  % creating base folders.
-  RootEntry=
-    #inode_entry{
-      name=root,
-      dir_name=root,
-      children=[{?REAL_FOLDR,RealIno},{?ATTR_FOLDR,AttribIno}],
-      type=internal_dir, %XXX: Really ok to let this have the same type as attribute dirs?
-      stat=
-        #stat{
-          st_mode=8#755 bor ?S_IFDIR,
-          st_ino=RootIno
-        },
-        ext_info=[],
-        ext_io=attr_ext:ext_info_to_ext_io([])
-    },
-  ?DEB1("   updating root inode entry"),
-  tree_srv:enter(RootIno,RootEntry,inodes),
-  ?DEB2("   making inode entries for ~p",MirrorDir),
-
-  AttributeEntry=
-    #inode_entry{
-      name=?ATTR_FOLDR,
-      dir_name=?ATTR_FOLDR,
-      children=[],
-      type=internal_dir,
-      stat=#stat{ 
-          % For now I'll set all access here, and limit access on a per-user-basis.
-          % Maybe even make this folder "magic", so that different users think that they own it?
-          % More on this when I start using the Ctx structure everywhere.
-          st_mode=8#777 bor ?S_IFDIR,
-          st_ino=AttribIno
-        },
-      ext_info=[],
-      ext_io=attr_ext:ext_info_to_ext_io([])
-    },
-  tree_srv:enter(AttribIno,AttributeEntry,inodes),
-  % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
-  make_inode_list({MirrorDir,?REAL_FOLDR}),
-  ?DEB1("   attribute inode list made"),
+  attr_init:init({MirrorDir,DB}),
   State=[],
   {ok,State}.
+
+
 
 %%--------------------------------------------------------------------------
 %% The analog to Module:terminate/2 in gen_server.
@@ -269,7 +216,7 @@ init({MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
   ?DEB1(">terminate"),
-  ?DEB1("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"),
+  ?DEB1("\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n"),
   ?DEB2("|  _Reason: ~p",_Reason),
   ?DEB2("   Closing database \"~p\"",?ATTR_DB),
   dets:close(?ATTR_DB).
@@ -318,8 +265,8 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
           ?DEB1("Filename linked to a real file."),
           {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
           case ParentEntry#inode_entry.type of
-            #attribute_dir{atype=value} ->
-              ?DEB1("Parent is value dir. All is ok."),
+            attribute_dir ->
+              ?DEB1("Parent is an attribute dir. All is ok."),
               % Adding a new attribute is the same as creating an attribute folder file entry.
               attr_ext:add_new_attribute(Path,Inode,Entry,ParentEntry#inode_entry.name),
               {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
@@ -477,7 +424,7 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
       {value,Children} ->
         ?DEBL("   Got children for ~p: ~p",[ParentInode, Children]),
         case lists:keysearch(Child,1,Children) of
-          {value,{_,Inode}} ->
+          {value,{_,Inode,_}} ->
             ?DEB2("   Found child ~p",Child),
             {value,Entry} = tree_srv:lookup(Inode,inodes),
             ?DEB1("   Got child inode entry, returning..."),
@@ -498,16 +445,13 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
 %% This will have different meanings depending on parent type:
 %% * #external_dir{}
 %%   creating dirs in the real file system not yet supported.
-%% * attr_dir where name is a string
-%%   this will create an attribute value with name {attr_dir name, value name}
-%% * attr_dir where name is a {string,string}
-%%   creating a dir inside a value dir will not be supported as long as I don't 
+%% * attr_dir 
+%%   this will create an attribute value with name [value name|attr_dir name]
 %%    support deep attributes.
 %% * internal_dir
-%%   this means we try to create a directory inside either /, /real or /attribs, 
+%%   this means we try to create a directory inside either /, or /real 
 %%    that is, either we try to create a new directory universe (not allowed),
-%%    a new real dir (maybe supported later) 
-%%    or a new attribute dir (certainly allowed)
+%%    or a new real dir (maybe supported later) 
 %%--------------------------------------------------------------------------
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
@@ -522,7 +466,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     case tree_srv:lookup(ParentInode,inodes) of
       none -> #fuse_reply_err{err=enoent}; 
       {value,Parent} ->
-        case tree_srv:lookup(inode:is_numbered(Name,ino),inodes) of
+        case tree_srv:lookup(inode:n2i(Name,ino),inodes) of
           none ->
             ParentName=Parent#inode_entry.name,
             ParentType=Parent#inode_entry.type,
@@ -721,7 +665,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
-      attr_remove:remove_old_attribute_key(Path,Inode,Name),
+      attr_remove:remove_key_values(Path,Inode,Name),
       ?DEB1("   Removed attribute, if any, from database and inode entry"),
       {#fuse_reply_err{err=ok},State};
     _ ->
@@ -755,20 +699,7 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
   ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
-  {value,ParentInoEntry}=tree_srv:lookup(ParentIno,inodes),
-  ?DEBL("   parent_type: ~p",[ParentInoEntry#inode_entry.type]),
-  Reply=
-    case tree_srv:lookup(NewParentIno,inodes) of
-      none -> 
-        ?DEB1("   new parent nonexistent!"),
-        enoent;
-      {value,NewAttribEntry} ->
-        ?DEBL("   new parent type: ~p",[NewAttribEntry#inode_entry.type]),
-        attr_rename:make_rename_reply(
-          ParentInoEntry#inode_entry.type,
-          ParentInoEntry#inode_entry.name,
-          ParentInoEntry,NewParentIno,Name,NewName)
-    end,
+  Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
 
 
@@ -786,24 +717,14 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
   PType=PEntry#inode_entry.type,
   PName=PEntry#inode_entry.name,
   ?DEBL("   parent type ~p",[PType]),
+  % So I don't have to lookup two entries, I match the parent type instead of the child type.
   Reply=
     case PType of
-      #attribute_dir{} ->
+      attribute_dir ->
         Name=binary_to_list(BName),
         attr_remove:remove_child_from_parent(Name,PName),
-        inode:release(inode:get(Name,ino),ino),
+        inode:release(inode:n2i(Name,ino),ino),
         ok;
-      internal_dir ->
-        case PName of
-          ?ATTR_FOLDR ->
-            Name=binary_to_list(BName),
-            ?DEBL("   Removing attribute key folder ~p",[Name]),
-            attr_remove:remove_child_from_parent(Name,PName),
-            inode:release(inode:get(Name,ino),ino),
-            ok;
-          _ ->
-            enotsup
-        end;
       _ ->
         enotsup
     end,
@@ -912,19 +833,25 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   Key=
     case string:str(RawKey,"system")==1 of
       true -> "."++RawKey;
-      false -> RawKey
+      false -> attr_tools:remove_from_start(RawKey,"user.")
     end,
 
-  Values=string:tokens(RawValue,","),
+  Values=string:tokens(RawValue,?VAL_SEP),
   ?DEB2("   got values: ~p",Values),
 
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
+        ?DEB1("   entry is an external file"),
+        Syek=string:tokens(Key,?KEY_SEP),
+        ?DEB2("   tokenized key: ~p",[Syek]),
+        Keys=lists:reverse(Syek),
+        ?DEBL("   key to be inserted: ~p",[Keys]),
         lists:foreach(
           fun(Value) -> 
-            ?DEBL("   adding attribute {~p,~p} for file ~p to database",[Key,Value,Path]),
-            attr_ext:add_new_attribute(Path,Inode,Entry,{attr_tools:remove_from_start(Key,"user."),Value})
+            Attr=[Value|Keys],
+            ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
+            attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
           end,
           Values),
         #fuse_reply_err{err=ok};
@@ -991,27 +918,25 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
   ?DEBL("parent type ~p",[ParentType]),
     Reply=
       case ParentType of
-        #attribute_dir{atype=value} ->
+        attribute_dir ->
           Name=binary_to_list(BName),
           ParentChildren=ParentEntry#inode_entry.children,
           case lists:keyfind(Name,1,ParentChildren) of
             false -> 
               ?DEBL("~p not found in ~p",[Name,ParentChildren]),
               #fuse_reply_err{err=enoent};
-            {Name,Inode} ->
-              ?DEB1("~p found"),
+            {Name,Inode,Type} ->
+              ?DEB1("found"),
               %% Removing a file from an attribute folder is 
               %% ONLY ALMOST the same as removing the corresponding 
               %% attribute from the file; Removing a value subfolder
               %% is NOT the same as removing a whole attribute.
               %% Thus, I'm NOT calling removexattr here.
-              {value,Entry}=tree_srv:lookup(Inode,inodes),
-              Type=Entry#inode_entry.type,
               ?DEBL("child type ~p",[Type]),
               case Type of 
                 #external_file{path=Path} ->
                   ?DEBL("Removing ~p from ~p", [ParentEntry#inode_entry.name,Name]),
-                  attr_remove:remove_old_attribute_value(Path,Inode,ParentName),
+                  attr_remove:remove_attribute(Path,Inode,ParentName),
                   #fuse_reply_err{err=ok};
                 _ ->
                   #fuse_reply_err{err=enotsup}
@@ -1040,16 +965,8 @@ write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%%=========================================================================
 %%% Callback function internals
 %%%=========================================================================
-
-
-
-%%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 %% Getattr internal functions
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-
-%%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 getattr_internal(Inode,Continuation) ->
   ?DEB2("  >getattr_internal inode:~p",Inode),
@@ -1071,91 +988,9 @@ getattr_internal(Inode,Continuation) ->
   ?DEB1("   Sending reply"),
   fuserlsrv:reply(Continuation,Reply).
 
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-%% Mkdir internal functions
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-
 %%%=========================================================================
 %%%                       SHARED UTILITY FUNCTIONS
 %%%=========================================================================
-
-
-
-
-
-
-
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-make_inode_list({Path,Name}) ->
-  ?DEBL("   reading file info for ~p into ~p",[Path,Name]),
-  case catch file:read_file_info(Path) of
-    {ok,FileInfo} ->
-      ?DEB1("   got file info"),
-      {ok,Children,Type}= 
-        case FileInfo#file_info.type of
-          directory ->
-            ?DEB1("    directory"),
-            {ok,ChildNames}=file:list_dir(Path),
-            ?DEB2("     directory entries:~p",ChildNames),
-            NameInodePairs=
-              lists:map(
-                fun(ChildName) -> {ChildName,inode:get(ChildName,ino)} end, 
-                ChildNames
-              ),
-            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path}};
-          regular ->
-            ?DEB1("    regular"),
-            {ok,[],#external_file{external_file_info=FileInfo,path=Path}};
-          _ ->
-            {error,not_supported} % for now
-        end,
-      ?DEB2("    Generating ext info for ~p",Path),
-      {ExtInfo,ExtIo}=attr_ext:generate_ext_info_io(Path), 
-      ?DEB2("     ext info: ~p", ExtInfo),
-      % XXX: This will break if provided with a local date and time that does not
-      % exist. Shouldn't be much of a problem.
-      EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
-      EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
-      EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
-      ?DEB2("    atime:~p~n",EpochAtime),
-      ?DEB2("    ctime:~p~n",EpochCtime),
-      ?DEB2("    mtime:~p~n",EpochMtime),
-      MyStat=
-        attr_tools:statify_file_info(
-          FileInfo#file_info{
-            inode=inode:get(Name,ino),
-            atime=EpochAtime,
-            ctime=EpochCtime,
-            mtime=EpochMtime
-          }
-        ),
-      InodeEntry=
-        #inode_entry{ 
-          name=Name,
-          children=Children,
-          type=Type,
-          stat=MyStat,
-          ext_info=ExtInfo,
-          ext_io=ExtIo
-        },
-      tree_srv:enter(inode:get(Name,ino),InodeEntry,inodes),
-      ?DEB2("    looking up ext folders for ~p",Name),
-      ExtFolders=lists:flatten(dets:match(?ATTR_DB,{Path,'$1'})),
-      ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
-      lists:foreach(fun(Attr) -> attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) end,ExtFolders),
-      ?DEB1("    recursing for all real subdirs"),
-      lists:foreach(fun({ChildName,_Inode})->make_inode_list({Path++"/"++ChildName,ChildName}) end,Children);
-    E ->
-      ?DEBL("   got ~p when trying to read ~p.",[E,Path]),
-      ?DEB1("   are you sure your app file is correctly configured?"),
-      ?DEB1(">>>exiting<<<"),
-      exit(E)
-  end.
-
-
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS

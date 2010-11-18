@@ -34,30 +34,12 @@
          generate_ext_info_io/1,
          ext_info_to_ext_io/1]).
 
+
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
 
 %%--------------------------------------------------------------------------
-%% Later on, this function will not only insert the attribute in the database, but add the file to the corresponding attribute folders as well.
-%%--------------------------------------------------------------------------
-add_new_attribute(Path,FIno,FEntry,Attr) ->
-  ?DEB1("  >add_new_attribute"),
-  % Add the new attribute pair, if non-existent.
-  ?DEBL("   inserting (~p)~p into database, if nonexistent",[Path,Attr]),
-  length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
-    (ok=dets:insert(?ATTR_DB,{Path,Attr})),
-  ?DEBL("   new database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
-  #inode_entry{stat=Stat,name=FName}=FEntry,
-  ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
-  append_attribute(Attr,FName,?UEXEC(Stat)),
-  ?DEB1("   creating new ext info"),
-  rehash_ext_from_db(FIno,Path).
-
-
-
-%%--------------------------------------------------------------------------
-%% Updates 
 %%--------------------------------------------------------------------------
 rehash_ext_from_db(Inode,Path) ->
   {ExtInfo,ExtIo}=generate_ext_info_io(Path),
@@ -67,85 +49,99 @@ rehash_ext_from_db(Inode,Path) ->
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-append_attribute({Key,Val},Name,Stat) ->
-  ?DEBL("    appending ~p/~p",[{Key,Val},Name]),
-  append_value_dir(Key,Val,Name,Stat),
-  ?DEBL("    appending ~p/~p",[Key,Val]),
-  append_key_dir(Key,Val,Stat),
-  tree_srv:enter(Key,inode:get(Key,ino),keys),
-  AttributesFolderIno=inode:get(?ATTR_FOLDR,ino),
-  ?DEB1("   getting attribute folder inode entry"),
-  {value,AttrEntry}=tree_srv:lookup(AttributesFolderIno,inodes),
-  ?DEB1("   getting attribute folder children"),
-  AttrChildren=tree_srv:to_list(keys), 
-  ?DEB1("   creating new inode entry"),
-  NewAttrEntry=AttrEntry#inode_entry{children=AttrChildren},
-  ?DEB2("   children of new attr entry: ~p",NewAttrEntry#inode_entry.children),
-  tree_srv:enter(AttributesFolderIno,NewAttrEntry,inodes).
+add_new_attribute(Path,FIno,FEntry,Attr) ->
+  ?DEB1("  >add_new_attribute"),
+  % Add the new attribute, if non-existent.
+  ?DEBL("   inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
+  length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
+    (ok=dets:insert(?ATTR_DB,{Path,Attr})),
+  ?DEBL("   database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
+  #inode_entry{stat=Stat,name=FName}=FEntry,
+  ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+  append_attribute(Attr,FName,?UEXEC(Stat)),
+  ?DEB1("   creating new ext info"),
+  rehash_ext_from_db(FIno,Path).
+
+
+
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-append_key_dir(KeyDir,ValDir,Stat) ->
-  ChildIno=inode:get({KeyDir,ValDir},ino),
-  MyInode=inode:get(KeyDir,ino),
-  NewEntry=
-    case tree_srv:lookup(MyInode,inodes) of
-      % No entry found, creating new attribute entry.
-      none ->
-        ?DEBL("   adding new attribute key folder ~p",[KeyDir]),
-        #inode_entry{
-          type=#attribute_dir{atype=key},
-          name=KeyDir,
-          children=[{ValDir,ChildIno}],
-          %XXX: Give the user some way of setting a standard 
-          stat=attr_tools:dir(Stat#stat{st_ino=MyInode}), 
-          ext_info=[],
-          ext_io=ext_info_to_ext_io([])
-        };
-      {value,OldEntry} ->
-        ?DEBL("   merging ~p into ~p",[{ValDir,ChildIno},OldEntry#inode_entry.children]),
-        OldEntry#inode_entry{
-          children=
-            attr_tools:keymergeunique({ValDir,ChildIno},OldEntry#inode_entry.children)
-        }
-    end,
-  tree_srv:enter(MyInode,NewEntry,inodes).
+append_attribute(Attr,FName,Stat) ->
+  ?DEBL("    appending ~p/~p",[Attr,FName]),
+  append(Attr,FName,FName,Stat).
 
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-append_value_dir(Key,Value,ChildName,Stat) ->
-  ChildIno=inode:get(ChildName,ino),
-  MyInode=inode:get({Key,Value},ino),
-  NewEntry=
-    case tree_srv:lookup(MyInode,inodes) of
-      % No entry found, creating new attribute entry.
-      none ->
-        ?DEBL("   adding new attribute value folder ~p",[{Key,Value}]),
+
+%% this function creates directory parents recursively if unexistent, updating
+%% the lists of children along the way.
+
+append(Parent,ChildInoName,ChildName,Stat) ->
+  ?DEBL(" »append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
+  ChildIno=inode:n2i(ChildInoName,ino),
+  ParentIno=inode:get(Parent,ino),
+  {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
+  ?DEB1("    got child entry"),
+  ChildType=ChildEntry#inode_entry.type,
+  ChildTriplet={ChildName,ChildIno,ChildType},
+  case tree_srv:lookup(ParentIno,inodes) of
+    % No entry found, creating new attribute entry.
+    none ->
+      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildTriplet]),
+      PEntry=
         #inode_entry{
-          type=#attribute_dir{atype=value},
-          name={Key,Value},
-          children=[{ChildName,ChildIno}],
-          stat=attr_tools:dir(Stat#stat{st_ino=MyInode}),
+          type=attribute_dir,
+          name=Parent,
+          children=[ChildTriplet],
+          stat=attr_tools:dir(Stat#stat{st_ino=ParentIno}),
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
-        };
-      {value,OldEntry} ->
-        ?DEBL("   merging ~p into ~p",[{ChildName,ChildIno},OldEntry#inode_entry.children]),
-        OldEntry#inode_entry{
-          children=
-            attr_tools:keymergeunique({ChildName,ChildIno},OldEntry#inode_entry.children)
-        }
-    end,
-  ?DEB1("  entering new entry into server"),
-  tree_srv:enter(MyInode,NewEntry,inodes).
+        },
+      ?DEB1("  entering new entry into server"),
+      tree_srv:enter(ParentIno,PEntry,inodes),
+      [PName|GrandParent]=Parent, %Since attribute folder names are defined recursively.
+      ?DEBL("  checking parent of parent (~p)",[GrandParent]),
+      append(GrandParent,Parent,PName,Stat);
+    {value,PEntry} ->
+      ?DEBL("   merging ~p into ~p",[ChildTriplet,PEntry#inode_entry.children]),
+      attr_tools:append_child(ChildTriplet,PEntry)
+  end.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
   ?DEB2("   generating ext info for ~p",Path),
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
-  attr_tools:merge_duplicates(lists:flatten(ExtInfo0)). % Going from a list of lists of tuples to a list of tuples.
+  ExtInfo1=convert(ExtInfo0),
+  attr_tools:merge_duplicates(ExtInfo1). % Going from a list of lists of tuples to a list of tuples.
 
+convert(LList) ->
+    convert1(attr_tools:flatten1(LList)).
+
+
+convert1([]) -> [];
+convert1([A|As]) ->
+    [keyvalue(A)|convert1(As)].
+
+% A key AND value less attribute will make this function crash, and it should.
+
+% A valueless key will have an empty string as value
+keyvalue([A|[]]) ->
+    {A,""};
+
+% All other attributes are converted from [value,words,key,of,list,long] to {"long/list/of/key/words",value}
+keyvalue(A) ->
+    lists:foldl(
+        fun(X,{[],[]}) ->
+            ?DEB2("init: ~p",X),
+            {[],X};
+           (X,{[],Z}) ->
+            {X,Z};
+           (X,{Y,Z}) ->
+            ?DEBL("recurs: ~p,~p,~p",[X,Y,Z]),
+            {X++"/"++Y,Z}
+        end,
+        {[],[]},
+        A).
 
 
 %%--------------------------------------------------------------------------
