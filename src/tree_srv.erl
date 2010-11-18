@@ -98,7 +98,7 @@ enter(Key,Entry,TreeID) ->
 %% @end
 %%----------------------------------------------
 new(TreeID) ->
-  gen_server:call(?MODULE,{new,TreeID}).
+  gen_server:call(?MODULE,{store_tree,TreeID,gb_trees:empty()}).
 
 %%----------------------------------------------
 %% @doc returns the entry Entry with key Key in the tree TreeID.
@@ -107,7 +107,6 @@ new(TreeID) ->
 %%----------------------------------------------
 lookup(Key,TreeID) ->
   gen_server:call(?MODULE,{get,Key,TreeID}).
-
 
 to_list(TreeID) ->
   gen_server:call(?MODULE,{to_list,TreeID}).
@@ -131,17 +130,14 @@ handle_call({get,Key,TreeID},_From,Trees) ->
   % TODO: In the parallel version, keep track of which keys are taken, and implement some kind of semaphoric thingie.
   {reply,gb_trees:lookup(Key,Tree),Trees};
 
-handle_call({new,TreeID},_From,Trees) ->
-  case lists:keymember(TreeID,1,Trees) of
-    false -> {reply,ok,[{TreeID,gb_trees:empty()}|Trees]};
-    true ->  {reply,{error,exists},Trees}
-  end;
-
 handle_call({store_tree,TreeID,Tree},_From,Trees) ->
+  ?DEBL("  storing a tree ~p into ~p",[TreeID,Trees]),
   case lists:keymember(TreeID,1,Trees) of
     false -> {reply,ok,[{TreeID,Tree}|Trees]};
     true ->  {reply,{error,exists},Trees}
   end.
+
+
 
 handle_cast({remove,Key,TreeID},Trees) ->
   {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
