@@ -21,8 +21,8 @@ filter_or([{_,_,logic_dir}|List1],List2) ->
 filter_or(List1,[{_,_,logic_dir}|List2]) ->
   filter_or(List1,List2);
 
-filter_or([{_,_,attribute_dir}=E1|List1],List2) ->
-  [E1|filter_or(List1,List2)];
+filter_or([{_,_,attribute_dir}|List1],List2) ->
+  filter_or(List1,List2);
 
 filter_or(List1,[{_,_,attribute_dir}=E2|List2]) ->
   [E2|filter_or(List1,List2)];
@@ -54,9 +54,12 @@ filter_or(List1,List3,[E2|List2]) ->
 
 %----------------------------------------------------------------
 
-filter_and([{_,_,attribute_dir}=E1|List1],List2) ->
-  [E1|filter_and(List1,List2)];
 
+% Filter away directories from the first directory...
+filter_and([{_,_,attribute_dir}|List1],List2) ->
+  filter_and(List1,List2);
+
+% ... but not the second.
 filter_and(List1,[{_,_,attribute_dir}=E2|List2]) ->
   [E2|filter_and(List1,List2)];
 
@@ -98,8 +101,8 @@ filter_and(List1,List3,[E2|List2]) ->
 
 %----------------------------------------------------------------
 
-filter_butnot([{_,_,attribute_dir}=E1|List1],List2) ->
-  [E1|filter_butnot(List1,List2)];
+filter_butnot([{_,_,attribute_dir}|List1],List2) ->
+  filter_butnot(List1,List2);
 
 filter_butnot(List1,[{_,_,attribute_dir}=E2|List2]) ->
   [E2|filter_butnot(List1,List2)];
