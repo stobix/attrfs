@@ -87,6 +87,7 @@ initiate_servers(DB) ->
   ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   tree_srv:new(inodes), % contains inode entries
+  tree_srv:new(keys), % contains inode entries XXX: When and why do I need this? MAGIC or MORE MAGIC?
   attr_open:init(),
   tree_srv:new(filter), % gives info on how each Ctx has its attribute folder contents filtered by logical dirs
   ?DEB1("   created inode and key trees"),

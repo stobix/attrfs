@@ -216,7 +216,7 @@ init({MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
   ?DEB1(">terminate"),
-  ?DEB1("~n~nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX~n~n"),
+  ?DEB1("\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n"),
   ?DEB2("|  _Reason: ~p",_Reason),
   ?DEB2("   Closing database \"~p\"",?ATTR_DB),
   dets:close(?ATTR_DB).
