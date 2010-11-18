@@ -34,6 +34,8 @@
 -export([direntries/1,
         children/1]).
 
+-export([find_conn/1]).
+
 -export([link_ino/1]).
 
 -define(CONNS(X),((X=="AND") or (X=="OR") or (X=="BUTNOT"))).
