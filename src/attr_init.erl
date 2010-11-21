@@ -93,12 +93,7 @@ initiate_servers(DB) ->
   inode:initiate(ino), % the inode table
   inode:initiate(fino). % the open files "inode" table
 
-make_inode_list({Path,Name}) ->
-  ?DEBL("   reading file info for ~p into ~p",[Path,Name]),
-  case catch file:read_file_info(Path) of
-    {ok,FileInfo} ->
-      ?DEB1("   got file info"),
-      {ok,Children,Type}= 
+type_and_children(Path,FileInfo) ->
         case FileInfo#file_info.type of
           directory ->
             ?DEB1("    directory"),
@@ -116,7 +111,24 @@ make_inode_list({Path,Name}) ->
             {ok,[],#external_file{external_file_info=FileInfo,path=Path}};
           _ ->
             {error,not_supported} % for now
-        end,
+        end.
+
+
+get_check_unique(Name0) ->
+          case inode:number(Name0,ino) of
+              {error,{is_numbered,{Name0,_Ino}}} ->
+                  get_check_unique(string:concat("duplicate-",Name0));
+              Ino ->
+                  {Name0,Ino}
+          end.
+
+make_inode_list({Path,Name0}) ->
+  ?DEBL("   reading file info for ~p into ~p",[Path,Name0]),
+  case catch file:read_file_info(Path) of
+    {ok,FileInfo} ->
+      {Name,Ino} =get_check_unique(Name0),
+      ?DEB1("   got file info"),
+      {ok,Children,Type}= type_and_children(Path,FileInfo),
       ?DEB2("    Generating ext info for ~p",Path),
       {ExtInfo,ExtIo}=attr_ext:generate_ext_info_io(Path), 
       ?DEB2("     ext info: ~p", ExtInfo),
@@ -131,7 +143,7 @@ make_inode_list({Path,Name}) ->
       MyStat=
         attr_tools:statify_file_info(
           FileInfo#file_info{
-            inode=inode:get(Name,ino),
+            inode=Ino,
             atime=EpochAtime,
             ctime=EpochCtime,
             mtime=EpochMtime

@@ -86,7 +86,7 @@ append(Parent,ChildInoName,ChildName,Stat) ->
   case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry.
     none ->
-      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildTriplet]),
+      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
       PEntry=
         #inode_entry{
           type=attribute_dir,
