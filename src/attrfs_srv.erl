@@ -466,8 +466,8 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     case tree_srv:lookup(ParentInode,inodes) of
       none -> #fuse_reply_err{err=enoent}; 
       {value,Parent} ->
-        case tree_srv:lookup(inode:n2i(Name,ino),inodes) of
-          none ->
+        case inode:is_numbered(Name,ino) of
+          false ->
             ParentName=Parent#inode_entry.name,
             ParentType=Parent#inode_entry.type,
             attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode);
@@ -723,7 +723,8 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
       attribute_dir ->
         Name=binary_to_list(BName),
         attr_remove:remove_child_from_parent(Name,PName),
-        inode:release(inode:n2i(Name,ino),ino),
+        {ok,OldIno}=n2i(Name,ino),
+        inode:release(OldIno,ino),
         ok;
       _ ->
         enotsup

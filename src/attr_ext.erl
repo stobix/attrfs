@@ -77,7 +77,7 @@ append_attribute(Attr,FName,Stat) ->
 
 append(Parent,ChildInoName,ChildName,Stat) ->
   ?DEBL(" »append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
-  ChildIno=inode:n2i(ChildInoName,ino),
+  {ok,ChildIno}=inode:n2i(ChildInoName,ino),
   ParentIno=inode:get(Parent,ino),
   {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
   ?DEB1("    got child entry"),

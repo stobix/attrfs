@@ -213,7 +213,7 @@ link_ino({_,Entry}) ->
 generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
 
-  MIno=inode:n2i(MirrorDir,ino),
+  {ok,MIno}=inode:n2i(MirrorDir,ino),
   ?DEB2("     attributes ino: ~p",MIno),
   ?DEB1("     getting attributes entry "),
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
@@ -260,7 +260,8 @@ generate_logic_dirs(Predecessor) ->
 generate_logic_dir(Parent,X) ->
   ?DEB2("     generating lodic dir \"~p\"",X),
   ?DEB1("      getting entry"),
-  {value,PEntry}=tree_srv:lookup(inode:n2i(Parent,ino),inodes),
+  {ok,PIno}=inode:n2i(Parent,ino),
+  {value,PEntry}=tree_srv:lookup(PIno,inodes),
   ?DEB1("      generating new entry"),
   Name=[X|Parent],
   Ino=inode:get(Name,ino),
