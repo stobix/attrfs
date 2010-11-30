@@ -48,7 +48,7 @@ make_dir(_Ctx,_ParentInode,_ParentName,DirType,_Name,_Mode) ->
 make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode) ->
   ?DEB1("   Creating an attribute dir"),
   MyName=[Name|ParentName],
-  MyInode=inode:number(MyName,ino),
+  {ok,MyInode}=inode:number(MyName,ino),
   Stat=make_general_dir(Ctx,ParentInode,MyInode,MyName,Mode,attribute_dir),
   Param=make_param(MyInode,Stat),
   #fuse_reply_entry{

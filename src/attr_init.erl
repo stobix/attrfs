@@ -38,16 +38,12 @@ init({MirrorDir,DB}) ->
   initiate_servers(DB),
   % getting inodes for base folders
   RootIno=inode:get(root,ino),
-  RealIno=inode:get(?REAL_FOLDR,ino),
   AttribIno=inode:get(?ATTR_FOLDR,ino),
 %  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.
   ?DEB2("   making inode entries for ~p",MirrorDir),
 
-  % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
-  ?DEB2("   mirroring dir ~p",MirrorDir),
-  make_inode_list({MirrorDir,?REAL_FOLDR}),
   AttributeEntry=
     #inode_entry{
       name=[],
@@ -64,6 +60,9 @@ init({MirrorDir,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AttribIno,AttributeEntry,inodes),
+  % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
+  ?DEB2("   mirroring dir ~p",MirrorDir),
+  {_,RealIno,_}=make_inode_list({MirrorDir,?REAL_FOLDR}),
   RootEntry=
     #inode_entry{
       name=root,
@@ -101,8 +100,8 @@ type_and_children(Path,FileInfo) ->
               lists:map(
                 fun(ChildName) -> 
                     % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
-                    {Ino,Type}=make_inode_list({Path++"/"++ChildName,ChildName}),
-                    {ChildName,Ino,Type} 
+                    {InternalChildName,Ino,Type}=make_inode_list({Path++"/"++ChildName,ChildName}),
+                    {InternalChildName,Ino,Type} 
                 end, 
                 ChildNames
               ),
@@ -115,23 +114,25 @@ type_and_children(Path,FileInfo) ->
         end.
 
 
-get_check_unique(Name0) ->
-    {Name0,inode:get(Name0,ino)}.
+get_unique(Name0) ->
+%    {Name0,inode:get(Name0,ino)}.
 
-%          case inode:number(Name0,ino) of
-%              {error,{is_numbered,{Name0,_Ino}}} ->
-%                  ?DEB2("~p is a duplicate!",Name0),
-%                  get_check_unique(string:concat("duplicate-",Name0));
-%              Ino ->
-%                  {Name0,Ino}
-%          end.
+          case inode:number(Name0,ino) of
+              {error,{is_numbered,{Name0,_Ino}}} ->
+                  ?DEB2("~p is a duplicate!",Name0),
+                  get_unique(string:concat("duplicate-",Name0));
+              {ok,Ino} ->
+                  ?DEB2("~p is not a duplicate!",Name0),
+                  {Name0,Ino}
+          end.
 
 make_inode_list({Path,Name0}) ->
   ?DEBL("   reading file info for ~p into ~p",[Path,Name0]),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
-      {Name,Ino} =get_check_unique(Name0),
       ?DEB1("   got file info"),
+      {Name,Ino} =get_unique(Name0),
+      ?DEB2("   got unique name ~p",Name),
       {ok,Children,Type}= type_and_children(Path,FileInfo),
       ?DEB2("    Generating ext info for ~p",Path),
       {ExtInfo,ExtIo}=attr_ext:generate_ext_info_io(Path), 
@@ -162,13 +163,17 @@ make_inode_list({Path,Name0}) ->
           ext_info=ExtInfo,
           ext_io=ExtIo
         },
-      tree_srv:enter(inode:get(Name,ino),InodeEntry,inodes),
+      tree_srv:enter(Ino,InodeEntry,inodes),
       ?DEB2("    looking up ext folders for ~p",Name),
       % I need to go from [[String]] to [String] here...
       ExtFolders=attr_tools:flatten1(dets:match(?ATTR_DB,{Path,'$1'})),
       ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
-      lists:foreach(fun(Attr) -> attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) end,ExtFolders),
-      {Ino,Type};
+      lists:foreach(
+        fun(Attr) -> 
+          attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) 
+        end,
+        ExtFolders),
+      {Name,Ino,Type};
     E ->
       ?DEBL("   got ~p when trying to read ~p.",[E,Path]),
       ?DEB1("   are you sure your app file is correctly configured?"),
