@@ -103,7 +103,7 @@ insert_entry(ParentInode,ChildEntry) ->
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,
-  ChildInode=inode:n2i(InoName,ino),
+  {ok,ChildInode}=inode:n2i(InoName,ino),
   ChildType=ChildEntry#inode_entry.type, 
   ChildName=
     case ChildType of

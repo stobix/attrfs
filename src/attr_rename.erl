@@ -88,7 +88,7 @@ rename_internal(_,_,_,PName,NPName,NewAttribIno,NewAttribEntry,FileIno,FileEntry
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 copy_file(NPIno,FIno,FEntry) ->
   Path=(FEntry#inode_entry.type)#external_file.path,
-  Attribute=inode:i2n(NPIno,ino),
+  {ok,Attribute}=inode:i2n(NPIno,ino),
   ?DEBL("   copying file ~p into ~p",[FEntry#inode_entry.name,Attribute]),
   attr_ext:add_new_attribute(Path,FIno,FEntry,Attribute).
 
@@ -128,8 +128,8 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEBL("    removing ~p from the ~p directory", [OldValueName,OldKeyName]),
   %XXX: Yes, this is a little bit ugly. Maybe do a global change about 
   %     whether to use inodes or entries as arguments sometime?
-  KeyIno=inode:n2i(OldKeyName,ino),
-  ValueIno=inode:n2i(OldValueName,ino),
+  {ok,KeyIno}=inode:n2i(OldKeyName,ino),
+  {ok,ValueIno}=inode:n2i(OldValueName,ino),
   attr_remove:remove_empty_dir(KeyIno,OldValueName),
   ?DEBL("    adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),

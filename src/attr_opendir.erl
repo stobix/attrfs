@@ -34,7 +34,9 @@ direntrify([{Name,Inode,Type}|Children]) ->
   ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode,Type}),
   Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
   ?DEB2("    Appending child ~p to list",{Name,Inode,Type}),
-  [Direntry1|direntrify(Children)].
+  [Direntry1|direntrify(Children)];
 
-
+direntrify(Blah) ->
+  ?DEB2("XXX Got a ~p, exiting",Blah),
+  exit({lolwhut}).
 

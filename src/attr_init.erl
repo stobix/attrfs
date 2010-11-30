@@ -39,33 +39,31 @@ init({MirrorDir,DB}) ->
   % getting inodes for base folders
   RootIno=inode:get(root,ino),
   RealIno=inode:get(?REAL_FOLDR,ino),
-%  AttribIno=inode:get(?ATTR_FOLDR,ino),
+  AttribIno=inode:get(?ATTR_FOLDR,ino),
 %  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.
   ?DEB2("   making inode entries for ~p",MirrorDir),
 
-%  AttributeEntry=
-%    #inode_entry{
-%      name=[],
-%      children=[],
-%      type=attribute_dir,
-%      stat=#stat{ 
-%          % For now I'll set all access here, and limit access on a per-user-basis.
-%          % Maybe even make this folder "magic", so that different users think that they own it?
-%          % More on this when I start using the Ctx structure everywhere.
-%          st_mode=8#777 bor ?S_IFDIR,
-%          st_ino=AttribIno
-%        },
-%      ext_info=[],
-%      ext_io=attr_ext:ext_info_to_ext_io([])
-%    },
-%  tree_srv:enter(AttribIno,AttributeEntry,inodes),
   % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
   ?DEB2("   mirroring dir ~p",MirrorDir),
   make_inode_list({MirrorDir,?REAL_FOLDR}),
-  ?DEB1("   attribute inode list made"),
-  {ok,AttribIno}=inode:n2i(?ATTR_FOLDR_NAME,ino),
+  AttributeEntry=
+    #inode_entry{
+      name=[],
+      children=[],
+      type=attribute_dir,
+      stat=#stat{ 
+          % For now I'll set all access here, and limit access on a per-user-basis.
+          % Maybe even make this folder "magic", so that different users think that they own it?
+          % More on this when I start using the Ctx structure everywhere.
+          st_mode=8#777 bor ?S_IFDIR,
+          st_ino=AttribIno
+        },
+      ext_info=[],
+      ext_io=attr_ext:ext_info_to_ext_io([])
+    },
+  tree_srv:enter(AttribIno,AttributeEntry,inodes),
   RootEntry=
     #inode_entry{
       name=root,

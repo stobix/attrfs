@@ -249,6 +249,11 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
 %% filtering away "nonsense" dir combinations such as "EITHER/.../AND/..." and "BOTH/.../OR/..."
 %% also, having an "AND" at the root attrib folder makes no sense...
 
+generate_logic_dirs([]) ->
+%% Will place a BOTH and an EITHER directory in the attribute root folder when I support those.
+  [
+  ];
+
 generate_logic_dirs(Predecessor) ->
   [
     ?LD("AND"),

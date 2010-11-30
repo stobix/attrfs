@@ -1,4 +1,3 @@
-
 ☐ Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
 
 ☐ Make the app terminate when fusermount -u mountdir
@@ -36,7 +35,7 @@ include support for
 
 ☑ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
 
-☐ Include support for "deep attributes":
+☑ Include support for "deep attributes":
   ☑  % attr -s "Foo/Bar" -V "Etaoin" Baz.file
     =>
     % ls attribs/Foo/Bar/Etaoin -R
@@ -47,7 +46,7 @@ include support for
     % ls attribs/Bla
     Baz
 
-  ☐ Make logical dirs ignore directories when filtering.
+  ☑ Make logical dirs ignore directories when filtering.
      Idea: Get it to work by going from {Name,Ino} to {Name,Ino,Ftype} for easy filtering.
 
 ☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
@@ -72,12 +71,14 @@ include support for
     Etaoin/Baz.file
     Shrdlu/Baz.file
 
+
 ☐ Include support for search directories:
     ☐ Special directories 
         ☑ AND, OR, BUTNOT, 
         ☐ NOT which negates the next folder choise
         ☐ AND<key folder> , BUTNOT <key folder> etc for every value folder.
-        ☐ parentheses, to be able to do a/b OR (c/d AND e/f) and such
+         ☐ parentheses, to be able to do a/b OR (c/d AND e/f) and such
+         ☐ alternatively, include BOTH and EITHER directories whose subdirs only contain AND and OR directories respectively, until one is choosen.
         
         % ls attribs/Foo/Bar
             Etaoin
@@ -98,6 +99,10 @@ include support for
         ☐ (Foo/Bar & Foo/Baz) | (Etaoin/(Shrdlu & Foo)|Blah/*)
         ☐ Regex?
 
+
+    ☐ Different logic dirs for different levels of attribute dirs.
+
+
 ☐ make one able to remove attribute key directories
 
 ☐ make setxattr unset old attribute value folders when adding new ones.
@@ -114,6 +119,7 @@ include support for
 
 ☐ Make a way to "reload" the directory we're mirroring from.
 ☐ Support mirroring from multiple directories.
+
 ☐ Detect duplicates in the folder(s) to mirror.
   * note as folders under /duplicates ?
     /duplicates/foo.file/paths.txt or something like it.

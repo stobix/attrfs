@@ -723,7 +723,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
       attribute_dir ->
         Name=binary_to_list(BName),
         attr_remove:remove_child_from_parent(Name,PName),
-        {ok,OldIno}=n2i(Name,ino),
+        {ok,OldIno}=inode:n2i(Name,ino),
         inode:release(OldIno,ino),
         ok;
       _ ->

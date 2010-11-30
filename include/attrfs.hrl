@@ -32,7 +32,7 @@
 
 -define(ROOT_FOLDR, root).
 -define(REAL_FOLDR, "real").
--define(ATTR_FOLDR_NAME, []).
+-define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, "attribs").
 -define(SRCH_FOLDR, "search").
 
