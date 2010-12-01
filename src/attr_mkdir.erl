@@ -48,7 +48,7 @@ make_dir(_Ctx,_ParentInode,_ParentName,DirType,_Name,_Mode) ->
 make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode) ->
   ?DEB1("   Creating an attribute dir"),
   MyName=[Name|ParentName],
-  MyInode=inode:number(MyName,ino),
+  {ok,MyInode}=inode:number(MyName,ino),
   Stat=make_general_dir(Ctx,ParentInode,MyInode,MyName,Mode,attribute_dir),
   Param=make_param(MyInode,Stat),
   #fuse_reply_entry{
@@ -103,7 +103,7 @@ insert_entry(ParentInode,ChildEntry) ->
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,
-  ChildInode=inode:n2i(InoName,ino),
+  {ok,ChildInode}=inode:n2i(InoName,ino),
   ChildType=ChildEntry#inode_entry.type, 
   ChildName=
     case ChildType of

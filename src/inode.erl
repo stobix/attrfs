@@ -155,7 +155,7 @@ n2i(Name,Server) ->
     false ->
       {error, {not_numbered,Name}};
     True ->
-      True
+      {ok,True}
   end.
 
 %%----------------------------------------------
@@ -170,20 +170,20 @@ i2n(Number,Server) ->
     false ->
       {error, {not_named,Number}};
     True ->
-      True
+      {ok,True}
   end.
 
 
 %%----------------------------------------------
 %% @doc Creates a link between a name and an inode number.
 %%     Crashes if the inode number is already bound.
-%% @spec (term(),server())-> Number::non_neg_integer() | { error, {is_numbered,Name}}.
+%% @spec (term(),server())-> {ok, Number::non_neg_integer()} | { error, {is_numbered,Name}}.
 %% @end
 %%----------------------------------------------
 number(Name,Server) ->
   case is_numbered(Name,Server) of
     false ->
-      ?MODULE:get(Name,Server);
+      {ok,?MODULE:get(Name,Server)};
     True ->
       {error, {is_numbered, {Name,True}}}
   end.
@@ -192,7 +192,7 @@ number(Name,Server) ->
 %%----------------------------------------------
 %% @doc Creates a link between a name and an inode number.
 %%     Crashes if the inode number is already bound.
-%% @spec (non_neg_integer(),term(),server())-> ok.
+%% @spec (non_neg_integer(),term(),server())-> ok | {error, {is_named,Name,NamedNumber::non_neg_intege()},Number}.
 %% @end
 %%----------------------------------------------
 name(Number,Name,Server) ->

@@ -1,14 +1,5 @@
-☐ multiple attribute folders with same name when multiple files have same attribute.
-
-☑ Read won't work!! The return value is somehow discarded.
-
-☑ DO SOMETHING ABOUT RÄTTIGHETERNA PÅ KATALOGERNA FFS~~!!! OMG !!11
-    ☐ Snygga till det hela, gör enhetligt osv.
-
-☑ Crashes when moving from a value dir to a value dir.
-
 ☐ Giving a key to a file with the same name as the file does not produce an attribute folder with the name of the file. In other words: fix some system that checks for duplicate file names and such.
 
 
 ☐ When loading entries from the data base, the attribute folders return bogus stats.
-☐ Adding two key folders in Nautilus or Konqueror and moving files to first one and then the other leads to the other having the name "unnamed"!
+☐ Adding two key folders in Nautilus or Konqueror and moving files to first one and then the other leads to the other having the name "unnamed"‽

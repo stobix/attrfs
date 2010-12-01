@@ -466,8 +466,8 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
     case tree_srv:lookup(ParentInode,inodes) of
       none -> #fuse_reply_err{err=enoent}; 
       {value,Parent} ->
-        case tree_srv:lookup(inode:n2i(Name,ino),inodes) of
-          none ->
+        case inode:is_numbered(Name,ino) of
+          false ->
             ParentName=Parent#inode_entry.name,
             ParentType=Parent#inode_entry.type,
             attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode);
@@ -698,7 +698,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
-  ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p",[ParentIno,Name,NewParentIno]),
+  ?DEBL(">rename; parent: ~p, name: ~p, new parent: ~p, new name: ~p",[ParentIno,Name,NewParentIno,NewName]),
   Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
 
@@ -723,7 +723,8 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
       attribute_dir ->
         Name=binary_to_list(BName),
         attr_remove:remove_child_from_parent(Name,PName),
-        inode:release(inode:n2i(Name,ino),ino),
+        {ok,OldIno}=inode:n2i(Name,ino),
+        inode:release(OldIno,ino),
         ok;
       _ ->
         enotsup
@@ -847,13 +848,17 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
         ?DEB2("   tokenized key: ~p",[Syek]),
         Keys=lists:reverse(Syek),
         ?DEBL("   key to be inserted: ~p",[Keys]),
-        lists:foreach(
-          fun(Value) -> 
-            Attr=[Value|Keys],
-            ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
-            attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
-          end,
-          Values),
+        case Values of
+          [] -> attr_ext:add_new_attribute(Path,Inode,Entry,Keys);
+          _Values ->
+            lists:foreach(
+              fun(Value) -> 
+                Attr=[Value|Keys],
+                ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
+                attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
+              end,
+              Values)
+        end,
         #fuse_reply_err{err=ok};
       _ ->
         ?DEB1("   entry not an external file, skipping..."),

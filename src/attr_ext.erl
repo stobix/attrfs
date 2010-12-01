@@ -77,7 +77,7 @@ append_attribute(Attr,FName,Stat) ->
 
 append(Parent,ChildInoName,ChildName,Stat) ->
   ?DEBL(" »append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
-  ChildIno=inode:n2i(ChildInoName,ino),
+  {ok,ChildIno}=inode:n2i(ChildInoName,ino),
   ParentIno=inode:get(Parent,ino),
   {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
   ?DEB1("    got child entry"),
@@ -86,7 +86,7 @@ append(Parent,ChildInoName,ChildName,Stat) ->
   case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry.
     none ->
-      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildTriplet]),
+      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
       PEntry=
         #inode_entry{
           type=attribute_dir,

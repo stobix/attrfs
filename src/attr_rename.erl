@@ -54,11 +54,11 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
         NPType=NPEntry#inode_entry.type,
         NPName=NPEntry#inode_entry.name,
         ?DEBL("   new parent type: ~p",[NPType]),
-        case inode:is_numbered(OldName,ino) of
+        case lists:keyfind(OldName,1,PEntry#inode_entry.children) of
           false -> 
             ?DEB1("   file nonexistent!"),
             enoent;
-          FIno ->
+          {_,FIno,_} ->
             {value,FEntry}=tree_srv:lookup(FIno,inodes),
             FType=FEntry#inode_entry.type,
             rename_internal(
@@ -88,7 +88,7 @@ rename_internal(_,_,_,PName,NPName,NewAttribIno,NewAttribEntry,FileIno,FileEntry
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 copy_file(NPIno,FIno,FEntry) ->
   Path=(FEntry#inode_entry.type)#external_file.path,
-  Attribute=inode:i2n(NPIno,ino),
+  {ok,Attribute}=inode:i2n(NPIno,ino),
   ?DEBL("   copying file ~p into ~p",[FEntry#inode_entry.name,Attribute]),
   attr_ext:add_new_attribute(Path,FIno,FEntry,Attribute).
 
@@ -113,7 +113,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEB1("   moving value dir"),
   OldAttribName=[OldValueName|OldKeyName]=OldValueEntry#inode_entry.name,
   NewParentName=NewParentEntry#inode_entry.name,
-  NewAttribName=[NewValueName,NewParentName], 
+  NewAttribName=[NewValueName|NewParentName], 
   NewValueEntry=OldValueEntry#inode_entry{name=NewAttribName},
   ?DEBL("   moving ~p to ~p",[OldAttribName,NewAttribName]),
   % I need to move the children before removing the entries of the parents from the current dir.
@@ -125,11 +125,13 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
     end,
     OldValueEntry#inode_entry.children
   ),
-  ?DEBL("    removing ~p from the ~p directory", [OldValueName,OldKeyName]),
   %XXX: Yes, this is a little bit ugly. Maybe do a global change about 
   %     whether to use inodes or entries as arguments sometime?
-  KeyIno=inode:n2i(OldKeyName,ino),
-  ValueIno=inode:n2i(OldValueName,ino),
+  ?DEBL("    removing ~p from the ~p directory", [OldValueName,OldKeyName]),
+  ?DEBL("     getting inodes...",[]),
+  {ok,KeyIno}=inode:n2i(OldKeyName,ino),
+  {ok,ValueIno}=inode:n2i(OldAttribName,ino),
+  ?DEBL("     removing...",[]),
   attr_remove:remove_empty_dir(KeyIno,OldValueName),
   ?DEBL("    adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
