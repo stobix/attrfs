@@ -165,7 +165,7 @@ start_link({MountDir,MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 %% In here, I mostly check for dirs needed to start fuserlsrv.
 %--------------------------------------------------------------------------
-start_link(Dir,LinkedIn,MountOpts,MirrorDirUnproccessed,DB) ->
+start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
 
   ?DEB1(">start_link"),
   ?DEB1("   checkning if dirs are ok..."),
@@ -186,24 +186,17 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDirUnproccessed,DB) ->
       ?DEB1("TERMINATING"),
       exit(E)
   end,
-  ?DEB1("   extracting mirror dirs..."),
-  MirrorDirs=case MirrorDirUnproccessed of
-    {dir,MirrDir} -> [MirrDir];
-    {dirs,MirrDirs} -> MirrDirs;
-    Other -> ?DEB2("  got an ~p!! exiting",Other),
-    exit(foo)
-  end,
   ?DEB1("    checking mirror dirs..."),
   lists:foreach(
     fun(MirrorDir) ->
-  case filelib:is_dir(MirrorDir) of
-    true ->
-      ?DEB2("      ~p exists, and is a dir. Ok.",MirrorDir);
-    false->
-      ?DEB2("      ~p is not a directory!(Check your config)",MirrorDir),
-      ?DEB1("TERMINATING"),
-      exit({error,mirror_dir_is_not_a_dir})
-  end
+      case filelib:is_dir(MirrorDir) of
+        true ->
+          ?DEB2("      ~p exists, and is a dir. Ok.",MirrorDir);
+        false->
+          ?DEB2("      ~p is not a directory!(Check your config)",MirrorDir),
+          ?DEB1("TERMINATING"),
+          exit({error,mirror_dir_is_not_a_dir})
+      end
   end,
   MirrorDirs),
   Options=[],

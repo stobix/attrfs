@@ -44,7 +44,6 @@
 rename(ParentIno,NewParentIno,OldName,NewName) ->
     {value,PEntry}=tree_srv:lookup(ParentIno,inodes),
     PType=PEntry#inode_entry.type,
-    PName=PEntry#inode_entry.name,
     ?DEBL("   parent_type: ~p",[PType]),
     case tree_srv:lookup(NewParentIno,inodes) of
       none ->
@@ -52,7 +51,6 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
         enoent; 
       {value,NPEntry} ->
         NPType=NPEntry#inode_entry.type,
-        NPName=NPEntry#inode_entry.name,
         ?DEBL("   new parent type: ~p",[NPType]),
         case lists:keyfind(OldName,1,PEntry#inode_entry.children) of
           false -> 
@@ -62,23 +60,23 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
             {value,FEntry}=tree_srv:lookup(FIno,inodes),
             FType=FEntry#inode_entry.type,
             rename_internal(
-              PType,NPType,FType,PName,NPName,
+              PType,NPType,FType,
               NewParentIno,NPEntry,FIno,FEntry,NewName)
         end
     end.
 
 %% rename_internal(OldParentType,NewParentType,NewFileType,
 
-rename_internal(#external_dir{},attribute_dir,#external_file{},PName,NPName,NewAttribIno,NewAttribEntry,FileIno,FileEntry,NewValueName) ->
+rename_internal(#external_dir{},attribute_dir,#external_file{},NewAttribIno,_,FileIno,FileEntry,_) ->
   copy_file(NewAttribIno,FileIno,FileEntry);
 
-rename_internal(attribute_dir,attribute_dir,attribute_dir,PName,NPName,NewAttribIno,NewAttribEntry,FileIno,ValueEntry,NewValueName) ->
+rename_internal(attribute_dir,attribute_dir,attribute_dir,_,NewAttribEntry,_,ValueEntry,NewValueName) ->
   move_attribute_dir(NewAttribEntry,ValueEntry,NewValueName);
 
-rename_internal(attribute_dir,attribute_dir,#external_file{},PName,NPName,NewAttribIno,NewAttribEntry,FileIno,FileEntry,NewValueName) ->
+rename_internal(attribute_dir,attribute_dir,#external_file{},NewAttribIno,_,FileIno,FileEntry,_) ->
   copy_file(NewAttribIno,FileIno,FileEntry);
 
-rename_internal(_,_,_,PName,NPName,NewAttribIno,NewAttribEntry,FileIno,FileEntry,NewValueName) ->
+rename_internal(_,_,_,_,_,_,_,_) ->
   enotsup.
 
 
@@ -118,7 +116,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEBL("   moving ~p to ~p",[OldAttribName,NewAttribName]),
   % I need to move the children before removing the entries of the parents from the current dir.
   lists:foreach(
-    fun({ChildName,ChildInode,ChildType}) ->
+    fun({_ChildName,ChildInode,ChildType}) ->
       {value,ChildEntry}=tree_srv:lookup(ChildInode,inodes),
       move_child(ChildType,ChildInode,ChildEntry,OldValueEntry,NewValueEntry)
 
@@ -147,7 +145,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
 move_child(#external_file{},ChildInode,ChildEntry,OldParentEntry,NewParentEntry) ->
   move_file(ChildInode,ChildEntry,OldParentEntry,NewParentEntry);
 
-move_child(attribute_dir,ChildInode,ChildEntry,_OldParentEntry,NewParentEntry) ->
+move_child(attribute_dir,_ChildInode,ChildEntry,_OldParentEntry,NewParentEntry) ->
   % Moving a value subdir does not change the name of the dir itself, hence the Entry#inode_entry.name as NewName.
   move_attribute_dir(NewParentEntry,ChildEntry,ChildEntry#inode_entry.name).
 

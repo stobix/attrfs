@@ -10,6 +10,9 @@
       {from_dirs,["/home/Volatile/mirrorfs","/home/Volatile/testfs"]},
       {attributes_db,"/home/Volatile/attributes"},
       {linked_in,true},
+      {real_name,"real"},
+      {attr_name,"attributes"},
+      {all_name,"my_files"},
       {mount_opts, "allow_other,default_permissions"}
      ]
    } 

@@ -40,7 +40,8 @@
          datetime_to_epoch/1,
          statify_file_info/1,
          flatten1/1,
-         append_child/2
+         append_child/2,
+         get_or_default/2
         ]).
 
 
@@ -251,4 +252,18 @@ append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
     none ->
         ?DEB1("   DID NOT get parent entry"),
         throw({error,{parent_unbound,ParentIno}})
+  end.
+
+
+%%--------------------------------------------------------------------------
+%% Returns the value associated with Attribute, if found, and Default if not.
+%%--------------------------------------------------------------------------
+get_or_default(Attribute,Default) ->
+  case application:get_env(attrfs,Attribute) of
+    {ok,Value} ->
+      ?DEBL("  ~p: ~p",[Attribute,Value]),
+      Value;
+    undefined ->
+      ?DEBL("  ~p not defined. Defaulting to ~p", [Attribute,Default]),
+      Default
   end.

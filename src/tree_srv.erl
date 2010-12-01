@@ -1,7 +1,7 @@
 -module(tree_srv).
 -vsn("$Header$").
 %%%=========================================================================
-%%% Module inode
+%%% Module tree_srv
 %%%=========================================================================
 %%% @author Joel Ericson <kasettbok@gmail.com>
 %%%
@@ -9,7 +9,7 @@
 %%%
 %%% @version 0.9
 %%%-------------------------------------------------------------------------
-%%% @doc This module provides a simple interface for leasing unique numbers (Inodes).
+%%% @doc This module contains various gb_trees to be accessed and updated by various modules.
 %%% @end
 %%%=========================================================================
 %%%=========================================================================

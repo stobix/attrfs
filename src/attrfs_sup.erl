@@ -35,6 +35,8 @@ init({From,To,DB,MountOpts,LinkedIn}) ->
            temporary, infinity, supervisor ,[inode]},
        {tree_sup,{tree_sup,start_link,[]}, 
            temporary, infinity, supervisor, [tree_srv]},
+%       {settings,{settings,start_sup,[]},
+%           temporary, infinity, supervisor, [settings]},
        {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
            temporary, 10, worker, [attrfs]}
      ]}}.

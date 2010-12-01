@@ -34,12 +34,6 @@
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
-init({{dir,Dir},DB}) ->
-  init({[Dir],DB});
-
-init({{dirs,Dirs},DB}) ->
-  init({Dirs,DB});
-
 init({MirrorDirs,DB}) ->
   initiate_servers(DB),
   % getting inodes for base folders
@@ -47,6 +41,7 @@ init({MirrorDirs,DB}) ->
   AttribIno=inode:get(?ATTR_FOLDR,ino),
   RealIno=inode:get(?REAL_FOLDR,ino),
   AllIno=inode:get(?ALL_FOLDR,ino),
+
 %  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.

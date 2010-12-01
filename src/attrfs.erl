@@ -28,13 +28,15 @@ start(_dont,_care) ->
   ?DEB2("Starting ~p",?MODULE),
   ?DEB1("  getting arguments"),
   DirFrom=case application:get_env(?MODULE,from_dir) of
-    {ok,DF} -> {dir,DF};
-    undefined -> {dirs,vget(from_dirs)}
+    {ok,DF} -> [DF];
+    undefined -> vget(from_dirs)
   end,
   DirTo=vget(to_dir),
   DB=vget(attributes_db),
   LinkedIn=vget(linked_in),
   MountOpts=vget(mount_opts),
+
+
   ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
   case attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn) of
     ok -> {ok,self()}; % Why do I sometimes need this? Why would supervisor:start_link suddenly start returning ok instead of {ok,Pid}?
@@ -45,6 +47,9 @@ start(_dont,_care) ->
 stop(_State) -> ok.
 
 
+%%--------------------------------------------------------------------------
+%% Returns the value associated with Attribute in the .app file. Exits the app if not found.
+%%--------------------------------------------------------------------------
 vget(Attribute) ->
   case application:get_env(?MODULE,Attribute) of
     {ok,Value} -> 

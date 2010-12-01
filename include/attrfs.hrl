@@ -31,11 +31,11 @@
 -define(ATTR_DB_FILE, attrfs, attributes_db).
 
 -define(ROOT_FOLDR, root).
--define(REAL_FOLDR, "real").
+-define(REAL_FOLDR, (attr_tools:get_or_default(real_name,"real"))).
 -define(ATTR_FOLDR, []).
--define(ATTR_FOLDR_FS_NAME, "attribs").
--define(SRCH_FOLDR, "search").
--define(ALL_FOLDR,"all_files").
+-define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attribs"))).
+:b app
+-define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
 
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
