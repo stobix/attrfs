@@ -27,16 +27,14 @@
 start(_dont,_care) ->
   ?DEB2("Starting ~p",?MODULE),
   ?DEB1("  getting arguments"),
-  {ok,DirFrom}=application:get_env(?MODULE,from_dir),
-  ?DEB2("  dir_from: ~p",DirFrom),
-  {ok,DirTo}=application:get_env(?MODULE,to_dir),
-  ?DEB2("  dir_to: ~p",DirTo),
-  {ok,DB}=application:get_env(?MODULE,attributes_db),
-  ?DEB2("  database: ~p",DB),
-  {ok,LinkedIn}=application:get_env(?MODULE,linked_in),
-  ?DEB2("  linked in status: ~p", LinkedIn),
-  {ok,MountOpts}=application:get_env(?MODULE,mount_opts),
-  ?DEB2("   fuserl mount opts: ~p", MountOpts),
+  DirFrom=case application:get_env(?MODULE,from_dir) of
+    {ok,DF} -> {dir,DF};
+    undefined -> {dirs,vget(from_dirs)}
+  end,
+  DirTo=vget(to_dir),
+  DB=vget(attributes_db),
+  LinkedIn=vget(linked_in),
+  MountOpts=vget(mount_opts),
   ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
   case attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn) of
     ok -> {ok,self()}; % Why do I sometimes need this? Why would supervisor:start_link suddenly start returning ok instead of {ok,Pid}?
@@ -46,3 +44,13 @@ start(_dont,_care) ->
 
 stop(_State) -> ok.
 
+
+vget(Attribute) ->
+  case application:get_env(?MODULE,Attribute) of
+    {ok,Value} -> 
+      ?DEBL("  ~p: ~p",[Attribute,Value]),
+      Value;
+    undefined -> 
+      ?DEB2("  ~p not defined! check your config file!",Attribute),
+    exit("not found")
+  end.

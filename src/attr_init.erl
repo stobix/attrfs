@@ -34,15 +34,21 @@
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
-init({MirrorDir,DB}) ->
+init({{dir,Dir},DB}) ->
+  init({[Dir],DB});
+
+init({{dirs,Dirs},DB}) ->
+  init({Dirs,DB});
+
+init({MirrorDirs,DB}) ->
   initiate_servers(DB),
   % getting inodes for base folders
   RootIno=inode:get(root,ino),
   AttribIno=inode:get(?ATTR_FOLDR,ino),
+  RealIno=inode:get(?REAL_FOLDR,ino),
 %  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.
-  ?DEB2("   making inode entries for ~p",MirrorDir),
 
   AttributeEntry=
     #inode_entry{
@@ -60,9 +66,29 @@ init({MirrorDir,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AttribIno,AttributeEntry,inodes),
-  % This mirrors all files and folders, recursively, from the external folder MirrorDir to the internal folder ?REAL_FOLDR, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
-  ?DEB2("   mirroring dir ~p",MirrorDir),
-  {_,RealIno,_}=make_inode_list({MirrorDir,?REAL_FOLDR}),
+  % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
+  RealChildren=lists:map(
+    fun(MirrorDir) ->
+      ?DEB2("   mirroring dir ~p",MirrorDir),
+      Child=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
+      ?DEB2("   got ~p",Child),
+      Child
+    end,
+    MirrorDirs),
+  RealEntry=
+    #inode_entry{
+      name=?REAL_FOLDR,
+      children=RealChildren,
+      type=internal_dir,
+      stat=
+        #stat{
+          st_mode=8#555 bor ?S_IFDIR,
+          st_ino=RealIno
+        },
+      ext_info=[],
+      ext_io=attr_ext:ext_info_to_ext_io([])
+    },
+  tree_srv:enter(RealIno,RealEntry,inodes),
   RootEntry=
     #inode_entry{
       name=root,
@@ -73,8 +99,8 @@ init({MirrorDir,DB}) ->
           st_mode=8#755 bor ?S_IFDIR,
           st_ino=RootIno
         },
-        ext_info=[],
-        ext_io=attr_ext:ext_info_to_ext_io([])
+      ext_info=[],
+      ext_io=attr_ext:ext_info_to_ext_io([])
     },
   ?DEB1("   updating root inode entry"),
   tree_srv:enter(RootIno,RootEntry,inodes).

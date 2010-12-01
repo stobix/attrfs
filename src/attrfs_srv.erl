@@ -165,7 +165,7 @@ start_link({MountDir,MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 %% In here, I mostly check for dirs needed to start fuserlsrv.
 %--------------------------------------------------------------------------
-start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
+start_link(Dir,LinkedIn,MountOpts,MirrorDirUnproccessed,DB) ->
 
   ?DEB1(">start_link"),
   ?DEB1("   checkning if dirs are ok..."),
@@ -186,7 +186,16 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
       ?DEB1("TERMINATING"),
       exit(E)
   end,
-  ?DEB2("    ~p...",MirrorDir),
+  ?DEB1("   extracting mirror dirs..."),
+  MirrorDirs=case MirrorDirUnproccessed of
+    {dir,MirrDir} -> [MirrDir];
+    {dirs,MirrDirs} -> MirrDirs;
+    Other -> ?DEB2("  got an ~p!! exiting",Other),
+    exit(foo)
+  end,
+  ?DEB1("    checking mirror dirs..."),
+  lists:foreach(
+    fun(MirrorDir) ->
   case filelib:is_dir(MirrorDir) of
     true ->
       ?DEB2("      ~p exists, and is a dir. Ok.",MirrorDir);
@@ -194,10 +203,12 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDir,DB) ->
       ?DEB2("      ~p is not a directory!(Check your config)",MirrorDir),
       ?DEB1("TERMINATING"),
       exit({error,mirror_dir_is_not_a_dir})
+  end
   end,
+  MirrorDirs),
   Options=[],
   ?DEB1("   starting fuserlsrv"),
-  fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,{MirrorDir,DB},Options).
+  fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,{MirrorDirs,DB},Options).
 
 %%--------------------------------------------------------------------------
 %% The analog to Module:init/1 in gen_server.
