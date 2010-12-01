@@ -848,13 +848,17 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
         ?DEB2("   tokenized key: ~p",[Syek]),
         Keys=lists:reverse(Syek),
         ?DEBL("   key to be inserted: ~p",[Keys]),
-        lists:foreach(
-          fun(Value) -> 
-            Attr=[Value|Keys],
-            ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
-            attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
-          end,
-          Values),
+        case Values of
+          [] -> attr_ext:add_new_attribute(Path,Inode,Entry,Keys);
+          _Values ->
+            lists:foreach(
+              fun(Value) -> 
+                Attr=[Value|Keys],
+                ?DEBL("   adding attribute {~p} for file ~p to database",[Attr,Path]),
+                attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
+              end,
+              Values)
+        end,
         #fuse_reply_err{err=ok};
       _ ->
         ?DEB1("   entry not an external file, skipping..."),

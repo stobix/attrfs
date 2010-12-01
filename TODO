@@ -1,15 +1,5 @@
 ☐ Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
 
-☐ Make the app terminate when fusermount -u mountdir
-
-include support for 
-    ☑ mkdir, 
-    ☑ rmdir, 
-    ☑ rename 
-    ☐ and others? to change attributes.
-    ☐ link
-
-
 ☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
 
 ☐ Include support for creating files! Nautilus wants to have a .Trash and a .thumbnails directory...    
@@ -19,35 +9,6 @@ include support for
 ☐ Include support for writing to files
  ☐  mirrored
  ☐  created
-
-☑ include support for reading files!
-
-☑ make closedir do something useful.
-
-☑ Include support for "multi-valued attributes":
-    % attr -s "Foo" -V "Etaoin,Shrdlu" Baz.file
-    =>
-    % ls attribs/Foo -R
-    Etaoin/Baz.file
-    Shrdlu/Baz.file
-  Setting multi-valued arguments now fixed.
-  Getting multi-valued arguments fixed.
-
-☑ Fix the FUSE "feature" of not letting me access a/b/c/a, where a and a are the same directory.
-
-☑ Include support for "deep attributes":
-  ☑  % attr -s "Foo/Bar" -V "Etaoin" Baz.file
-    =>
-    % ls attribs/Foo/Bar/Etaoin -R
-    Baz.file
-
-    % attr -s "Bla" -V "" Baz
-    =>
-    % ls attribs/Bla
-    Baz
-
-  ☑ Make logical dirs ignore directories when filtering.
-     Idea: Get it to work by going from {Name,Ino} to {Name,Ino,Ftype} for easy filtering.
 
 ☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
     % attr -s "Foo" -V "" Bar.file
@@ -100,7 +61,7 @@ include support for
         ☐ Regex?
 
 
-    ☐ Different logic dirs for different levels of attribute dirs.
+    ☐ Different logic dirs for different levels of attribute dirs. *BEGUN*
 
 
 ☐ make one able to remove attribute key directories
@@ -126,7 +87,4 @@ include support for
   * show duplicate files as a special type of folder?
 
 
-☑ Apparently, linux calls open before calling setattr. What to do with open? Assign fh.
-
-
-☐ what is wrong with the logical subdirs? Do I point sequentially all the way down to the original, or do I point directly to the original from all?
+☐ what is wrong with the logical subdirs? Do I point sequentially all the way down to the original, or do I point directly to the original from all? The processing is way too slow, anyhow.
