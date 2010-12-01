@@ -35,6 +35,8 @@
 -define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, "attribs").
 -define(SRCH_FOLDR, "search").
+-define(ALL_FOLDR,"all_files").
+
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}

@@ -46,6 +46,7 @@ init({MirrorDirs,DB}) ->
   RootIno=inode:get(root,ino),
   AttribIno=inode:get(?ATTR_FOLDR,ino),
   RealIno=inode:get(?REAL_FOLDR,ino),
+  AllIno=inode:get(?ALL_FOLDR,ino),
 %  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.
@@ -66,19 +67,36 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AttribIno,AttributeEntry,inodes),
+  ?DEB1("  Traversing all mirror dirs"),
   % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
-  RealChildren=lists:map(
-    fun(MirrorDir) ->
+  {RealChildren,AllChildren}=lists:mapfoldl(
+    fun(MirrorDir,Children) ->
       ?DEB2("   mirroring dir ~p",MirrorDir),
-      Child=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
+      {ChildName,ChildIno,ChildType,ChildChildren}=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
+      Child={ChildName,ChildIno,ChildType},
       ?DEB2("   got ~p",Child),
-      Child
+      {Child,ChildChildren++Children}
     end,
+    [],
     MirrorDirs),
+  AllEntry=
+    #inode_entry{
+      name=?ALL_FOLDR,
+      children=AllChildren,
+      type=internal_dir,
+      stat=
+        #stat{
+          st_mode=8#555 bor ?S_IFDIR,
+          st_ino=AllIno
+        },
+      ext_info=[],
+      ext_io=attr_ext:ext_info_to_ext_io([])
+    },
+  tree_srv:enter(AllIno,AllEntry,inodes),
   RealEntry=
     #inode_entry{
       name=?REAL_FOLDR,
-      children=RealChildren,
+      children=[{?ALL_FOLDR,AllIno,internal_dir}|RealChildren],
       type=internal_dir,
       stat=
         #stat{
@@ -122,19 +140,26 @@ type_and_children(Path,FileInfo) ->
             ?DEB1("    directory"),
             {ok,ChildNames}=file:list_dir(Path),
             ?DEB2("     directory entries:~p",ChildNames),
-            NameInodePairs=
-              lists:map(
-                fun(ChildName) -> 
-                    % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
-                    {InternalChildName,Ino,Type}=make_inode_list({Path++"/"++ChildName,ChildName}),
-                    {InternalChildName,Ino,Type} 
+            {NameInodePairs,MultitudeOfChildren}=
+              lists:mapfoldl(
+                fun(ChildName,OtherChildren) -> 
+                  % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
+                  {InternalChildName,Ino,Type,AllChildren}=make_inode_list({Path++"/"++ChildName,ChildName}),
+                  Me={InternalChildName,Ino,Type},
+                  case Type of
+                    #external_file{} ->
+                      {Me,[Me|OtherChildren++AllChildren]};
+                    _ ->
+                      {Me,OtherChildren++AllChildren}
+                  end
                 end, 
+                [],
                 ChildNames
               ),
-            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path}};
+            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},MultitudeOfChildren};
           regular ->
             ?DEB1("    regular"),
-            {ok,[],#external_file{external_file_info=FileInfo,path=Path}};
+            {ok,[],#external_file{external_file_info=FileInfo,path=Path},[]};
           _ ->
             {error,not_supported} % for now
         end.
@@ -159,7 +184,7 @@ make_inode_list({Path,Name0}) ->
       ?DEB1("   got file info"),
       {Name,Ino} =get_unique(Name0),
       ?DEB2("   got unique name ~p",Name),
-      {ok,Children,Type}= type_and_children(Path,FileInfo),
+      {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
       ?DEB2("    Generating ext info for ~p",Path),
       {ExtInfo,ExtIo}=attr_ext:generate_ext_info_io(Path), 
       ?DEB2("     ext info: ~p", ExtInfo),
@@ -199,7 +224,7 @@ make_inode_list({Path,Name0}) ->
           attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) 
         end,
         ExtFolders),
-      {Name,Ino,Type};
+    {Name,Ino,Type,AllChildren};
     E ->
       ?DEBL("   got ~p when trying to read ~p.",[E,Path]),
       ?DEB1("   are you sure your app file is correctly configured?"),

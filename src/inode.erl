@@ -144,6 +144,26 @@ get(Name,Server) ->
     Number -> Number
   end.
 
+
+%%----------------------------------------------
+%% @doc On first run, assosicate a unique integer with Name.
+%%     On sequential runs, return the integer associated with Name.
+%% @spec (term(),non_neg_integer(),server())-> ok|{error,{named,Number}}|{error,{numbered,Name}}.
+%% @end
+%%----------------------------------------------
+bind(Name,Number,Server) ->
+  case is_numbered(Name,Server) of
+    false ->
+      case is_named(Number,Server) of
+        false ->
+          gen_server:cast(?MODULE,{register,Name,Number,Server});
+        _ ->
+          {error, {named,Number}}
+      end;
+    _ ->
+      {error, {numbered,Name}}
+  end.
+
 %%----------------------------------------------
 %% @doc Returns the inode number associated with Name.
 %%     Crashes if no association exists.
