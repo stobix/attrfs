@@ -181,7 +181,7 @@ make_inode_list({Path,Name0}) ->
       ?DEB2("   got unique name ~p",Name),
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
       ?DEB2("    Generating ext info for ~p",Path),
-      {ExtInfo,ExtIo}=attr_ext:generate_ext_info_io(Path), 
+      {ExtInfo,ExtIo,ExtAmount}=attr_ext:generate_ext_info_io(Path), 
       ?DEB2("     ext info: ~p", ExtInfo),
       % XXX: This will break if provided with a local date and time that does not
       % exist. Shouldn't be much of a problem.
@@ -191,7 +191,7 @@ make_inode_list({Path,Name0}) ->
       ?DEB2("    atime:~p~n",EpochAtime),
       ?DEB2("    ctime:~p~n",EpochCtime),
       ?DEB2("    mtime:~p~n",EpochMtime),
-      MyStat=
+      MyStat0=
         attr_tools:statify_file_info(
           FileInfo#file_info{
             inode=Ino,
@@ -200,6 +200,7 @@ make_inode_list({Path,Name0}) ->
             mtime=EpochMtime
           }
         ),
+      MyStat=MyStat0#stat{st_nlink=ExtAmount+1},
       InodeEntry=
         #inode_entry{ 
           name=Name,
