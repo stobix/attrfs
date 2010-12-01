@@ -34,7 +34,6 @@
 -define(REAL_FOLDR, (attr_tools:get_or_default(real_name,"real"))).
 -define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attribs"))).
-:b app
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
 
 
