@@ -23,6 +23,7 @@
 
 -export([start/2,stop/1]).
 -include("../include/debug.hrl").
+-include("../include/attrfs.hrl").
 
 start(_dont,_care) ->
   ?DEB2("Starting ~p",?MODULE),

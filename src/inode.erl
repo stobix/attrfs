@@ -30,7 +30,8 @@
 %%%
 %%%=========================================================================
 %%%=========================================================================
--ifdef(EUNIT).
+
+-ifdef(test).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -52,6 +53,7 @@
 -export([start_link/0,start_link/1,init/1]).
 -export([handle_call/3,handle_cast/2]).
 -export([terminate/2]).
+-export([handle_info/2,code_change/3]).
 
 -export([start/2,stop/1]).
 
@@ -93,6 +95,9 @@ init(_SmallestNumber) ->
 %  {ok,{SmallestNumber,[],[]}}.
 
 terminate(_Reason,_State) -> ok.
+
+code_change(_,_,_) -> ok.
+handle_info(_,_) -> ok.
 
 %%%=========================================================================
 %%% exports

@@ -28,6 +28,7 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
 -export([add_new_attribute/4,
          rehash_ext_from_db/2,
          append_attribute/3,

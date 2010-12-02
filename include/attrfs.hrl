@@ -27,6 +27,11 @@
 %%% @end
 %%%-------------------------------------------------------
 
+
+-ifdef(test).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(ATTR_DB, attributes).
 -define(ATTR_DB_FILE, attrfs, attributes_db).
 

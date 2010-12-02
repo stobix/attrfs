@@ -29,6 +29,7 @@
 %%%
 %%% @version 1.0
 
+
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
@@ -108,7 +109,7 @@ insert_entry(ParentInode,ChildEntry) ->
   ChildName=
     case ChildType of
       attribute_dir ->
-        [Name|Parents] = InoName,
+        [Name|_Parents] = InoName,
         Name;
       _ -> InoName
     end,

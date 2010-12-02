@@ -1,6 +1,8 @@
 -module(filter).
 -export([filter/3]).
 
+
+-include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
 filter(List1,"BUTNOT",List2) ->

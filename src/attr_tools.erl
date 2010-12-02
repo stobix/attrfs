@@ -28,14 +28,6 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 
--ifdef('EUNIT'). %make:all in the erl shell won't let me redefine EUNIT, so 'EUNIT' will suffice for now.
--include_lib("eunit/include/eunit.hrl").
--else.
--ifdef(EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
--endif.
-
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
@@ -60,7 +52,7 @@ flatten1([[]]) ->
   [];
 flatten1([[A]|As]) ->
   [A|flatten1(As)];
-flatten1([A=[B|Bs]|As]) ->
+flatten1([A=[_|_s]|As]) ->
   A++flatten1(As);
 flatten1([A|As]) ->
   [A|flatten1(As)];
@@ -201,8 +193,7 @@ has_rwx_access_rwx_test_() ->
   ___=0,
   _F=false,
   T_=true,
- ?_test(
- [
+ [{"postive tests",?_test([
   ?assertMatch(T_,has_rwx_access(U__,RWX,GU)),
   ?assertMatch(T_,has_rwx_access(_G_,RWX,GU)),
   ?assertMatch(T_,has_rwx_access(__O,RWX,GU)),
@@ -217,9 +208,9 @@ has_rwx_access_rwx_test_() ->
 
   ?assertMatch(_F,has_rwx_access(U__,RWX,__)),
   ?assertMatch(_F,has_rwx_access(_G_,RWX,__)),
-  ?assertMatch(T_,has_rwx_access(__O,RWX,__)),
+  ?assertMatch(T_,has_rwx_access(__O,RWX,__))])},
 
-
+  {"negative tests",?_test([
   ?assertMatch(_F,has_rwx_access(U__,___,GU)),
   ?assertMatch(_F,has_rwx_access(_G_,___,GU)),
   ?assertMatch(_F,has_rwx_access(__O,___,GU)),
@@ -234,24 +225,31 @@ has_rwx_access_rwx_test_() ->
 
   ?assertMatch(_F,has_rwx_access(U__,___,__)),
   ?assertMatch(_F,has_rwx_access(_G_,___,__)),
-  ?assertMatch(_F,has_rwx_access(__O,___,__))
-  ]).
+  ?assertMatch(_F,has_rwx_access(__O,___,__))])}
+ ].
 -endif.
 
 
 -ifdef(EUNIT).
 perms_test_() ->
-  ?_test(
-  [
-  ?assertMatch(false,has_other_perms(8#777,0)),
-  ?assertMatch(true,has_other_perms(8#777,8#777)),
+  ARWX=8#777,
+  A___=0,
+  _F=false,
+  T_=true,
+  [{"other",?_test([
+  ?assertMatch(_F,has_other_perms(ARWX,A___)),
+  ?assertMatch(T_,has_other_perms(ARWX,ARWX))
+  ])},
 
-  ?assertMatch(false,has_group_perms(8#777,0)),
-  ?assertMatch(true,has_group_perms(8#777,8#777)),
+  {"group",?_test([
+  ?assertMatch(_F,has_group_perms(ARWX,A___)),
+  ?assertMatch(T_,has_group_perms(ARWX,ARWX))
+  ])},
 
-  ?assertMatch(false,has_user_perms(8#777,0)),
-  ?assertMatch(true,has_user_perms(8#777,8#777))
-  ]).
+  {"user",?_test([
+  ?assertMatch(_F,has_user_perms(ARWX,A___)),
+  ?assertMatch(T_,has_user_perms(ARWX,ARWX))
+  ])}].
 -endif.
 
 %%--------------------------------------------------------------------------
@@ -285,7 +283,13 @@ merge_duplicates(List) ->
 
 -ifdef(EUNIT).
 merge_duplicates_test_() ->
-  ?_assertMatch([{"a","b"},{"hej","tjo,hoj"}],merge_duplicates([{"hej","tjo"},{"hej","hoj"},{"a","b"}])).
+  Single={"a","b"},
+  Duplicate1={"c","d"},
+  Duplicate2={"c","e"},
+  Merged={"c","d,e"},
+  InData=[Duplicate1,Duplicate2,Single],
+  OutData=[Single,Merged],
+  ?_assertMatch(OutData,merge_duplicates(InData)).
 -endif.
 %%--------------------------------------------------------------------------
 %% Takes a [{Key,Val}] and transforms it into a gb_tree where each key only has one val.

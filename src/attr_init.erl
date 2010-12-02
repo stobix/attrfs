@@ -1,6 +1,5 @@
 -module(attr_init).
 
--export([init/1]).
 
 %%%=========================================================================
 %%%                                 LICENSE
@@ -30,6 +29,8 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
+-export([init/1]).
 
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").

@@ -33,14 +33,19 @@
 %%%=========================================================================
 %%%=========================================================================
 
+
 -behaviour(gen_server).
 
 -export([enter/3,store/2,new/1,lookup/2,to_list/1,clear/1,delete_any/2]).
 
+-ifdef(test).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -export([start_link/0,init/1]).
 -export([handle_call/3,handle_cast/2]).
 -export([terminate/2]).
+-export([handle_info/2,code_change/3]).
 
 -include("../include/debug.hrl").
 
@@ -67,6 +72,9 @@ init(_) ->
   {ok,[]}.
 
 terminate(_Reason,_State) -> ok.
+
+code_change(_,_,_) -> ok.
+handle_info(_,_) -> ok.
 
 %%%=========================================================================
 %%% exports
