@@ -27,7 +27,15 @@
 %%%
 %%% @copyright Copylefted using some GNU license or other.
 %%%
-%%% @version 1.0
+
+-ifdef('EUNIT'). %make:all in the erl shell won't let me redefine EUNIT, so 'EUNIT' will suffice for now.
+-include_lib("eunit/include/eunit.hrl").
+-else.
+-ifdef(EUNIT).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+-endif.
+
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
@@ -48,29 +56,49 @@
 %%--------------------------------------------------------------------------
 %% flatten1 removes one list layer from a file. [[a],[[B]]] -> [a,[B]].
 %%--------------------------------------------------------------------------
+flatten1([[]]) ->
+  [];
 flatten1([[A]|As]) ->
   [A|flatten1(As)];
-
+flatten1([A=[B|Bs]|As]) ->
+  A++flatten1(As);
 flatten1([A|As]) ->
   [A|flatten1(As)];
 
+
 flatten1([]) ->
   [].
+
+-ifdef(EUNIT).
+flatten1_test_() ->
+ ?_test(
+ [
+  ?assertMatch([],flatten1([[]])),
+  ?assertMatch([a],flatten1([[a]])),
+  ?assertMatch([[bar],[baz]],flatten1([[[bar],[baz]]])),
+  ?assertMatch(["etaoin","shrdlu"],flatten1([["etaoin","shrdlu"]]))
+ ]).
+-endif.
 
 %%--------------------------------------------------------------------------
 %seems like lists:keymerge won't do what I ask it, so I build my own...
 %%--------------------------------------------------------------------------
 keymergeunique(Tuple,TupleList) ->
-  keymerge(Tuple,TupleList,[]).
+  keymergeunique(Tuple,TupleList,[]).
 
-keymerge(Tuple,[],FilteredList) ->
+keymergeunique(Tuple,[],FilteredList) ->
   [Tuple|FilteredList];
 
-keymerge(Tuple={Key,_Value,_Type},[{Key,_,_}|TupleList],FilteredList) ->
-  keymerge(Tuple,TupleList,FilteredList);
+keymergeunique(Tuple={Key,_Value,_Type},[{Key,_,_}|TupleList],FilteredList) ->
+  keymergeunique(Tuple,TupleList,FilteredList);
 
-keymerge(Tuple={_Key,_Value,_Type},[OtherTuple|TupleList],FilteredList) ->
-  keymerge(Tuple,TupleList,[OtherTuple|FilteredList]).
+keymergeunique(Tuple={_Key,_Value,_Type},[OtherTuple|TupleList],FilteredList) ->
+  keymergeunique(Tuple,TupleList,[OtherTuple|FilteredList]).
+
+-ifdef(EUNIT).
+keymergeunique_test_() ->
+  ?_assertMatch([{b,e,f},{a,b,c}],keymergeunique({b,e,f},[{b,c,d},{a,b,c}])).
+-endif.
 
 %%--------------------------------------------------------------------------
 %% (This one I stole from fuserlproc.)
@@ -98,6 +126,15 @@ remove_from_start([C1|String1],[C2|String2]) when C1 == C2 ->
 remove_from_start([C1|String1],[C2|_String2]) when C1 /= C2 ->
   [C1|String1].
 
+-ifdef(EUNIT).
+remove_from_start_test_() ->
+ ?_test(
+  [
+    ?assertMatch("foo",remove_from_start("foo","bar")),
+    ?assertMatch("oo",remove_from_start("foo","f"))
+  ]).
+-endif.
+
 %%--------------------------------------------------------------------------
 %% @spec (boolean(),A,B) -> A|B.
 %% @doc Takes a boolean and redefines the meanings of true and false.
@@ -114,6 +151,11 @@ transmogrify(TrueOrFalse,NewTrue,NewFalse) ->
       ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewFalse]),
       NewFalse
   end.
+
+-ifdef(EUNIT).
+transmogrify_test_() ->
+  ?_assertMatch(true,transmogrify(transmogrify(true,false,true),false,true)).
+-endif.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
@@ -139,23 +181,93 @@ test_access(Inode,Mask,Ctx) ->
 has_rwx_access(Entry,Mask,Ctx) ->
   #stat{st_mode=Mode,st_uid=Uid,st_gid=Gid}=Entry#inode_entry.stat,
   has_other_perms(Mode,Mask)
-    orelse Gid==Ctx#fuse_ctx.gid andalso has_group_perms(Mode,Mask)
-    orelse Uid==Ctx#fuse_ctx.uid andalso has_user_perms(Mode,Mask).
+    orelse (Gid==Ctx#fuse_ctx.gid andalso has_group_perms(Mode,Mask))
+    orelse (Uid==Ctx#fuse_ctx.uid andalso has_user_perms(Mode,Mask)).
+
+
+-ifdef(EUNIT).
+has_rwx_access_rwx_test_() ->
+  StatURWX=#stat{st_mode=8#700,st_uid=1,st_gid=2},
+  StatGRWX=#stat{st_mode=8#070,st_uid=1,st_gid=2},
+  StatORWX=#stat{st_mode=8#007,st_uid=1,st_gid=2},
+  U__=#inode_entry{stat=StatURWX},
+  _G_=#inode_entry{stat=StatGRWX},
+  __O=#inode_entry{stat=StatORWX},
+  GU=#fuse_ctx{gid=2,uid=1},
+  _U=#fuse_ctx{gid=3,uid=1},
+  G_=#fuse_ctx{gid=2,uid=3},
+  __=#fuse_ctx{gid=3,uid=3},
+  RWX=8#755,
+  ___=0,
+  _F=false,
+  T_=true,
+ ?_test(
+ [
+  ?assertMatch(T_,has_rwx_access(U__,RWX,GU)),
+  ?assertMatch(T_,has_rwx_access(_G_,RWX,GU)),
+  ?assertMatch(T_,has_rwx_access(__O,RWX,GU)),
+
+  ?assertMatch(T_,has_rwx_access(U__,RWX,_U)),
+  ?assertMatch(_F,has_rwx_access(_G_,RWX,_U)),
+  ?assertMatch(T_,has_rwx_access(__O,RWX,_U)),
+
+  ?assertMatch(_F,has_rwx_access(U__,RWX,G_)),
+  ?assertMatch(T_,has_rwx_access(_G_,RWX,G_)),
+  ?assertMatch(T_,has_rwx_access(__O,RWX,G_)),
+
+  ?assertMatch(_F,has_rwx_access(U__,RWX,__)),
+  ?assertMatch(_F,has_rwx_access(_G_,RWX,__)),
+  ?assertMatch(T_,has_rwx_access(__O,RWX,__)),
+
+
+  ?assertMatch(_F,has_rwx_access(U__,___,GU)),
+  ?assertMatch(_F,has_rwx_access(_G_,___,GU)),
+  ?assertMatch(_F,has_rwx_access(__O,___,GU)),
+
+  ?assertMatch(_F,has_rwx_access(U__,___,_U)),
+  ?assertMatch(_F,has_rwx_access(_G_,___,_U)),
+  ?assertMatch(_F,has_rwx_access(__O,___,_U)),
+
+  ?assertMatch(_F,has_rwx_access(U__,___,G_)),
+  ?assertMatch(_F,has_rwx_access(_G_,___,G_)),
+  ?assertMatch(_F,has_rwx_access(__O,___,G_)),
+
+  ?assertMatch(_F,has_rwx_access(U__,___,__)),
+  ?assertMatch(_F,has_rwx_access(_G_,___,__)),
+  ?assertMatch(_F,has_rwx_access(__O,___,__))
+  ]).
+-endif.
+
+
+-ifdef(EUNIT).
+perms_test_() ->
+  ?_test(
+  [
+  ?assertMatch(false,has_other_perms(8#777,0)),
+  ?assertMatch(true,has_other_perms(8#777,8#777)),
+
+  ?assertMatch(false,has_group_perms(8#777,0)),
+  ?assertMatch(true,has_group_perms(8#777,8#777)),
+
+  ?assertMatch(false,has_user_perms(8#777,0)),
+  ?assertMatch(true,has_user_perms(8#777,8#777))
+  ]).
+-endif.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 has_other_perms(Mode,Mask) ->
-  Mode band ?S_IRWXO band Mask/=0.
+  (Mode band ?S_IRWXO band Mask)/=0.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 has_group_perms(Mode,Mask) ->
-  Mode band ?S_IRWXG bsr 3 band Mask/=0.
+  (Mode band ?S_IRWXG band Mask)/=0.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 has_user_perms(Mode,Mask) ->
-  Mode band ?S_IRWXU bsr 6 band Mask/=0.
+  (Mode band ?S_IRWXU band Mask)/=0.
 
 
 %%--------------------------------------------------------------------------
@@ -171,7 +283,10 @@ merge_duplicates(List) ->
   Tree=make_unduplicate_tree(List),
   gb_trees:to_list(Tree).
 
-
+-ifdef(EUNIT).
+merge_duplicates_test_() ->
+  ?_assertMatch([{"a","b"},{"hej","tjo,hoj"}],merge_duplicates([{"hej","tjo"},{"hej","hoj"},{"a","b"}])).
+-endif.
 %%--------------------------------------------------------------------------
 %% Takes a [{Key,Val}] and transforms it into a gb_tree where each key only has one val.
 %% If the list contains several identical keys, their values are combined using "," as a separator.
@@ -205,6 +320,11 @@ dir(Stat) ->
 %%--------------------------------------------------------------------------
 datetime_to_epoch(DateTime) ->
   calendar:datetime_to_gregorian_seconds(DateTime) - calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}).
+
+-ifdef(EUNIT).
+datetime_to_epoch_test_() ->
+  ?_assertMatch(1234567890,datetime_to_epoch({{2009,02,13},{23,31,30}})). %best date ever!
+-endif.
 
 %%--------------------------------------------------------------------------
 %% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}

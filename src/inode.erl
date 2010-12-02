@@ -6,7 +6,6 @@
 %%%
 %%% @copyright Copylefted using some GNU license or other.
 %%%
-%%% @version 0.9
 %%%-------------------------------------------------------------------------
 %%% @doc This module provides a simple interface for leasing unique numbers (Inodes).
 %%% @end
@@ -31,12 +30,19 @@
 %%%
 %%%=========================================================================
 %%%=========================================================================
+-ifdef(EUNIT).
+
+-include_lib("eunit/include/eunit.hrl").
+
+-endif.
 
 -behaviour(gen_server).
 
 -export([get/1,release/2]).
 -export([n2i/2,i2n/2,name/3,number/2]).
--export([get/2,is_named/2,is_numbered/2,is_used/2]).
+-export([get/2]).
+-export([is_named/2,is_numbered/2]).
+-export([is_used/2]).
 -export([reset/1,reset/2,list_bound/1]).
 -export([rename/3]).
 -export([count_occupied/1]).
@@ -49,7 +55,7 @@
 
 -export([start/2,stop/1]).
 
--vsn(0.9).
+-vsn("0.2.1").
 
 -include("../include/debug.hrl").
 
@@ -145,24 +151,6 @@ get(Name,Server) ->
   end.
 
 
-%%----------------------------------------------
-%% @doc On first run, assosicate a unique integer with Name.
-%%     On sequential runs, return the integer associated with Name.
-%% @spec (term(),non_neg_integer(),server())-> ok|{error,{named,Number}}|{error,{numbered,Name}}.
-%% @end
-%%----------------------------------------------
-bind(Name,Number,Server) ->
-  case is_numbered(Name,Server) of
-    false ->
-      case is_named(Number,Server) of
-        false ->
-          gen_server:cast(?MODULE,{register,Name,Number,Server});
-        _ ->
-          {error, {named,Number}}
-      end;
-    _ ->
-      {error, {numbered,Name}}
-  end.
 
 %%----------------------------------------------
 %% @doc Returns the inode number associated with Name.
@@ -208,7 +196,6 @@ number(Name,Server) ->
       {error, {is_numbered, {Name,True}}}
   end.
 
-
 %%----------------------------------------------
 %% @doc Creates a link between a name and an inode number.
 %%     Crashes if the inode number is already bound.
@@ -218,9 +205,9 @@ number(Name,Server) ->
 name(Number,Name,Server) ->
   case is_named(Number,Server) of
     false ->
-      gen_server:call(?MODULE,{register,Name,Number,Server});
+      gen_server:cast(?MODULE,{register,Name,Number,Server});
     True ->
-      {error,{is_named,{Name,True},Number}}
+      {error,{is_named,{Number,True},Name}}
   end.
 
 %%----------------------------------------------
@@ -385,10 +372,8 @@ get__({CurrentHighest,[Free|Frees],Reserved}) ->
 rename__(OldName,NewName,{CurrentHighest,Frees,Reserved}=Status) ->
   case lists:keytake(OldName,1,Reserved) of
     {value,{OldName,OldIno},NewReserved} ->
-      ?DEBL("   ~p found. New list ~p.",[OldName,NewReserved]),
       {CurrentHighest,Frees,[{NewName,OldIno}|NewReserved]};
     false ->
-      ?DEBL("   ~p not bound! Not binding ~p.",[OldName,NewName]),
       Status
   end.
 
@@ -405,3 +390,31 @@ return__(NewFree, {CurrentHighest,Frees,Reserved}) ->
   NewReserved=lists:keydelete(NewFree,2,Reserved),
   {noreply,{CurrentHighest,[NewFree|Frees],NewReserved}}.
 
+
+-ifdef(EUNIT).
+
+get_test_() ->
+    initiate(get_test),
+    I=?MODULE:get(foo,get_test),
+  ?_test([
+    ?assertMatch(I,inode:get(foo,get_test)),
+    ?assertMatch({ok,I},n2i(foo,get_test))
+  ]).
+
+name_number_test_() ->
+  initiate(name_number_test),
+  reset(name_number_test),
+  Name=foo,Number=1,
+  name(Number,Name,name_number_test),
+  ?_test([
+    ?assertMatch({ok,Number},n2i(Name,name_number_test)),
+    ?assertMatch({ok,Name},i2n(Number,name_number_test)),
+    ?assertMatch({error,{is_numbered,{Name,Number}}},number(Name,name_number_test)),
+    ?assertMatch({error,{is_named,{Number,Name},Name}},name(Number,Name,name_number_test)),
+    ?assertMatch(ok,rename(Name,Name,name_number_test)),
+    ?assertMatch({ok,Number},n2i(Name,name_number_test)),
+    ?assertMatch({ok,Name},i2n(Number,name_number_test))
+  ]).
+  
+
+-endif.
