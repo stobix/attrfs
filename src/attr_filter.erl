@@ -1,4 +1,4 @@
--module(filter).
+-module(attr_filter).
 -export([filter/3]).
 
 

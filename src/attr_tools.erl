@@ -134,13 +134,13 @@ remove_from_start_test_() ->
 %% good or {error, no_foo}, depending on whether is_foo(X) returns true or 
 %% false.
 %%--------------------------------------------------------------------------
-transmogrify(TrueOrFalse,NewTrue,NewFalse) ->
+transmogrify(Boolean,NewTrue,NewFalse) ->
   if 
-    TrueOrFalse -> 
-      ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewTrue]),
+    Boolean -> 
+      ?DEBL("   transmogrifying ~p into ~p",[Boolean,NewTrue]),
       NewTrue;
     true -> 
-      ?DEBL("   transmogrifying ~p into ~p",[TrueOrFalse,NewFalse]),
+      ?DEBL("   transmogrifying ~p into ~p",[Boolean,NewFalse]),
       NewFalse
   end.
 

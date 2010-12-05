@@ -197,7 +197,7 @@ filter_children([Connective|Parents],Children) when ?CONNS(Connective) ->
       % Since directories are filtered when created, I need not filter the children of the parent anew.
       {value,PrevChildren} = children(Ino),
       ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
-      filter:filter(PrevChildren,Connective,Children)
+      attr_filter:filter(PrevChildren,Connective,Children)
   end;
 
 
