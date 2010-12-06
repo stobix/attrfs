@@ -292,10 +292,10 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
 %% This is called on each close () of an opened file, possibly multiple times per open  call (due to dup () et. al.). Fi#fuse_file_info.fh will contain the descriptor set in open, if any. #fuse_reply_err{err = ok} indicates success. This return value is ultimately the return value of close () (unlike release). Does *not* necessarily imply an fsync. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type flush_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-flush(_Ctx,Inode,_Fuse_File_Info,_Continuation,State) ->
+flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">flush"),
   ?DEB2("|  _Ctx:~p",_Ctx),
-  ?DEB2("|  Inode: ~p ",Inode),
+  ?DEB2("|  Inode: ~p ",_Inode),
   ?DEB2("|  FI: ~p",_Fuse_File_Info),
   {#fuse_reply_err{err=ok},State}.
 
@@ -499,14 +499,14 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %% Open an inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type open_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
+open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">open"),
-  ?DEB2("|  Ctx: ~p",Ctx),
+  ?DEB2("|  _Ctx: ~p",_Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
   ?DEB2("|  FI: ~p",Fuse_File_Info),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
-  Name=Entry#inode_entry.name,
-  ?DEBL("   Internal file name: ~p",[Name]),
+  _Name=Entry#inode_entry.name,
+  ?DEBL("   Internal file name: ~p",[_Name]),
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
@@ -530,9 +530,9 @@ open(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
+opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
   ?DEB1(">opendir"),
-  ?DEB2("|  Ctx:~p",Ctx),
+  ?DEB2("|  _Ctx:~p",_Ctx),
   ?DEB2("|  Inode: ~p ",Inode),
   ?DEB2("|  FI: ~p", FI),
   ?DEB2("|  _flags: ~p",_Flags),
@@ -553,10 +553,10 @@ opendir(Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io
 %% To read an internal file that has an external counterpart, open the external file and forward the contents to the reader.
 %% To read other internal files, I need to output the Right Kind Of Data somehow. A project to do later.
 %%--------------------------------------------------------------------------
-read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
+read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">read"),
-  ?DEB2("|  Ctx:~p",Ctx),
-  ?DEB2("|  Inode: ~p ",Inode),
+  ?DEB2("|  _Ctx:~p",_Ctx),
+  ?DEB2("|  _Inode: ~p ",_Inode),
   ?DEB2("|  Size: ~p ",Size),
   ?DEB2("|  Offset: ~p",Offset),
   ?DEB2("|  FI: ~p", Fuse_File_Info),
@@ -583,10 +583,10 @@ read(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-readdir(Ctx,Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
+readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">readdir"),
-  ?DEB2("|  Ctx:~p",Ctx),
-  ?DEB2("|  Inode: ~p ",Inode),
+  ?DEB2("|  _Ctx:~p",_Ctx),
+  ?DEB2("|  _Inode: ~p ",_Inode),
   ?DEB2("|  Offset:~p",Offset),
   ?DEB2("|  FI: ~p",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
@@ -632,13 +632,13 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
 %%--------------------------------------------------------------------------
-release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
+release(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
+  ?DEB1(">release"),
+  ?DEB2("|  _Ctx:~p",_Ctx),
+  ?DEB2("|  _Inode: ~p ",_Inode),
+  ?DEB2("|  FI: ~p",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   attr_open:remove(FIno),
-  ?DEB1(">release"),
-  ?DEB2("|  Ctx:~p",Ctx),
-  ?DEB2("|  Inode: ~p ",Inode),
-  ?DEB2("|  FI: ~p",Fuse_File_Info),
   {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -646,10 +646,10 @@ release(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 %%--------------------------------------------------------------------------
-releasedir(Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
+releasedir(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(">releasedir"),
-  ?DEB2("|  Ctx:~p",Ctx),
-  ?DEB2("|  Inode: ~p ",Inode),
+  ?DEB2("|  _Ctx:~p",_Ctx),
+  ?DEB2("|  _Inode: ~p ",_Inode),
   ?DEB2("|  FI: ~p",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   attr_open:remove(FIno),
@@ -668,7 +668,11 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
-      attr_remove:remove_key_values(Path,Inode,Name),
+  Syek=string:tokens(Name,?KEY_SEP),
+  ?DEB2("   tokenized key: ~p",[Syek]),
+  Keys=lists:reverse(Syek),
+  ?DEBL("   key to be deleted: ~p",[Keys]),
+      attr_remove:remove_key_values(Path,Inode,Keys),
       ?DEB1("   Removed attribute, if any, from database and inode entry"),
       {#fuse_reply_err{err=ok},State};
     _ ->

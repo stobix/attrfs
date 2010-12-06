@@ -38,8 +38,8 @@
 make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
   make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
 
-make_dir(_Ctx,_ParentInode,_ParentName,DirType,_Name,_Mode) ->
-  ?DEB2("   ~p , not supported",DirType),
+make_dir(_Ctx,_ParentInode,_ParentName,_DirType,_Name,_Mode) ->
+  ?DEB2("   ~p , not supported",_DirType),
   #fuse_reply_err{err=enotsup}.
 
 

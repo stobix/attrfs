@@ -100,7 +100,7 @@ remove_key_values(Path,Inode,AName) ->
   % removing file child from attribute folder entry
   {ok,FName}=inode:i2n(Inode,ino),
   lists:foreach(
-    fun(AValue) -> 
+    fun([AValue]) -> 
       remove_child_from_parent(FName,[AValue|AName])
     end,
     Matches
