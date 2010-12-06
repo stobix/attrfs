@@ -80,11 +80,11 @@ attribute_test_() ->
 
 
 multiple_create_test_() ->
-  [?_assertCmd("attr -s \"a/b\" -V \"c,d\" test/to/r/foo"),
-   ?_assertCmd("attr -s \"a/b\" -V \"c\" test/to/r/bar"),
-   ?_assertCmd("attr -r \"a/b\" test/to/r/foo"),
-   ?_assertCmd("attr -g \"a/b\" test/to/r/bar"),
+  [?_assertCmd("attr -s \"a/b\" -V \"c,d\" test/to/r/from/foo"),
+   ?_assertCmd("attr -s \"a/b\" -V \"c\" test/to/r/from/bar"),
+   ?_assertCmd("attr -r \"a/b\" test/to/r/from/foo"),
+   ?_assertCmd("attr -g \"a/b\" test/to/r/from/bar"),
    ?_assertCmd("ls test/to/a/a/b/c|grep bar"),
    ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
-   ?_assertCmd("attr -r \"a/b\" test/to/r/bar")].
+   ?_assertCmd("attr -r \"a/b\" test/to/r/from/bar")].
 
