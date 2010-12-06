@@ -20,19 +20,18 @@ fs_prereq() ->
 
 fs_cleanup(_) ->
   ?debugMsg("letting the dust settle..."),
-  receive after 1000 -> ok end,
   switch(),
   application:stop(attrfs),
   ?assertCmd("touch test/attrs"),
   ?assertCmd("rm test/attrs").
 
-fs_test() ->
-  ?debugMsg("Dir listings:"),
-  ?debugFmt("to:~n ~s~n",[os:cmd("ls -l test/to")]),
-  ?debugFmt("to/a:~n ~s~n",[os:cmd("ls -l test/to/a")]),
-  ?debugFmt("to/r:~n ~s~n",[os:cmd("ls -l test/to/r")]),
-  ?debugFmt("to/r/from:~n ~s~n",[os:cmd("ls -l test/to/r/from")]),
-  ?debugFmt("to/r/all:~n ~s~n",[os:cmd("ls -l test/to/r/all")]).
+%fs_test() ->
+%  ?debugMsg("Dir listings:"),
+%  ?debugFmt("to:~n ~s~n",[os:cmd("ls -l test/to")]),
+%  ?debugFmt("to/a:~n ~s~n",[os:cmd("ls -l test/to/a")]),
+%  ?debugFmt("to/r:~n ~s~n",[os:cmd("ls -l test/to/r")]),
+%  ?debugFmt("to/r/from:~n ~s~n",[os:cmd("ls -l test/to/r/from")]),
+%  ?debugFmt("to/r/all:~n ~s~n",[os:cmd("ls -l test/to/r/all")]).
 
 
 switch() ->
@@ -49,6 +48,10 @@ move_to(String) ->
 remove_from(String) ->
   {"remove",[?_assertCmd("rm test/to/a/"++String++"foo"),
    ?_assertCmdStatus(1,"ls test/to/a/"++String++"|grep foo")]}.
+
+
+ls_test() ->
+  [?_assertCmdOutput("a\nr\n","ls test/to")].
 
 create_test_() ->
   [?_assertCmdOutput("a\nr\n","ls test/to"),
@@ -67,8 +70,21 @@ create_test_() ->
 attribute_test_() ->
   [?_assertCmdOutput("Attribute \"sko/hus\" set to a 8 byte value for test/to/r/from/foo:\nget,skri\n","attr -s \"sko/hus\" -V \"get,skri\" test/to/r/from/foo"),
    ?_assertCmd("ls test/to/a/sko/hus/get/foo"),
+   ?_assertCmd("ls test/to/a/sko/hus/skri/foo"),
    ?_assertCmd("attr -g \"sko/hus\" test/to/a/sko/hus/skri/foo"),
    ?_assertCmd("attr -r \"sko/hus\" test/to/r/from/foo"),
-   ?_assertCmdStatus(1,"ls test/to/a/sko/hus/skri/foo"),
+   ?_assertCmdStatus(1,"ls test/to/a/sko/hus/get|grep foo"),
+   ?_assertCmdStatus(1,"ls test/to/a/sko/hus/skri|grep foo"),
    ?_assertCmdStatus(1,"attr -g \"sko/hus\" test/to/a/sko/hus/skri/foo")
    ].
+
+
+multiple_create_test_() ->
+  [?_assertCmd("attr -s \"a/b\" -V \"c,d\" test/to/r/foo"),
+   ?_assertCmd("attr -s \"a/b\" -V \"c\" test/to/r/bar"),
+   ?_assertCmd("attr -r \"a/b\" test/to/r/foo"),
+   ?_assertCmd("attr -g \"a/b\" test/to/r/bar"),
+   ?_assertCmd("ls test/to/a/a/b/c|grep bar"),
+   ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
+   ?_assertCmd("attr -r \"a/b\" test/to/r/bar")].
+
