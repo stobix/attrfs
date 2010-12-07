@@ -10,23 +10,41 @@ test() ->
   
 
 fs_prereq() ->
-  application:stop(attrfs),
-  application:unload(attrfs),
-  switch(),
   ?assertCmd("mkdir -p test/from"),
   ?assertCmd("mkdir -p test/to"),
+  MyAttrApp=
+    {application,attrfs,
+      [{description,"A file system used to sort files by attributes."},
+       {vsn,0.9},
+       {modules,[attrfs,attrfs_srv,attrfs_sup,inode,inode_sup,
+                 tree_srv,tree_sup]},
+       {applications,[kernel,stdlib,fuserl]},
+       {registered,[attrfs]},
+       {mod,{attrfs,[]}},
+       {env,[{to_dir,"test/to"},
+             {from_dir,"test/from"},
+             {attributes_db,"test/attrs"},
+             {linked_in,true},
+             {real_name,"r"},
+             {attr_name,"a"},
+             {all_name,"all"},
+             {and_name,"&"},
+             {or_name,"|"},
+             {butnot_name,"&~"},
+             {mount_opts,"allow_other,default_permissions"}]}]},
+  file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
+  application:stop(attrfs),
+  application:unload(attrfs),
   ?assertCmd("touch test/from/foo"),
   ?assertCmd("touch test/from/bar"),
-  ?assertCmd("touch test/attrs"),
-  ?assertCmd("rm test/attrs"),
+  switch(),
   application:start(attrfs).
 
 fs_cleanup(_) ->
   ?debugMsg("letting the dust settle..."),
   switch(),
   application:stop(attrfs),
-  ?assertCmd("touch test/attrs"),
-  ?assertCmd("rm test/attrs").
+  ?assertCmd("rm -r test").
 
 %fs_test() ->
 %  ?debugMsg("Dir listings:"),
@@ -91,7 +109,8 @@ multiple_create_test_() ->
    ?_assertCmd("attr -g \"a/b\" "++Bar),
    ?_assertCmd("ls test/to/a/a/b/c|grep bar"),
    ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
-   ?_assertCmd("attr -r \"a/b\" test/to/r/from/bar")].
+   ?_assertCmd("attr -r \"a/b\" "++Bar)
+   ].
 
 
 access_test_() ->
