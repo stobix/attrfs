@@ -157,10 +157,14 @@ generate_dir_link_children(Ino,Name) ->
               case Type of
                 attribute_dir ->
                   MyType=#dir_link{link=Inode},
+                  MyLinkStat=MyLinkEntry#inode_entry.stat,
+                  MyLinkMode=MyLinkStat#stat.st_mode,
+                  MyStat=MyLinkStat#stat{st_mode=MyLinkMode band (bnot 8#222)},
                   MyEntry=
                     MyLinkEntry#inode_entry{
                       name=[MyName|Name],
                       children=[],
+                      stat=MyStat,
                       type=MyType,
                       links=[]
                     },
@@ -227,9 +231,13 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
           {value,Entry}=tree_srv:lookup(Inode,inodes),
           LinkName=[Name|LogicName],
           LinkType=#dir_link{link=Inode},
+          Stat=Entry#inode_entry.stat,
+          Mode=Stat#stat.st_mode,
+          LinkStat=Stat#stat{st_mode= (bnot 8#222) band Mode},
           LinkEntry=Entry#inode_entry{
             name=LinkName,
             links=[],
+            stat=LinkStat,
             generated=false,
             type=LinkType},
           ?DEB2("    getting or setting inode number of ~p",[Name|LogicName]),
@@ -271,7 +279,9 @@ generate_logic_dir(Parent,X) ->
   ?DEB1("      generating new entry"),
   Name=[X|Parent],
   Ino=inode:get(Name,ino),
-  Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[]},
+  PStat=PEntry#inode_entry.stat,
+  Stat=PStat#stat{st_mode=?S_IFDIR bor 8#555},
+  Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[],stat=Stat},
   ?DEB1("      saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),
   {X,Ino,logic_dir}.

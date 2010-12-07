@@ -88,3 +88,27 @@ multiple_create_test_() ->
    ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
    ?_assertCmd("attr -r \"a/b\" test/to/r/from/bar")].
 
+
+access_test_() ->
+  Foo="test/to/r/from/foo",
+  Bar="test/to/r/from/bar",
+  ABCFoo="test/to/a/b/c/foo",
+  ABC="test/to/a/b/c",
+  ABCANDAB="test/to/a/b/c/AND/b/c",
+  ABCANDABFoo="test/to/a/b/c/AND/b/c/foo",
+  [?_assertCmd("attr -s b -V c " ++ Foo),
+   ?_assertCmdOutput("drwxr-xr-x\n","ls -ld " ++ ABC ++ "|cut -f1 -d \" \""),
+   ?_assertCmdOutput("-rw-r--r--\n","ls -l "  ++ ABCFoo ++ "|cut -f1 -d \" \""),
+   ?_assertCmdOutput("dr-xr-xr-x\n","ls -ld " ++ ABCANDAB ++ "|cut -f1 -d \" \""),
+   ?_assertCmdOutput("-r--r--r--\n","ls -l "  ++ ABCANDABFoo ++ "|cut -f1 -d \" \""),
+   ?_assertCmdStatus(1,"mv "  ++ ABCANDABFoo ++ " test/to/a/b/"),
+   ?_assertCmd("attr -r a " ++ Foo)].
+
+
+namespace_test_() ->
+  Foo="test/to/r/from/foo",
+  [?_assertCmd("attr -s foo -V foo "++Foo),
+   ?_assertCmdOutput("Attribute \"foo\" had a 3 byte value for test/to/r/from/foo:\nfoo\n","attr -g foo "++Foo),
+   ?_assertCmd("ls test/to/a/foo/foo/foo"),
+   ?_assertCmd("attr -r foo "++ Foo)].
+  
