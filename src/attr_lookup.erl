@@ -39,7 +39,7 @@
 
 -export([link_ino/1]).
 
--define(CONNS(X),((X=="AND") or (X=="OR") or (X=="BUTNOT"))).
+-define(CONNS(X),((X==?AND_FOLDR) or (X==?OR_FOLDR) or (X==?BUTNOT_FOLDR))).
 
 %%--------------------------------------------------------------------------
 %% Gets the children for the inode from the inode list, and runs direntrify
@@ -76,10 +76,12 @@ direntrify([{Name,Inode,_Type}|Children]) ->
 
 
 find_conn([]) -> [];
-find_conn([A|_As]=Conn) when ?CONNS(A) ->
-  Conn;
-find_conn([_A|As]) ->
-  find_conn(As).
+find_conn([A|As]=Conn) ->
+  case ?CONNS(A) of
+    true -> Conn;
+    false -> find_conn(As)
+  end.
+
  
 
 %%--------------------------------------------------------------------------
@@ -194,22 +196,28 @@ filter_children_entry(InoOrEntry,Name) ->
 %% LastChildrenUnfiltered is the children after the final logical connective in the list.
 %% XXX: This thing tails in the wrong way! This will consume much memory if we have very complicated connections.
 
-filter_children([Connective|Parents],Children) when ?CONNS(Connective) ->
-  case inode:is_numbered(Parents,ino) of
-    false -> false;
-    Ino ->
-      % Since directories are filtered when created, I need not filter the children of the parent anew.
-      {value,PrevChildren} = children(Ino),
-      ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
-      attr_filter:filter(PrevChildren,Connective,Children)
+filter_children([Connective|Parents],Children) ->
+  case ?CONNS(Connective) of
+    true ->
+      case inode:is_numbered(Parents,ino) of
+        false -> false;
+        Ino ->
+          % Since directories are filtered when created, I need not filter the children of the parent anew.
+          {value,PrevChildren} = children(Ino),
+          ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
+          attr_filter:filter(PrevChildren,Connective,Children)
+      end;
+    false ->
+    % No more connectives, returning children.
+      Children
   end;
 
+%% Since I always call find_conn before filter_children, I end up here if I have no connective to begin with.
+filter_children([],LastChildrenUnfiltered) ->
+      LastChildrenUnfiltered.
 
 
-%% When we have no logical connectiv as final dir, we return
 
-filter_children(_,LastChildrenUnfiltered) -> 
-  LastChildrenUnfiltered.
 
 
 link_ino({_,Entry}) ->
@@ -256,7 +264,7 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
 %% TODO: This function will later add different folders for different directories, 
 %% when I add support for dir types such as attribs/BOTH/.../AND/..., .../AND/EITHER/.../OR/...,
 %% filtering away "nonsense" dir combinations such as "EITHER/.../AND/..." and "BOTH/.../OR/..."
-%% also, having an "AND" at the root attrib folder makes no sense...
+%% also, having an ?AND_FOLDR at the root attrib folder makes no sense...
 
 generate_logic_dirs([]) ->
 %% Will place a BOTH and an EITHER directory in the attribute root folder when I support those.
@@ -265,9 +273,9 @@ generate_logic_dirs([]) ->
 
 generate_logic_dirs(Predecessor) ->
   [
-    ?LD("AND"),
-    ?LD("OR"),
-    ?LD("BUTNOT")
+    ?LD(?AND_FOLDR),
+    ?LD(?OR_FOLDR),
+    ?LD(?BUTNOT_FOLDR)
   ].
 
 

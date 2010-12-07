@@ -5,15 +5,22 @@
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
-filter(List1,"BUTNOT",List2) ->
-  Filtered=filter_butnot(List1,List2),
-  Filtered;
+filter(List1,LogicFoldr,List2) ->
+  case LogicFoldr==?BUTNOT_FOLDR of
+    true ->
+      filter_butnot(List1,List2);
+    false ->
+      case LogicFoldr==?AND_FOLDR of
+        true -> 
+          filter_and(List1,List2);
+        false ->
+          case LogicFoldr==?OR_FOLDR of
+            true -> 
+              filter_or(List1,List2)
+          end
+      end
+  end.
 
-filter(List1,"AND",List2) ->
-  filter_and(List1,List2);
-
-filter(List1,"OR",List2) ->
-  filter_or(List1,List2).
     
 %----------------------------------------------------------------
 

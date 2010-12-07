@@ -13,7 +13,10 @@ fs_prereq() ->
   application:stop(attrfs),
   application:unload(attrfs),
   switch(),
+  ?assertCmd("mkdir -p test/from"),
+  ?assertCmd("mkdir -p test/to"),
   ?assertCmd("touch test/from/foo"),
+  ?assertCmd("touch test/from/bar"),
   ?assertCmd("touch test/attrs"),
   ?assertCmd("rm test/attrs"),
   application:start(attrfs).
@@ -80,10 +83,12 @@ attribute_test_() ->
 
 
 multiple_create_test_() ->
-  [?_assertCmd("attr -s \"a/b\" -V \"c,d\" test/to/r/from/foo"),
-   ?_assertCmd("attr -s \"a/b\" -V \"c\" test/to/r/from/bar"),
-   ?_assertCmd("attr -r \"a/b\" test/to/r/from/foo"),
-   ?_assertCmd("attr -g \"a/b\" test/to/r/from/bar"),
+  Foo="test/to/r/from/foo",
+  Bar="test/to/r/from/bar",
+  [?_assertCmd("attr -s \"a/b\" -V \"c,d\" "++Foo),
+   ?_assertCmd("attr -s \"a/b\" -V \"c\" "++Bar),
+   ?_assertCmd("attr -r \"a/b\" "++Foo),
+   ?_assertCmd("attr -g \"a/b\" "++Bar),
    ?_assertCmd("ls test/to/a/a/b/c|grep bar"),
    ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
    ?_assertCmd("attr -r \"a/b\" test/to/r/from/bar")].
@@ -91,15 +96,15 @@ multiple_create_test_() ->
 
 access_test_() ->
   Foo="test/to/r/from/foo",
-  Bar="test/to/r/from/bar",
   ABCFoo="test/to/a/b/c/foo",
   ABC="test/to/a/b/c",
-  ABCANDAB="test/to/a/b/c/AND/b/c",
-  ABCANDABFoo="test/to/a/b/c/AND/b/c/foo",
+  ABCANDAB="test/to/a/b/c/\\&/b/c",
+  ABCANDABFoo="test/to/a/b/c/\\&/b/c/foo",
   [?_assertCmd("attr -s b -V c " ++ Foo),
-   ?_assertCmdOutput("drwxr-xr-x\n","ls -ld " ++ ABC ++ "|cut -f1 -d \" \""),
-   ?_assertCmdOutput("-rw-r--r--\n","ls -l "  ++ ABCFoo ++ "|cut -f1 -d \" \""),
-   ?_assertCmdOutput("dr-xr-xr-x\n","ls -ld " ++ ABCANDAB ++ "|cut -f1 -d \" \""),
+   ?_assertCmdOutput("drwxr-xr-x\n","ls -ld " ++ ABC         ++ "|cut -f1 -d \" \""),
+   ?_assertCmdOutput("-rw-r--r--\n","ls -l "  ++ ABCFoo      ++ "|cut -f1 -d \" \""),
+   ?_assertCmdOutput("dr-xr-xr-x\n","ls -ld " ++ ABCANDAB    ++ "|cut -f1 -d \" \""),
+   % This one I still need to fix, if it should be fixed.
    ?_assertCmdOutput("-r--r--r--\n","ls -l "  ++ ABCANDABFoo ++ "|cut -f1 -d \" \""),
    ?_assertCmdStatus(1,"mv "  ++ ABCANDABFoo ++ " test/to/a/b/"),
    ?_assertCmd("attr -r a " ++ Foo)].
