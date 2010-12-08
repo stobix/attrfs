@@ -65,10 +65,12 @@
 
 
 -define(DIR_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_DIR(Mode),st_ino=(Ino)})).
--define(FILE_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_FILE(Mode),st_ino=(Ino)})).
+%% Files with no size specified outputs no data on read.
+-define(FILE_STAT(Mode,Ino,Size),((attr_tools:curr_time_stat())#stat{st_mode=?M_FILE(Mode),st_ino=(Ino),st_size=Size})).
 
 -define(ST_INO(Stat,Ino),(Stat#stat{st_ino=Ino})).
 -define(ST_MODE(Stat,Mode),(Stat#stat{st_mode=Mode})).
+-define(ST_NLINK(Stat,NLink),(Stat#stat{st_nlink=NLink})).
 
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 

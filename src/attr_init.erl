@@ -156,22 +156,28 @@ type_and_children(Path,FileInfo) ->
             ?DEB1("    directory"),
             {ok,ChildNames}=file:list_dir(Path),
             ?DEB2("     directory entries:~p",ChildNames),
-            {NameInodePairs,MultitudeOfChildren}=
+            {NameInodePairs0,MultitudeOfChildren}=
               lists:mapfoldl(
                 fun(ChildName,OtherChildren) -> 
                   % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
-                  {InternalChildName,Ino,Type,AllChildren}=make_inode_list({Path++"/"++ChildName,ChildName}),
-                  Me={InternalChildName,Ino,Type},
-                  case Type of
-                    #external_file{} ->
-                      {Me,[Me|OtherChildren++AllChildren]};
-                    _ ->
-                      {Me,OtherChildren++AllChildren}
+                  case make_inode_list({Path++"/"++ChildName,ChildName}) of
+                    {InternalChildName,Ino,Type,AllChildren} ->
+                      Me={InternalChildName,Ino,Type},
+                      case Type of
+                        #external_file{} ->
+                          {Me,[Me|OtherChildren++AllChildren]};
+                        _ ->
+                          {Me,OtherChildren++AllChildren}
+                      end;
+                    skip ->
+                     {skip,OtherChildren}
                   end
                 end, 
                 [],
                 ChildNames
               ),
+              % Filter out bad entries.
+              NameInodePairs=lists:filter(fun(skip) -> false;(_)->true end,NameInodePairs0),
             {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},MultitudeOfChildren};
           regular ->
             ?DEB1("    regular"),
@@ -260,8 +266,7 @@ make_inode_list({Path,Name0}) ->
     E ->
       ?DEBL("   got ~p when trying to read ~p.",[E,Path]),
       ?DEB1("   are you sure your app file is correctly configured?"),
-      ?DEB1(">>>exiting<<<"),
-      exit(E)
+      skip
   end.
 
 
@@ -285,7 +290,7 @@ make_duplicate_children() ->
         children=Data,
         ext_info=[],
         ext_io=attr_ext:ext_info_to_ext_io([]),
-        stat=?FILE_STAT(8#755,Ino)#stat{st_size=size(Data)}
+        stat=?FILE_STAT(8#755,Ino,size(Data))
         },
       ?DEB1("   entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),
