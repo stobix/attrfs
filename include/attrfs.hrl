@@ -27,27 +27,57 @@
 %%% @end
 %%%-------------------------------------------------------
 
+
+-ifdef(test).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(ATTR_DB, attributes).
 -define(ATTR_DB_FILE, attrfs, attributes_db).
 
 -define(ROOT_FOLDR, root).
--define(REAL_FOLDR, "real").
+-define(REAL_FOLDR, (attr_tools:get_or_default(real_name,"real"))).
 -define(ATTR_FOLDR, []).
--define(ATTR_FOLDR_FS_NAME, "attribs").
--define(SRCH_FOLDR, "search").
+-define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attribs"))).
+-define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
+-define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,"duplicates"))).
+-define(AND_FOLDR,(attr_tools:get_or_default(and_name,"AND"))).
+-define(OR_FOLDR,(attr_tools:get_or_default(or_name,"OR"))).
+-define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,"BUTNOT"))).
+
+
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
+-define(FILE_BIT, 8#100000).
+-define(DIR_BIT, ?S_IFDIR).
+
 -define(UEXEC(X), (X#stat{st_mode=(X#stat.st_mode bor 8#100)})).
 
--define(STD_DIR_MODE, (?S_IFDIR bor 8#755)).
+
+-define(M_DIR(X),?DIR_BIT bor (X)).
+-define(M_FILE(X),?FILE_BIT bor (X)).
+
+
+-define(DIR_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_DIR(Mode),st_ino=(Ino)})).
+-define(FILE_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_FILE(Mode),st_ino=(Ino)})).
+
+-define(CHANGE_INO(Stat,Ino),(Stat#stat{st_ino=Ino})).
+
+-define(STD_DIR_MODE, ?M_DIR(8#755)).
 
 -record(initargs,
         {dir::string()}).
 
 -type inode_number()::pos_integer().
 -type attrib_list()::[{string(), string()}].
+
+%The dupliacte_file record contains the file data for files containing duplicate info for the file whose name they bear.
+
+-record(duplicate_file,
+        {d_contents::[{string(),string()}]
+        }).
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.
 
@@ -90,7 +120,7 @@
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
--type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|duplicate_file.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 
@@ -132,16 +162,15 @@
         }).
 
 
--record(open_internal_dir,
-        {contents%::raw directory listing format
-        }).
-        
-
 -record(open_external_file,
         {io_device::file:io_device(),
          path::string()
         }).
 
+
+-record(open_duplicate_file,
+        {ino::non_neg_integer()
+        }).
 
 -type attribute_entries()::[name_tuple()|{inode,inode_number()}].
 

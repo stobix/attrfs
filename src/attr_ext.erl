@@ -28,6 +28,7 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
 -export([add_new_attribute/4,
          rehash_ext_from_db/2,
          append_attribute/3,
@@ -42,9 +43,11 @@
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 rehash_ext_from_db(Inode,Path) ->
-  {ExtInfo,ExtIo}=generate_ext_info_io(Path),
+  {ExtInfo,ExtIo,ExtAmount}=generate_ext_info_io(Path),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
-  NewEntry=Entry#inode_entry{ext_info=ExtInfo,ext_io=ExtIo},
+  Stat=Entry#inode_entry.stat,
+  NewStat=Stat#stat{st_nlink=ExtAmount+1},
+  NewEntry=Entry#inode_entry{stat=NewStat,ext_info=ExtInfo,ext_io=ExtIo},
   tree_srv:enter(Inode,NewEntry,inodes).
 
 %%--------------------------------------------------------------------------
@@ -109,10 +112,11 @@ append(Parent,ChildInoName,ChildName,Stat) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
-  ?DEB2("   generating ext info for ~p",Path),
+  ?DEB2("    generating ext info for ~p",Path),
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
+  ExtAmount=lists:foldr(fun(_,N) -> N+1 end,0,ExtInfo0),
   ExtInfo1=convert(ExtInfo0),
-  attr_tools:merge_duplicates(ExtInfo1). % Going from a list of lists of tuples to a list of tuples.
+  {attr_tools:merge_duplicates(ExtInfo1),ExtAmount}. % Going from a list of lists of tuples to a list of tuples.
 
 convert(LList) ->
     convert1(attr_tools:flatten1(LList)).
@@ -148,10 +152,10 @@ keyvalue(A) ->
 %%--------------------------------------------------------------------------
 generate_ext_info_io(Path) ->
   ?DEB2("   generating ext info for ~p",Path),
-  ExtInfo=generate_ext_info(Path),
+  {ExtInfo,ExtAmount}=generate_ext_info(Path),
   ?DEB2("   generating ext io for ~p",ExtInfo),
   ExtIo=ext_info_to_ext_io(ExtInfo),
-  {ExtInfo,ExtIo}.
+  {ExtInfo,ExtIo,ExtAmount}.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------

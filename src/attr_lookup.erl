@@ -28,6 +28,7 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
@@ -38,7 +39,7 @@
 
 -export([link_ino/1]).
 
--define(CONNS(X),((X=="AND") or (X=="OR") or (X=="BUTNOT"))).
+-define(CONNS(X),((X==?AND_FOLDR) or (X==?OR_FOLDR) or (X==?BUTNOT_FOLDR))).
 
 %%--------------------------------------------------------------------------
 %% Gets the children for the inode from the inode list, and runs direntrify
@@ -59,26 +60,28 @@ direntrify([]) ->
   ?DEB1("    Done converting children"),
   [];
 
-direntrify([{Name,Inode,Type}|Children]) ->
-  ?DEB2("    Getting entry for child ~p",{Name,Inode,Type}),
+direntrify([{Name,Inode,_Type}|Children]) ->
+  ?DEB2("    Getting entry for child ~p",{Name,Inode,_Type}),
   {value,Child}=tree_srv:lookup(Inode,inodes),
-  ?DEB2("    Getting permissions for child ~p",{Name,Inode,Type}),
+  ?DEB2("    Getting permissions for child ~p",{Name,Inode,_Type}),
   ChildStats=Child#inode_entry.stat,
-  ?DEB2("    Creating direntry for child ~p",{Name,Inode,Type}),
+  ?DEB2("    Creating direntry for child ~p",{Name,Inode,_Type}),
   Direntry= #direntry{name=Name ,stat=ChildStats },
-  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode,Type}),
+  ?DEB2("    Calculatig size for direntry for child ~p",{Name,Inode,_Type}),
   Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
-  ?DEB2("    Appending child ~p to list",{Name,Inode,Type}),
+  ?DEB2("    Appending child ~p to list",{Name,Inode,_Type}),
   [Direntry1|direntrify(Children)].
 
 
 
 
 find_conn([]) -> [];
-find_conn([A|_As]=Conn) when ?CONNS(A) ->
-  Conn;
-find_conn([_A|As]) ->
-  find_conn(As).
+find_conn([A|As]=Conn) ->
+  case ?CONNS(A) of
+    true -> Conn;
+    false -> find_conn(As)
+  end.
+
  
 
 %%--------------------------------------------------------------------------
@@ -156,10 +159,14 @@ generate_dir_link_children(Ino,Name) ->
               case Type of
                 attribute_dir ->
                   MyType=#dir_link{link=Inode},
+                  MyLinkStat=MyLinkEntry#inode_entry.stat,
+                  MyLinkMode=MyLinkStat#stat.st_mode,
+                  MyStat=MyLinkStat#stat{st_mode=MyLinkMode band (bnot 8#222)},
                   MyEntry=
                     MyLinkEntry#inode_entry{
                       name=[MyName|Name],
                       children=[],
+                      stat=MyStat,
                       type=MyType,
                       links=[]
                     },
@@ -189,22 +196,28 @@ filter_children_entry(InoOrEntry,Name) ->
 %% LastChildrenUnfiltered is the children after the final logical connective in the list.
 %% XXX: This thing tails in the wrong way! This will consume much memory if we have very complicated connections.
 
-filter_children([Connective|Parents],Children) when ?CONNS(Connective) ->
-  case inode:is_numbered(Parents,ino) of
-    false -> false;
-    Ino ->
-      % Since directories are filtered when created, I need not filter the children of the parent anew.
-      {value,PrevChildren} = children(Ino),
-      ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
-      filter:filter(PrevChildren,Connective,Children)
+filter_children([Connective|Parents],Children) ->
+  case ?CONNS(Connective) of
+    true ->
+      case inode:is_numbered(Parents,ino) of
+        false -> false;
+        Ino ->
+          % Since directories are filtered when created, I need not filter the children of the parent anew.
+          {value,PrevChildren} = children(Ino),
+          ?DEBL("Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
+          attr_filter:filter(PrevChildren,Connective,Children)
+      end;
+    false ->
+    % No more connectives, returning children.
+      Children
   end;
 
+%% Since I always call find_conn before filter_children, I end up here if I have no connective to begin with.
+filter_children([],LastChildrenUnfiltered) ->
+      LastChildrenUnfiltered.
 
 
-%% When we have no logical connectiv as final dir, we return
 
-filter_children(_,LastChildrenUnfiltered) -> 
-  LastChildrenUnfiltered.
 
 
 link_ino({_,Entry}) ->
@@ -226,9 +239,13 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
           {value,Entry}=tree_srv:lookup(Inode,inodes),
           LinkName=[Name|LogicName],
           LinkType=#dir_link{link=Inode},
+          Stat=Entry#inode_entry.stat,
+          Mode=Stat#stat.st_mode,
+          LinkStat=Stat#stat{st_mode= (bnot 8#222) band Mode},
           LinkEntry=Entry#inode_entry{
             name=LinkName,
             links=[],
+            stat=LinkStat,
             generated=false,
             type=LinkType},
           ?DEB2("    getting or setting inode number of ~p",[Name|LogicName]),
@@ -247,7 +264,7 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
 %% TODO: This function will later add different folders for different directories, 
 %% when I add support for dir types such as attribs/BOTH/.../AND/..., .../AND/EITHER/.../OR/...,
 %% filtering away "nonsense" dir combinations such as "EITHER/.../AND/..." and "BOTH/.../OR/..."
-%% also, having an "AND" at the root attrib folder makes no sense...
+%% also, having an ?AND_FOLDR at the root attrib folder makes no sense...
 
 generate_logic_dirs([]) ->
 %% Will place a BOTH and an EITHER directory in the attribute root folder when I support those.
@@ -256,9 +273,9 @@ generate_logic_dirs([]) ->
 
 generate_logic_dirs(Predecessor) ->
   [
-    ?LD("AND"),
-    ?LD("OR"),
-    ?LD("BUTNOT")
+    ?LD(?AND_FOLDR),
+    ?LD(?OR_FOLDR),
+    ?LD(?BUTNOT_FOLDR)
   ].
 
 
@@ -270,7 +287,9 @@ generate_logic_dir(Parent,X) ->
   ?DEB1("      generating new entry"),
   Name=[X|Parent],
   Ino=inode:get(Name,ino),
-  Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[]},
+  PStat=PEntry#inode_entry.stat,
+  Stat=PStat#stat{st_mode=?S_IFDIR bor 8#555},
+  Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[],stat=Stat},
   ?DEB1("      saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),
   {X,Ino,logic_dir}.

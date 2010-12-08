@@ -19,10 +19,12 @@
 %%%  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 %%%
 %%%=========================================================================
+
 -behaviour(supervisor).
 
 -export([start_link/5,init/1]).
 -include("../include/debug.hrl").
+-include("../include/attrfs.hrl").
 
 start_link(From,To,DB,MountOpts,LinkedIn) ->
   supervisor:start_link(?MODULE,{From,To,DB,MountOpts,LinkedIn}).

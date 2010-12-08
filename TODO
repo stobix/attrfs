@@ -10,27 +10,12 @@
  ☐  mirrored
  ☐  created
 
-☐ Add support for value-less key-value attribute pairs? makes attribs/Foo/file possible.
-    % attr -s "Foo" -V "" Bar.file
-    =>
-    % ls attribs/Foo 
-    Bar.file
-    ☐ Change Key, {Key,Value} into {Key,nil},{Key,Value}, {{Key,Value},Value},...
-
-
 ☐ Include support for setting multiple attributes at once:
     % attr -s "Foo,Bar" -V "Etaoin" Baz.file
     =>
     % ls attribs -R
     Foo/Etaoin/Baz.file
     Bar/Etaoin/Baz.file
-
-☐ The above combined:
-    % attr -s "Foo/Bar" -V "Etaoin,Shrdlu" Baz.file
-    =>
-    % ls attribs/Foo/Bar -R
-    Etaoin/Baz.file
-    Shrdlu/Baz.file
 
 
 ☐ Include support for search directories:

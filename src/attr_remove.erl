@@ -28,6 +28,7 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
@@ -99,7 +100,7 @@ remove_key_values(Path,Inode,AName) ->
   % removing file child from attribute folder entry
   {ok,FName}=inode:i2n(Inode,ino),
   lists:foreach(
-    fun(AValue) -> 
+    fun([AValue]) -> 
       remove_child_from_parent(FName,[AValue|AName])
     end,
     Matches
