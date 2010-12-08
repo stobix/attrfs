@@ -351,7 +351,7 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
   RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
-  ?DEBL(">getxattr, name:~w, size:~w, inode:~w",[RawName,Size,Inode]),
+  ?DEBL(">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
   Name=
     case string:str(RawName,"system")==1 of
       true -> "."++RawName;
@@ -422,14 +422,14 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
   Child=binary_to_list(BinaryChild),
-  ?DEBL(">lookup Parent: ~w Name: ~w",[ParentInode,Child]),
+  ?DEBL(">lookup Parent: ~p Name: ~s",[ParentInode,Child]),
   Reply=
     case attr_lookup:children(ParentInode) of
       {value,Children} ->
-        ?DEBL("   Got children for ~w: ~w",[ParentInode, Children]),
+        ?DEBL("   Got children for ~p",[ParentInode]),
         case lists:keysearch(Child,1,Children) of
           {value,{_,Inode,_}} ->
-            ?DEB2("   Found child ~w",Child),
+            ?DEB2("   Found child ~p",Child),
             {value,Entry} = tree_srv:lookup(Inode,inodes),
             ?DEB1("   Got child inode entry, returning..."),
             #fuse_reply_entry{fuse_entry_param=?ENTRY2PARAM(Entry,Inode)};
@@ -463,20 +463,18 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
   ?DEB1(">mkdir"),
   ?DEB2("|  Ctx:~w",Ctx),
   ?DEB2("|  PIno: ~w",ParentInode),
-  ?DEB2("|  Name: ~w",Name),
-  ?DEB2("|  Mode: ~w",MMode),
-  Mode=MMode bor ?S_IFDIR bor 8#111, % To the mode provided with, I add the dir status and make the dir executable.
+  ?DEB2("|  Name: ~p",Name),
+  ?DEB2("|  Mode: ~.8B",MMode),
+  Mode=?M_DIR(MMode bor 8#111), % To the mode provided with, I add the dir status and make the dir executable.
   Reply=
     case tree_srv:lookup(ParentInode,inodes) of
       none -> #fuse_reply_err{err=enoent}; 
       {value,Parent} ->
-        case inode:is_numbered(Name,ino) of
-          false ->
-            ParentName=Parent#inode_entry.name,
-            ParentType=Parent#inode_entry.type,
-            attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode);
-          _ -> #fuse_reply_err{err=eexist}
-        end
+        ParentName=Parent#inode_entry.name,
+        ParentType=Parent#inode_entry.type,
+        Rreply=attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode),
+        ?DEB2("  got reply ~p",Rreply),
+        Rreply
     end,
   {Reply,State}.
 

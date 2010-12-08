@@ -49,16 +49,19 @@ make_dir(_Ctx,_ParentInode,_ParentName,_DirType,_Name,_Mode) ->
 make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode) ->
   ?DEB1("   Creating an attribute dir"),
   MyName=[Name|ParentName],
-  {ok,MyInode}=inode:number(MyName,ino),
-  Stat=make_general_dir(Ctx,ParentInode,MyInode,MyName,Mode,attribute_dir),
-  Param=make_param(MyInode,Stat),
-  #fuse_reply_entry{
-    fuse_entry_param=Param
-  }.
+  case make_general_dir(Ctx,ParentInode,MyName,Mode,attribute_dir) of
+    {ok,Stat} ->
+      Param=make_param(Stat),
+      #fuse_reply_entry{
+        fuse_entry_param=Param
+      };
+    _ ->
+      #fuse_reply_err{err=eexist}
+  end.
 
-make_param(Ino,Stat) ->
+make_param(Stat) ->
   #fuse_entry_param{
-    ino=Ino,
+    ino=Stat#stat.st_ino,
     generation=1,
     attr=Stat,
     attr_timeout_ms=1000,
@@ -68,33 +71,40 @@ make_param(Ino,Stat) ->
 %%--------------------------------------------------------------------------
 %% Creates a dir inode entry of type DirType and inserts it into the inode table as a child of ParentInode; Creates and returns dirstats with actual time info, and the UID and GID provided in CTX and the mode provided in Mode.
 %%--------------------------------------------------------------------------
-make_general_dir(Ctx,ParentInode,MyInode,Name,Mode,DirType) ->
-  ?DEBL("   creating new directory entry called ~p",[Name]),
-  {MegaNow,NormalNow,_} = now(),
-  Now=MegaNow*1000000+NormalNow,
-  ?DEBL("   atime etc: ~p",[Now]),
-  #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
-  DirStat=
-    #stat{
-      st_mode=Mode,
-      st_ino=MyInode,
-%        st_nlink=1, % FIXME: Make this accurate.
-      st_uid=Uid,
-      st_gid=Gid,
-      st_atime=Now,
-      st_ctime=Now,
-      st_mtime=Now
-    },
-  DirEntry=#inode_entry{
-    name=Name,
-    stat=DirStat,
-    ext_info=[],
-    ext_io=attr_ext:ext_info_to_ext_io([]),
-    type=DirType,
-    children=[]
-  },
-  insert_entry(ParentInode,DirEntry),
-  DirStat.
+make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
+  case inode:is_numbered(Name,ino) of
+    false ->
+      {ok,MyInode}=inode:number(Name,ino),
+      ?DEBL("   creating new directory entry called ~p",[Name]),
+      {MegaNow,NormalNow,_}=now(),
+      Now=MegaNow*1000000+NormalNow,
+      ?DEBL("   atime etc: ~p",[Now]),
+      #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
+      DirStat=
+        #stat{
+          st_mode=Mode,
+          st_ino=MyInode,
+          st_nlink=1,
+          st_uid=Uid,
+          st_gid=Gid,
+          st_atime=Now,
+          st_ctime=Now,
+          st_mtime=Now
+        },
+      DirEntry=#inode_entry{
+        name=Name,
+        stat=DirStat,
+        ext_info=[],
+        ext_io=attr_ext:ext_info_to_ext_io([]),
+        type=DirType,
+        children=[]
+      },
+      insert_entry(ParentInode,DirEntry),
+      {ok,DirStat};
+    _ ->
+      ?DEB2("   ~p already has an inode! Not creating duplicate folder...",Name),
+      error
+  end.
 
 %%--------------------------------------------------------------------------
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.

@@ -25,8 +25,8 @@ direntries(Inode) ->
 direntrify(List) ->
   direntrify(List,1).
 
-direntrify([],N) -> 
-  ?DEB2("    Done converting ~w children",N),
+direntrify([],_N) -> 
+  ?DEB2("    Done converting ~b children",_N),
   [];
 
 direntrify([{Name,Inode,_Type}|Children],N) ->

@@ -119,6 +119,14 @@ multiple_create_test_() ->
    ?_assertCmd("attr -r \"a/b\" "++Bar)
    ].
 
+move_test() ->
+  A="test/to/a/",
+  F=A++"F",
+  W=A++"W",
+  [?_assertCmd("mkdir "++F),
+   ?_assertCmd("mkdir "++W),
+   ?_assertCmd("mv "++W++" "++F),
+   ?_assertCmd("ls -l "++F++"|grep W")].
 
 access_test_() ->
   Foo="test/to/r/from/foo",
@@ -157,7 +165,8 @@ namespace_test_() ->
   [?_assertCmd("attr -s foo -V foo "++Foo),
    ?_assertCmdOutput("Attribute \"foo\" had a 3 byte value for test/to/r/from/foo:\nfoo\n","attr -g foo "++Foo),
    ?_assertCmd("ls test/to/a/foo/foo/foo"),
-   ?_assertCmd("attr -r foo "++ Foo)].
+   ?_assertCmd("attr -r foo "++ Foo),
+   ?_assertCmd("mkdir test/to/a/from")].
   
 
 dups_test_() -> 
@@ -240,8 +249,6 @@ timer_prereq(Amount,AmountDup) ->
     lists:seq(1,AmountDup)),
   switch(),
   utils:chain(attrfs).
-timer_cleanup_dup() ->
-  fs_cleanup(foo).
 
 timer_cleanup() ->
   fs_cleanup(foo).
