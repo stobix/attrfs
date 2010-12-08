@@ -189,12 +189,12 @@ get_unique(Name0) ->
       case Entry0#inode_entry.type of
         #external_file{path=Path0} ->
           ?DEB2("~p is a file!",Name0),
-          {Name,PossiblePaths,Ino}=get_unique(string:concat("duplicate-",Name0)),
+          {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
           ?DEBL("adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
           {Name,[{Name0,Path0}|PossiblePaths],Ino};
         _ ->
           %We don't care if external dirs have duplicate names
-          get_unique(string:concat("duplicate-",Name0))
+          get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX))
       end;
     {ok,Ino} ->
       ?DEB2("~p is not a duplicate!",Name0),
@@ -268,24 +268,29 @@ make_inode_list({Path,Name0}) ->
 make_duplicate_children() ->
   ?DEB1("   Generating duplicates dir"),
   lists:map(
-    fun({Name,List}) ->
+    fun({Name,List0}) ->
       ?DEBL("   Making inode number for {duplicate,~p}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
-      ?DEBL("   got inode number for {duplicate,~p}",[Name]),
-      ?DEB1("   stat generated, generating dup"),
       Type= duplicate_file,
-      ?DEB1("   dup generated, generating entry"),
+      IOList=lists:foldr(
+        fun({DupName,Path},Acc) ->
+          [io_lib:format("~p:\t ~p\n",[DupName,Path])|Acc]
+        end
+        ,[]
+        ,List0),
+      List=lists:flatten(IOList),
+      Data=iolist_to_binary(List),
       Entry=#inode_entry{
         type=Type,
-        children=List,
+        children=Data,
         ext_info=[],
         ext_io=attr_ext:ext_info_to_ext_io([]),
-        stat=?FILE_STAT(8#755,Ino)#stat{st_size=iolist_size(io_lib:format("~p",[List]))}
+        stat=?FILE_STAT(8#755,Ino)#stat{st_size=size(Data)}
         },
       ?DEB1("   entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),
       ?DEB1("   done"),
-      {Name,Ino,#duplicate_file{}}
+      {Name++?DUP_EXT,Ino,#duplicate_file{}}
     end,
     tree_srv:to_list(duplicates)
       ).

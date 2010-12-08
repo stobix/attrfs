@@ -44,7 +44,11 @@
 -define(AND_FOLDR,(attr_tools:get_or_default(and_name,"AND"))).
 -define(OR_FOLDR,(attr_tools:get_or_default(or_name,"OR"))).
 -define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,"BUTNOT"))).
-
+-define(KEY_SEP,(attr_tools:get_or_default(key_sep,"/"))).
+-define(VAL_SEP,(attr_tools:get_or_default(val_sep,","))).
+-define(DUP_PREFIX,(attr_tools:get_or_default(dup_prefix,"duplicate-"))).
+-define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,""))).
+-define(DUP_EXT,(attr_tools:get_or_default(dup_ext,".txt"))).
 
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
@@ -63,7 +67,8 @@
 -define(DIR_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_DIR(Mode),st_ino=(Ino)})).
 -define(FILE_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_FILE(Mode),st_ino=(Ino)})).
 
--define(CHANGE_INO(Stat,Ino),(Stat#stat{st_ino=Ino})).
+-define(ST_INO(Stat,Ino),(Stat#stat{st_ino=Ino})).
+-define(ST_MODE(Stat,Mode),(Stat#stat{st_mode=Mode})).
 
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 
@@ -111,8 +116,6 @@
     {link::inode_number() % the inode linked to.
     }).
 
--define(KEY_SEP,"/").
--define(VAL_SEP,",").
 
 
 -type parent()::name().

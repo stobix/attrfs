@@ -33,6 +33,9 @@ fs_prereq() ->
              {and_name,"&"},
              {or_name,"|"},
              {butnot_name,"&~"},
+             {dup_prefix,"d"},
+             {dup_suffix,"u"},
+             {dup_ext,"tsk"},
              {mount_opts,"allow_other,default_permissions"}]}]},
   file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
   application:stop(attrfs),
@@ -158,13 +161,13 @@ namespace_test_() ->
   
 
 dups_test_() -> 
-  DupEtaoin="test/to/r/dup/etaoin",
+  DupEtaoin="test/to/r/dup/etaointsk",
   AllEtaoin="test/to/r/all/etaoin",
-  AllDupEtaoin="test/to/r/all/duplicate-etaoin",
+  AllDupEtaoin="test/to/r/all/detaoinu",
   [?_assertCmd("ls "++DupEtaoin),
    ?_assertCmd("ls "++AllEtaoin),
    ?_assertCmd("ls "++AllDupEtaoin),
-   ?_assertCmdOutput("[{\"duplicate-etaoin\",\"test/from/also/etaoin\"},{\"etaoin\",\"test/from/etaoin\"}]","cat "++DupEtaoin)
+   ?_assertCmdOutput("\"detaoinu\":\t \"test/from/also/etaoin\"\n\"etaoin\":\t \"test/from/etaoin\"\n","cat "++DupEtaoin)
    
   ].
   

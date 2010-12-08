@@ -587,7 +587,7 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
       #open_duplicate_file{ino=Ino} ->
         {value,Entry}=tree_srv:lookup(Ino,inodes),
         Contents=Entry#inode_entry.children,
-        Data=io_lib:format("~p",[Contents]),
+        Data=Contents,
         #fuse_reply_buf{buf=Data,size=erlang:iolist_size(Data)};
       _ ->
         #fuse_reply_err{err=eio}
