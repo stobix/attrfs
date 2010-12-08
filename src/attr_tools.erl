@@ -41,7 +41,8 @@
          statify_file_info/1,
          flatten1/1,
          append_child/2,
-         get_or_default/2
+         get_or_default/2,
+         curr_time_stat/0
         ]).
 
 
@@ -318,6 +319,19 @@ dir(Stat) ->
   NewMode= ?STD_DIR_MODE,
   ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
+
+
+%%--------------------------------------------------------------------------
+%% returns a stat with the current time in it.
+%%--------------------------------------------------------------------------
+curr_time_stat() ->
+  {MegaNow,NormalNow,_} = now(),
+  Now=MegaNow*1000000+NormalNow,
+    #stat{
+      st_atime=Now,
+      st_ctime=Now,
+      st_mtime=Now
+    }.
 
 %%--------------------------------------------------------------------------
 %% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT

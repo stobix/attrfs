@@ -46,12 +46,26 @@
 -define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,"BUTNOT"))).
 
 
+
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
+-define(FILE_BIT, 8#100000).
+-define(DIR_BIT, ?S_IFDIR).
+
 -define(UEXEC(X), (X#stat{st_mode=(X#stat.st_mode bor 8#100)})).
 
--define(STD_DIR_MODE, (?S_IFDIR bor 8#755)).
+
+-define(M_DIR(X),?DIR_BIT bor (X)).
+-define(M_FILE(X),?FILE_BIT bor (X)).
+
+
+-define(DIR_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_DIR(Mode),st_ino=(Ino)})).
+-define(FILE_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_FILE(Mode),st_ino=(Ino)})).
+
+-define(CHANGE_INO(Stat,Ino),(Stat#stat{st_ino=Ino})).
+
+-define(STD_DIR_MODE, ?M_DIR(8#755)).
 
 -record(initargs,
         {dir::string()}).

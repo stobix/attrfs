@@ -256,6 +256,7 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB2("|  Ctx: ~p",Ctx),
   ?DEB2("|  ParentIno: ~p",ParentInode),
   ?DEB2("|  Name: ~p",Name),
+  ?DEBL("|  Mode: ~.8X",[_Mode,"O"]),
   ?DEB2("|  FI: ~p",Fuse_File_Info),
   Reply=case inode:is_numbered(binary_to_list(Name),ino) of
     false -> 

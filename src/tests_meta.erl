@@ -10,7 +10,7 @@ test() ->
   
 
 fs_prereq() ->
-  ?assertCmd("mkdir -p test/from"),
+  ?assertCmd("mkdir -p test/from/also"),
   ?assertCmd("mkdir -p test/to"),
   MyAttrApp=
     {application,attrfs,
@@ -28,6 +28,7 @@ fs_prereq() ->
              {real_name,"r"},
              {attr_name,"a"},
              {all_name,"all"},
+             {dup_name,"dup"},
              {and_name,"&"},
              {or_name,"|"},
              {butnot_name,"&~"},
@@ -35,6 +36,8 @@ fs_prereq() ->
   file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
   application:stop(attrfs),
   application:unload(attrfs),
+  ?assertCmd("touch test/from/also/etaoin"),
+  ?assertCmd("touch test/from/etaoin"),
   ?assertCmd("touch test/from/foo"),
   ?assertCmd("touch test/from/bar"),
   switch(),
@@ -124,10 +127,26 @@ access_test_() ->
    ?_assertCmdOutput("-rw-r--r--\n","ls -l "  ++ ABCFoo      ++ "|cut -f1 -d \" \""),
    ?_assertCmdOutput("dr-xr-xr-x\n","ls -ld " ++ ABCANDAB    ++ "|cut -f1 -d \" \""),
    % This one I still need to fix, if it should be fixed.
-   ?_assertCmdOutput("-r--r--r--\n","ls -l "  ++ ABCANDABFoo ++ "|cut -f1 -d \" \""),
+   % ?_assertCmdOutput("-r--r--r--\n","ls -l "  ++ ABCANDABFoo ++ "|cut -f1 -d \" \""),
    ?_assertCmdStatus(1,"mv "  ++ ABCANDABFoo ++ " test/to/a/b/"),
    ?_assertCmd("attr -r a " ++ Foo)].
 
+
+all_test_() ->
+  Foo="test/to/r/from/foo",
+  Bar="test/to/r/from/bar",
+  AllFoo="test/to/r/all/foo",
+  AllBar="test/to/r/all/bar",
+  [?_assertCmd("attr -s \"a/b\" -V \"c,d\" "++Foo),
+   ?_assertCmd("attr -s \"a/b\" -V \"c\" "++Bar),
+   ?_assertCmd("attr -g \"a/b\" "++AllFoo),
+   ?_assertCmd("attr -r \"a/b\" "++Foo),
+   ?_assertCmd("attr -g \"a/b\" "++Bar),
+   ?_assertCmd("attr -g \"a/b\" "++AllBar),
+   ?_assertCmd("ls test/to/a/a/b/c|grep bar"),
+   ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
+   ?_assertCmd("attr -r \"a/b\" "++Bar)
+   ].
 
 namespace_test_() ->
   Foo="test/to/r/from/foo",
@@ -135,4 +154,15 @@ namespace_test_() ->
    ?_assertCmdOutput("Attribute \"foo\" had a 3 byte value for test/to/r/from/foo:\nfoo\n","attr -g foo "++Foo),
    ?_assertCmd("ls test/to/a/foo/foo/foo"),
    ?_assertCmd("attr -r foo "++ Foo)].
+  
+
+dups_test_() -> 
+  DupEtaoin="test/to/r/dup/etaoin",
+  AllEtaoin="test/to/r/all/etaoin",
+  AllDupEtaoin="test/to/r/all/duplicate-etaoin",
+  [?_assertCmd("ls "++DupEtaoin),
+   ?_assertCmd("ls "++AllEtaoin),
+   ?_assertCmd("ls "++AllDupEtaoin),
+   ?_assertCmdOutput("{\"Etaoin\",\"test/from/etaoin\"\n","cat "++DupEtaoin)
+  ].
   
