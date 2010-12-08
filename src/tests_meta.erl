@@ -3,7 +3,7 @@
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
--export([test/0,fs_prereq/0,switch/0]).
+-export([test/0,fs_prereq/0,switch/0,timer/1]).
 
 test() ->
   eunit:test({setup,fun fs_prereq/0,fun fs_cleanup/1,tests_meta}).
@@ -45,7 +45,7 @@ fs_prereq() ->
   ?assertCmd("touch test/from/foo"),
   ?assertCmd("touch test/from/bar"),
   switch(),
-  application:start(attrfs).
+  utils:chain(attrfs).
 
 fs_cleanup(_) ->
   ?debugMsg("cleaning up"),
@@ -171,3 +171,62 @@ dups_test_() ->
    
   ].
   
+timer_prereq(Amount) ->
+  ?debugMsg("preparing timer"),
+  ?assertCmd("mkdir -p test/from/"),
+  ?assertCmd("mkdir -p test/to"),
+  MyAttrApp=
+    {application,attrfs,
+      [{description,"A file system used to sort files by attributes."},
+       {vsn,0.9},
+       {modules,[attrfs,attrfs_srv,attrfs_sup,inode,inode_sup,
+                 tree_srv,tree_sup]},
+       {applications,[kernel,stdlib,fuserl]},
+       {registered,[attrfs]},
+       {mod,{attrfs,[]}},
+       {env,[{to_dir,"test/to"},
+             {from_dir,"test/from"},
+             {attributes_db,"test/attrs"},
+             {linked_in,true},
+             {real_name,"r"},
+             {attr_name,"a"},
+             {all_name,"all"},
+             {dup_name,"dup"},
+             {mount_opts,"allow_other,default_permissions"}]}]},
+  file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
+  application:stop(attrfs),
+  application:unload(attrfs),
+  lists:foreach(fun(X) ->
+    ?assertCmd("touch test/from/"++integer_to_list(X))
+    end,
+    lists:seq(1,Amount)),
+  switch(),
+  utils:chain(attrfs).
+
+timer_cleanup() ->
+  fs_cleanup(foo).
+
+timertest() ->
+  A=os:cmd("ls test/to/"),
+  B=os:cmd("ls test/to/r"),
+  C=os:cmd("ls test/to/r/all"),
+  ?debugVal(A),
+  ?debugVal(B),
+  ?debugVal(C).
+
+timea(N) ->
+  ?debugTime("fs_prereq:", timer_prereq(N)),
+  ?debugTime("ls:", timertest()),
+  ?debugTime("fs_cleanup:", timer_cleanup()).
+
+timer(N) ->
+  process_flag(trap_exit, true),
+  timea(N),
+  receive
+    N ->
+      ?debugMsg("cleaning up anyway"),
+      timer_cleanup()
+  after 1 ->
+    ok
+  end.
+

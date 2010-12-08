@@ -44,7 +44,7 @@ init({MirrorDirs,DB}) ->
   {ok,AllIno}=inode:number(?ALL_FOLDR,ino),
   {ok,DupIno}=inode:number(?DUP_FOLDR,ino),
 
-%  ?DEBL("   inodes;\troot:~p, real:~p, attribs:~p",[RootIno,RealIno,AttribIno]),
+%  ?DEBL("   inodes;\troot:~w, real:~w, attribs:~w",[RootIno,RealIno,AttribIno]),
   ?DEB1("   creating root entry"),
   % creating base folders.
 
@@ -68,10 +68,10 @@ init({MirrorDirs,DB}) ->
   % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
   {RealChildren,AllChildren}=lists:mapfoldl(
     fun(MirrorDir,Children) ->
-      ?DEB2("   mirroring dir ~p",MirrorDir),
+      ?DEB2("   mirroring dir ~w",MirrorDir),
       {ChildName,ChildIno,ChildType,ChildChildren}=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
       Child={ChildName,ChildIno,ChildType},
-      ?DEB2("   got ~p",Child),
+      ?DEB2("   got ~w",Child),
       {Child,ChildChildren++Children}
     end,
     [],
@@ -140,7 +140,7 @@ init({MirrorDirs,DB}) ->
 
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
-  ?DEBL("   opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
+  ?DEBL("   opening attribute database file ~w as ~w", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   tree_srv:new(inodes), % contains inode entries
   tree_srv:new(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
@@ -155,29 +155,23 @@ type_and_children(Path,FileInfo) ->
           directory ->
             ?DEB1("    directory"),
             {ok,ChildNames}=file:list_dir(Path),
-            ?DEB2("     directory entries:~p",ChildNames),
-            {NameInodePairs0,MultitudeOfChildren}=
+            ?DEB2("     directory entries:~w",ChildNames),
+            {NameInodePairs,MultitudeOfChildren}=
               lists:mapfoldl(
                 fun(ChildName,OtherChildren) -> 
                   % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
-                  case make_inode_list({Path++"/"++ChildName,ChildName}) of
-                    {InternalChildName,Ino,Type,AllChildren} ->
-                      Me={InternalChildName,Ino,Type},
-                      case Type of
-                        #external_file{} ->
-                          {Me,[Me|OtherChildren++AllChildren]};
-                        _ ->
-                          {Me,OtherChildren++AllChildren}
-                      end;
-                    skip ->
-                     {skip,OtherChildren}
+                  {InternalChildName,Ino,Type,AllChildren}=make_inode_list({Path++"/"++ChildName,ChildName}),
+                  Me={InternalChildName,Ino,Type},
+                  case Type of
+                    #external_file{} ->
+                      {Me,[Me|OtherChildren++AllChildren]};
+                    _ ->
+                      {Me,OtherChildren++AllChildren}
                   end
                 end, 
                 [],
                 ChildNames
               ),
-              % Filter out bad entries.
-              NameInodePairs=lists:filter(fun(skip) -> false;(_)->true end,NameInodePairs0),
             {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},MultitudeOfChildren};
           regular ->
             ?DEB1("    regular"),
@@ -190,30 +184,30 @@ type_and_children(Path,FileInfo) ->
 get_unique(Name0) ->
   case inode:number(Name0,ino) of
     {error,{is_numbered,{Name0,Ino0}}} ->
-      ?DEB2("~p is a duplicate!",Name0),
+      ?DEB2("~w is a duplicate!",Name0),
       {value,Entry0}=tree_srv:lookup(Ino0,inodes),
       case Entry0#inode_entry.type of
         #external_file{path=Path0} ->
-          ?DEB2("~p is a file!",Name0),
+          ?DEB2("~w is a file!",Name0),
           {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
-          ?DEBL("adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
+          ?DEBL("adding ~w to ~w",[{Name0,Path0},PossiblePaths]),
           {Name,[{Name0,Path0}|PossiblePaths],Ino};
         _ ->
           %We don't care if external dirs have duplicate names
           get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX))
       end;
     {ok,Ino} ->
-      ?DEB2("~p is not a duplicate!",Name0),
+      ?DEB2("~w is not a duplicate!",Name0),
       {Name0,[],Ino}
   end.
 
 make_inode_list({Path,Name0}) ->
-  ?DEBL("   reading file info for ~p into ~p",[Path,Name0]),
+  ?DEBL("   reading file info for ~w into ~w",[Path,Name0]),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
       ?DEB1("   got file info"),
       {Name,OlderEntries,Ino} =get_unique(Name0),
-      ?DEB2("   got unique name ~p",Name),
+      ?DEB2("   got unique name ~w",Name),
       if
         Name==Name0 ->
           ok;
@@ -222,17 +216,17 @@ make_inode_list({Path,Name0}) ->
           tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates)
       end,
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
-      ?DEB2("    Generating ext info for ~p",Path),
+      ?DEB2("    Generating ext info for ~w",Path),
       {ExtInfo,ExtIo,ExtAmount}=attr_ext:generate_ext_info_io(Path), 
-      ?DEB2("     ext info: ~p", ExtInfo),
+      ?DEB2("     ext info: ~w", ExtInfo),
       % XXX: This will break if provided with a local date and time that does not
       % exist. Shouldn't be much of a problem.
       EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
       EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
       EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
-      ?DEB2("    atime:~p~n",EpochAtime),
-      ?DEB2("    ctime:~p~n",EpochCtime),
-      ?DEB2("    mtime:~p~n",EpochMtime),
+      ?DEB2("    atime:~w~n",EpochAtime),
+      ?DEB2("    ctime:~w~n",EpochCtime),
+      ?DEB2("    mtime:~w~n",EpochMtime),
       MyStat0=
         attr_tools:statify_file_info(
           FileInfo#file_info{
@@ -253,10 +247,10 @@ make_inode_list({Path,Name0}) ->
           ext_io=ExtIo
         },
       tree_srv:enter(Ino,InodeEntry,inodes),
-      ?DEB2("    looking up ext folders for ~p",Name),
+      ?DEB2("    looking up ext folders for ~w",Name),
       % I need to go from [[String]] to [String] here...
       ExtFolders=attr_tools:flatten1(dets:match(?ATTR_DB,{Path,'$1'})),
-      ?DEBL("    creating ext folders ~p for ~p",[ExtFolders,Name]),
+      ?DEBL("    creating ext folders ~w for ~w",[ExtFolders,Name]),
       lists:foreach(
         fun(Attr) -> 
           attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) 
@@ -264,9 +258,10 @@ make_inode_list({Path,Name0}) ->
         ExtFolders),
     {Name,Ino,Type,AllChildren};
     E ->
-      ?DEBL("   got ~p when trying to read ~p.",[E,Path]),
+      ?DEBL("   got ~w when trying to read ~w.",[E,Path]),
       ?DEB1("   are you sure your app file is correctly configured?"),
-      skip
+      ?DEB1(">>>exiting<<<"),
+      exit(E)
   end.
 
 
@@ -274,7 +269,7 @@ make_duplicate_children() ->
   ?DEB1("   Generating duplicates dir"),
   lists:map(
     fun({Name,List0}) ->
-      ?DEBL("   Making inode number for {duplicate,~p}",[Name]),
+      ?DEBL("   Making inode number for {duplicate,~w}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
       Type= duplicate_file,
       IOList=lists:foldr(
