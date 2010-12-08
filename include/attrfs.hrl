@@ -40,6 +40,7 @@
 -define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attribs"))).
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
+-define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,"duplicates"))).
 -define(AND_FOLDR,(attr_tools:get_or_default(and_name,"AND"))).
 -define(OR_FOLDR,(attr_tools:get_or_default(or_name,"OR"))).
 -define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,"BUTNOT"))).
@@ -57,6 +58,12 @@
 
 -type inode_number()::pos_integer().
 -type attrib_list()::[{string(), string()}].
+
+%The dupliacte_file record contains the file data for files containing duplicate info for the file whose name they bear.
+
+-record(duplicate_file,
+        {d_contents::[{string(),string()}]
+        }).
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.
 
@@ -99,7 +106,7 @@
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
--type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|duplicate_file.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 
@@ -140,11 +147,6 @@
         ,generated::boolean()
         }).
 
-
--record(open_internal_dir,
-        {contents%::raw directory listing format
-        }).
-        
 
 -record(open_external_file,
         {io_device::file:io_device(),

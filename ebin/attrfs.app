@@ -2,7 +2,7 @@
   [{description,"A file system used to sort files by attributes."},
    {vsn,0.9},
    {modules,[attrfs,attrfs_srv,attrfs_sup,inode,inode_sup,tree_srv,tree_sup]},
-   {applications,[kernel,stdlib,fuserl]}, %,inode,tree_app]},
+   {applications,[kernel,stdlib,fuserl]}, 
    {registered,[attrfs]},
    {mod,{attrfs,[]}},
    {env,
@@ -16,6 +16,7 @@
       {or_name,"OR"},
       {butnot_name,"BUTNOT"},
       {all_name,"all"},
+      {dup_name,"duplicates"},
       {mount_opts, "allow_other,default_permissions"}
      ]
    } 
