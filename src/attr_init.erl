@@ -191,7 +191,7 @@ get_unique(Name0) ->
           ?DEB2("~p is a file!",Name0),
           {Name,PossiblePaths,Ino}=get_unique(string:concat("duplicate-",Name0)),
           ?DEBL("adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
-          {Name,[{Name0,Entry0}|PossiblePaths],Ino};
+          {Name,[{Name0,Path0}|PossiblePaths],Ino};
         _ ->
           %We don't care if external dirs have duplicate names
           get_unique(string:concat("duplicate-",Name0))
@@ -208,6 +208,13 @@ make_inode_list({Path,Name0}) ->
       ?DEB1("   got file info"),
       {Name,OlderEntries,Ino} =get_unique(Name0),
       ?DEB2("   got unique name ~p",Name),
+      if
+        Name==Name0 ->
+          ok;
+        true ->
+          ?DEB1("   updating duplicate list"),
+          tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates)
+      end,
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
       ?DEB2("    Generating ext info for ~p",Path),
       {ExtInfo,ExtIo,ExtAmount}=attr_ext:generate_ext_info_io(Path), 
@@ -240,13 +247,6 @@ make_inode_list({Path,Name0}) ->
           ext_io=ExtIo
         },
       tree_srv:enter(Ino,InodeEntry,inodes),
-      if
-        Name==Name0 ->
-          ok;
-        true ->
-          ?DEB1("   updating duplicate list"),
-          tree_srv:enter(Name0,[{Name,InodeEntry}|OlderEntries],duplicates)
-      end,
       ?DEB2("    looking up ext folders for ~p",Name),
       % I need to go from [[String]] to [String] here...
       ExtFolders=attr_tools:flatten1(dets:match(?ATTR_DB,{Path,'$1'})),
@@ -280,7 +280,7 @@ make_duplicate_children() ->
         children=List,
         ext_info=[],
         ext_io=attr_ext:ext_info_to_ext_io([]),
-        stat=?FILE_STAT(8#755,Ino)
+        stat=?FILE_STAT(8#755,Ino)#stat{st_size=iolist_size(io_lib:format("~p",[List]))}
         },
       ?DEB1("   entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),

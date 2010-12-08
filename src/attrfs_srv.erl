@@ -522,6 +522,11 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
                     #fuse_reply_err{err=Error}
             end;
 %        #fuse_reply_open{fuse_file_info=Fuse_File_Info};
+      duplicate_file ->
+        ?DEB1("  duplicate file"),
+        MyFino=inode:get(fino),
+        attr_open:set(MyFino,Inode,#open_duplicate_file{ino=Inode}),
+        #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
       _ ->
         #fuse_reply_err{err=enotsup}
     end,
@@ -565,18 +570,27 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
     ?DEB2("   looking up fino ~p",FIno),
     {value,File}=attr_open:lookup(FIno),
     ?DEB1("   extracting io_device"),
-    #open_external_file{io_device=IoDevice}=File,
-    ?DEB1("   got file and iodevice, reading..."),
-    Reply=case file:pread(IoDevice,Offset,Size) of
-      {ok, Data} ->
-        ?DEB1("   data read, returning"),
-        #fuse_reply_buf{ buf = Data, size=erlang:size(Data) };
-      eof ->
-        ?DEB1("   eof reached, returning nodata"),
-        #fuse_reply_err{ err=enodata };
-      _E ->
-        ?DEB2("   other error, returning ~p",_E),
-        #fuse_reply_err{ err=eio }
+    Reply=case File of
+      #open_external_file{io_device=IoDevice} -> 
+        ?DEB1("   got file and iodevice, reading..."),
+        case file:pread(IoDevice,Offset,Size) of
+          {ok, Data} ->
+            ?DEB1("   data read, returning"),
+            #fuse_reply_buf{buf=Data,size=erlang:size(Data)};
+          eof ->
+            ?DEB1("   eof reached, returning nodata"),
+            #fuse_reply_err{err=enodata};
+          _E ->
+            ?DEB2("   other error, returning ~p",_E),
+            #fuse_reply_err{err=eio}
+        end;
+      #open_duplicate_file{ino=Ino} ->
+        {value,Entry}=tree_srv:lookup(Ino,inodes),
+        Contents=Entry#inode_entry.children,
+        Data=io_lib:format("~p",[Contents]),
+        #fuse_reply_buf{buf=Data,size=erlang:iolist_size(Data)};
+      _ ->
+        #fuse_reply_err{err=eio}
     end,
     {Reply,State}.
 

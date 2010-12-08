@@ -168,6 +168,10 @@
         }).
 
 
+-record(open_duplicate_file,
+        {ino::non_neg_integer()
+        }).
+
 -type attribute_entries()::[name_tuple()|{inode,inode_number()}].
 
 -record(state,

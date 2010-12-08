@@ -10,6 +10,7 @@ test() ->
   
 
 fs_prereq() ->
+  ?debugMsg("preparing tests"),
   ?assertCmd("mkdir -p test/from/also"),
   ?assertCmd("mkdir -p test/to"),
   MyAttrApp=
@@ -44,7 +45,7 @@ fs_prereq() ->
   application:start(attrfs).
 
 fs_cleanup(_) ->
-  ?debugMsg("letting the dust settle..."),
+  ?debugMsg("cleaning up"),
   switch(),
   application:stop(attrfs),
   ?assertCmd("rm -r test").
@@ -163,6 +164,7 @@ dups_test_() ->
   [?_assertCmd("ls "++DupEtaoin),
    ?_assertCmd("ls "++AllEtaoin),
    ?_assertCmd("ls "++AllDupEtaoin),
-   ?_assertCmdOutput("{\"Etaoin\",\"test/from/etaoin\"\n","cat "++DupEtaoin)
+   ?_assertCmdOutput("[{\"duplicate-etaoin\",\"test/from/also/etaoin\"},{\"etaoin\",\"test/from/etaoin\"}]","cat "++DupEtaoin)
+   
   ].
   
