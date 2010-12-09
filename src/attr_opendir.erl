@@ -11,10 +11,10 @@
 %% on it.
 %%--------------------------------------------------------------------------
 direntries(Inode) ->
-  ?DEB1("    Creating direntries"),
-  ?DEB1("     Getting child entries"),
+%  ?DEB1("    Creating direntries"),
+%  ?DEB1("     Getting child entries"),
   {value,Children}=attr_lookup:children(Inode),
-  ?DEBL("     Converting children ~w for ~w",[Children,Inode]),
+%  ?DEBL("     Converting children ~w for ~w",[Children,Inode]),
   direntrify(Children).
 
 
@@ -26,7 +26,7 @@ direntrify(List) ->
   direntrify(List,1).
 
 direntrify([],_N) -> 
-  ?DEB2("    Done converting ~b children",_N),
+%  ?DEB2("    Done converting ~b children",_N),
   [];
 
 direntrify([{Name,Inode,_Type}|Children],N) ->
@@ -38,6 +38,6 @@ direntrify([{Name,Inode,_Type}|Children],N) ->
   Direntry= #direntry{name=Name ,stat=ChildStats },
 %  ?DEB2("    Calculatig size for direntry for child ~w",{Name,Inode,_Type}),
   Direntry1=Direntry#direntry{offset=N},
-  ?DEB2("    Appending child ~w to list",{Name,Inode,_Type}),
+%  ?DEB2("    Appending child ~p to list",{Name,Inode,_Type}),
   [Direntry1|direntrify(Children,N+1)].
 

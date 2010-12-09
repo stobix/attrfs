@@ -168,20 +168,20 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
 
   ?DEB1(">start_link"),
   ?DEB1("   checkning if dirs are ok..."),
-  ?DEB2("    ~w...",Dir),
+  ?DEB2("    ~p...",Dir),
   case filelib:ensure_dir(Dir) of
     ok -> 
       ?DEB1("     path ok."),
       case filelib:is_dir(Dir) of
         true ->
-          ?DEB2("       ~w exists, and is a dir. Ok.",Dir);
+          ?DEB2("       ~p exists, and is a dir. Ok.",Dir);
         false->
-          ?DEB2("       ~w is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
+          ?DEB2("       ~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
           ?DEB1("TERMINATING"),
           exit({error,dir_is_not_a_dir})
       end;
     E ->
-      ?DEB2("     received ~w (Check your config)",E),
+      ?DEB2("     received ~p (Check your config)",E),
       ?DEB1("TERMINATING"),
       exit(E)
   end,
@@ -190,9 +190,9 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
     fun(MirrorDir) ->
       case filelib:is_dir(MirrorDir) of
         true ->
-          ?DEB2("      ~w exists, and is a dir. Ok.",MirrorDir);
+          ?DEB2("      ~p exists, and is a dir. Ok.",MirrorDir);
         false->
-          ?DEB2("      ~w is not a directory!(Check your config)",MirrorDir),
+          ?DEB2("      ~p is not a directory!(Check your config)",MirrorDir),
           ?DEB1("TERMINATING"),
           exit({error,mirror_dir_is_not_a_dir})
       end
@@ -505,11 +505,11 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB2("|  FI: ~w",Fuse_File_Info),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   _Name=Entry#inode_entry.name,
-  ?DEBL("   Internal file name: ~w",[_Name]),
+  ?DEBL("   Internal file name: ~p",[_Name]),
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
-        ?DEBL("   External file path: ~w",[Path]),
+        ?DEBL("   External file path: ~p",[Path]),
             case file:open(Path,[read,binary]) of
 %            case file:open(Path,[read,raw]) of
                 {ok,IoDevice} ->

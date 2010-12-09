@@ -278,7 +278,7 @@ has_user_perms(Mode,Mask) ->
 %% or create a tree with my own insertion algorithm.
 
 merge_duplicates(List) ->
-  ?DEB2(" indata: ~p",List),
+%  ?DEB2(" indata: ~p",List),
   Tree=make_unduplicate_tree(List),
   gb_trees:to_list(Tree).
 
@@ -348,7 +348,7 @@ datetime_to_epoch_test_() ->
 %% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
 %%--------------------------------------------------------------------------
 statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-  ?DEBL("    converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
+%  ?DEBL("    converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
   #stat{
     st_dev= {MajorDevice,MinorDevice},
     st_ino=Inode,
@@ -369,26 +369,27 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 %%--------------------------------------------------------------------------
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry{}) ->
   PName=ParentEntry#inode_entry.name,
-  ?DEBL(" »append_child: Child: ~p Parent: ~p",[NewChild,ParentEntry#inode_entry.name]),
+%  ?DEBL(" »append_child: Child: ~p Parent: ~p",[element(1,NewChild),ParentEntry#inode_entry.name]),
   Children=ParentEntry#inode_entry.children,
-  ?DEB2("     children: ~p",Children),
+%  ?DEB2("     children: ~p",Children),
   NewChildren=attr_tools:keymergeunique(NewChild,Children),
-  ?DEB2("     merged children: ~p",NewChildren),
+%  ?DEB2("     merged children: ~p",NewChildren),
   NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
-  ?DEB1("     created new parent entry"),
+%  ?DEB1("     created new parent entry"),
   {ok,ParentIno}=inode:n2i(PName,ino),
-  ?DEB2("     parent inode: ~p",ParentIno),
+%  ?DEB2("     parent inode: ~p",ParentIno),
   tree_srv:enter(ParentIno,NewParentEntry,inodes),
-  ?DEB1("     new parent inserted");
+%  ?DEB1("     new parent inserted"),
+  ok;
 
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
-  ?DEBL(" »append_child: ~p (~p)",[NewChild,ParentIno]),
+%  ?DEBL(" »append_child: ~p (~p)",[NewChild,ParentIno]),
   case tree_srv:lookup(ParentIno,inodes) of
     {value,ParentEntry} -> 
-        ?DEB1("   got parent entry"),
+%        ?DEB1("   got parent entry"),
         append_child(NewChild,ParentEntry);
     none ->
-        ?DEB1("   DID NOT get parent entry"),
+%        ?DEB1("   DID NOT get parent entry"),
         throw({error,{parent_unbound,ParentIno}})
   end.
 
@@ -399,9 +400,9 @@ append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
 get_or_default(Attribute,Default) ->
   case application:get_env(attrfs,Attribute) of
     {ok,Value} ->
-      ?DEBL("  ~p: ~p",[Attribute,Value]),
+%      ?DEBL("  ~p: ~p",[Attribute,Value]),
       Value;
     undefined ->
-      ?DEBL("  ~p not defined. Defaulting to ~p", [Attribute,Default]),
+%      ?DEBL("  ~p not defined. Defaulting to ~p", [Attribute,Default]),
       Default
   end.
