@@ -28,7 +28,7 @@
 -include("../include/debug.hrl").
 
 start_link() ->
-  ?DEB1("Starting tree server"),
+  ?DEB1({tree,1},"Starting tree server"),
   supervisor:start_link(?MODULE,[]).
 
 init(_) ->

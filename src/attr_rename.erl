@@ -43,19 +43,20 @@
 %% make_rename_reply filters according to the old parent type, the old attribute name, the new attribute type 
 
 rename(ParentIno,NewParentIno,OldName,NewName) ->
+    ?DEB1(3,">rename"),
     {value,PEntry}=tree_srv:lookup(ParentIno,inodes),
     PType=PEntry#inode_entry.type,
-    ?DEBL("   parent_type: ~p",[PType]),
+    ?DEBL(5,"parent_type: ~p",[PType]),
     case tree_srv:lookup(NewParentIno,inodes) of
       none ->
-        ?DEB1("   new parent nonexistent!"),
+        ?DEB1(5,"new parent nonexistent!"),
         enoent; 
       {value,NPEntry} ->
         NPType=NPEntry#inode_entry.type,
-        ?DEBL("   new parent type: ~p",[NPType]),
+        ?DEBL(5,"new parent type: ~p",[NPType]),
         case lists:keyfind(OldName,1,PEntry#inode_entry.children) of
           false -> 
-            ?DEB1("   file nonexistent!"),
+            ?DEB1(5,"file nonexistent!"),
             enoent;
           {_,FIno,_} ->
             {value,FEntry}=tree_srv:lookup(FIno,inodes),
@@ -88,7 +89,7 @@ rename_internal(_,_,_,_,_,_,_,_) ->
 copy_file(NPIno,FIno,FEntry) ->
   Path=(FEntry#inode_entry.type)#external_file.path,
   {ok,Attribute}=inode:i2n(NPIno,ino),
-  ?DEBL("   copying file ~p into ~p",[FEntry#inode_entry.name,Attribute]),
+  ?DEBL(6,"copying file ~p into ~p",[FEntry#inode_entry.name,Attribute]),
   attr_ext:add_new_attribute(Path,FIno,FEntry,Attribute).
 
 %%--------------------------------------------------------------------------
@@ -109,12 +110,12 @@ move_file(FileInode,FileEntry,OldParentEntry,NewParentEntry) ->
 % NewValueName: the new value name.
 %%--------------------------------------------------------------------------
 move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
-  ?DEB1("   moving value dir"),
+  ?DEB1(6,"moving value dir"),
   OldAttribName=[OldValueName|OldKeyName]=OldValueEntry#inode_entry.name,
   NewParentName=NewParentEntry#inode_entry.name,
   NewAttribName=[NewValueName|NewParentName], 
   NewValueEntry=OldValueEntry#inode_entry{name=NewAttribName},
-  ?DEBL("   moving ~p to ~p",[OldAttribName,NewAttribName]),
+  ?DEBL(8,"moving ~p to ~p",[OldAttribName,NewAttribName]),
   % I need to move the children before removing the entries of the parents from the current dir.
   lists:foreach(
     fun({_ChildName,ChildInode,ChildType}) ->
@@ -126,17 +127,17 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ),
   %XXX: Yes, this is a little bit ugly. Maybe do a global change about 
   %     whether to use inodes or entries as arguments sometime?
-  ?DEBL("    removing ~p from the ~p directory", [OldValueName,OldKeyName]),
-  ?DEBL("     getting inodes...",[]),
+  ?DEBL(8,"removing ~p from the ~p directory", [OldValueName,OldKeyName]),
+  ?DEBL(9,"getting inodes...",[]),
   {ok,KeyIno}=inode:n2i(OldKeyName,ino),
   {ok,ValueIno}=inode:n2i(OldAttribName,ino),
-  ?DEBL("     removing...",[]),
+  ?DEBL(9,"removing...",[]),
   attr_remove:remove_empty_dir(KeyIno,OldValueName),
-  ?DEBL("    adding ~p to ~p directory", [NewValueName,NewParentName]),
+  ?DEBL(9,"adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
-  ?DEB2("    adding ~p to inode list",NewAttribName),
+  ?DEB2(9,"adding ~p to inode list",NewAttribName),
   attr_tools:append_child({NewValueName,ValueIno,attribute_dir},KeyIno),
-  ?DEB1("    moving inode number"),
+  ?DEB1(9,"moving inode number"),
   inode:rename(OldAttribName,NewAttribName,ino),
   ok.
 

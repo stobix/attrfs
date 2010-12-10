@@ -57,10 +57,10 @@ remove_attribute(Path,Inode,Attribute) ->
   Matches=dets:match(?ATTR_DB,{Path,Attribute}),
   case length(Matches)>0 of
     true ->
-      ?DEBL("Removing ~p for ~p from database", [Attribute,Path]),
+      ?DEBL(3,"Removing ~p for ~p from database", [Attribute,Path]),
       dets:match_delete(?ATTR_DB,{Path,Attribute});
     false ->
-      ?DEB1("No data base entry to remove!")
+      ?DEB1(3,"No data base entry to remove!")
   end,
   % File attribute handling
   attr_ext:rehash_ext_from_db(Inode,Path),
@@ -83,18 +83,18 @@ remove_attribute(Path,Inode,Attribute) ->
 % this one was used for removing attributes. Removing the attribute key removes the file from all direct subdirs where it resides
 % attr -r foo fil when attribute foo has the value ",bar,baz" should remove fil from both attribs/foo attribs/foo/bar and attribs/foo/baz
 remove_key_values(Path,Inode,AName) ->
-  ?DEBL("    deleting ~p from ~p",[AName,Path]),
+  ?DEBL(3,"deleting ~p from ~p",[AName,Path]),
   % Database handling
   Matches=dets:match(?ATTR_DB,{Path,['$1'|AName]}),
   case length(Matches)>0 of
     true -> 
-      ?DEBL("   removing the following items (if any): ~p",[Matches]),
+      ?DEBL(5,"removing the following items (if any): ~p",[Matches]),
       dets:match_delete(?ATTR_DB,{Path,['_'|AName]});
     false -> 
-      ?DEB1("   found no items to remove, doing nothing"),
+      ?DEB1(5,"found no items to remove, doing nothing"),
       ok
   end,
-  ?DEBL("   items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,['$1'|AName]})]),
+  ?DEBL(5,"items left (should be none): ~p",[dets:match(?ATTR_DB,{Path,['$1'|AName]})]),
   % Updating ext io using the filtered ext info
   attr_ext:rehash_ext_from_db(Inode,Path),
   % removing file child from attribute folder entry
@@ -109,16 +109,17 @@ remove_key_values(Path,Inode,AName) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 remove_empty_dir(ParentIno,DirName) ->
-  ?DEBL("   removing empty dir ~p from parent ~p",[DirName,ParentIno]),
+  ?DEB1(3,">remove_empty_dir"),
   {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
   case lists:keytake(DirName,1,ParentEntry#inode_entry.children) of
     {value,{_DeletedChild,ChildIno,_ChildType},NewChildren} ->
+      ?DEBL(5,"removing empty dir ~p from parent ~p",[DirName,ParentIno]),
       NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
       tree_srv:enter(ParentIno,NewParentEntry,inodes),
       tree_srv:delete_any(ChildIno,inodes),
       ok;
     _ -> 
       % Found no old entry; nothing needs to be done.
-      ?DEB1("   dir not a child of parent! not removing!!"),
+      ?DEB1(5,"dir not a child of parent! not removing!!"),
       enoent
   end.

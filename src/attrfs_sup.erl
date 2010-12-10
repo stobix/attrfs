@@ -30,7 +30,7 @@ start_link(From,To,DB,MountOpts,LinkedIn) ->
   supervisor:start_link(?MODULE,{From,To,DB,MountOpts,LinkedIn}).
 
 init({From,To,DB,MountOpts,LinkedIn}) ->
-  ?DEB1("Starting attrfs_srv..."),
+  ?DEB1(1,"Starting attrfs_srv..."),
   {ok, {{one_for_all,3,10},
      [
        {inode_sup,{inode_sup,start_link,[]}, 

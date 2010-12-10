@@ -64,11 +64,11 @@
 %%%=========================================================================
 
 start_link() ->
-  ?DEB1("Starting tree server"),
+  ?DEB1({tree,1},"Starting tree server"),
   gen_server:start_link({local,?MODULE},?MODULE,[],[]).
 
 init(_) ->
-  ?DEB1("Tree server started"),
+  ?DEB1({tree,1},"Tree server started"),
   {ok,[]}.
 
 terminate(_Reason,_State) -> ok.
@@ -139,7 +139,7 @@ handle_call({get,Key,TreeID},_From,Trees) ->
   {reply,gb_trees:lookup(Key,Tree),Trees};
 
 handle_call({store_tree,TreeID,Tree},_From,Trees) ->
-  ?DEBL("  storing a tree ~p into ~p",[TreeID,Trees]),
+  ?DEBL({tree,2},"storing a tree ~p into ~p",[TreeID,Trees]),
   case lists:keymember(TreeID,1,Trees) of
     false -> {reply,ok,[{TreeID,Tree}|Trees]};
     true ->  {reply,{error,exists},Trees}

@@ -138,10 +138,10 @@ remove_from_start_test_() ->
 transmogrify(Boolean,NewTrue,NewFalse) ->
   if 
     Boolean -> 
-      ?DEBL("   transmogrifying ~p into ~p",[Boolean,NewTrue]),
+      ?DEBL(5,"transmogrifying ~p into ~p",[Boolean,NewTrue]),
       NewTrue;
     true -> 
-      ?DEBL("   transmogrifying ~p into ~p",[Boolean,NewFalse]),
+      ?DEBL(5,"transmogrifying ~p into ~p",[Boolean,NewFalse]),
       NewFalse
   end.
 
@@ -153,19 +153,19 @@ transmogrify_test_() ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 test_access(Inode,Mask,Ctx) ->
-  ?DEB1("   checking access..."),
+  ?DEB1(5,"checking access..."),
   case tree_srv:lookup(Inode,inodes) of
     {value, Entry} ->
       % Can I use the mask like this?
       case Mask of
         ?F_OK ->
-          ?DEB1("   file existing"),
+          ?DEB1(7,"file existing"),
           ok;
         _ -> 
           transmogrify(has_rwx_access(Entry,Mask,Ctx),ok,eacces)
       end;
     none ->
-      ?DEB1("   file does not exist!"),
+      ?DEB1(7,"file does not exist!"),
       enoent
   end.
 
@@ -317,7 +317,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
 %%--------------------------------------------------------------------------
 dir(Stat) ->
   NewMode= ?STD_DIR_MODE,
-  ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
+  ?DEBL(5,"transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
 
 

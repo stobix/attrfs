@@ -53,16 +53,16 @@ rehash_ext_from_db(Inode,Path) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 add_new_attribute(Path,FIno,FEntry,Attr) ->
-  ?DEB1("  >add_new_attribute"),
+  ?DEB1(3,">add_new_attribute"),
   % Add the new attribute, if non-existent.
-%  ?DEBL("   inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
+  ?DEBL(5,"inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
   length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
     (ok=dets:insert(?ATTR_DB,{Path,Attr})),
-%  ?DEBL("   database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
+  ?DEBL(5,"database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
   #inode_entry{stat=Stat,name=FName}=FEntry,
-%  ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+  ?DEBL(5,"appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
   append_attribute(Attr,FName,?UEXEC(Stat)),
-%  ?DEB1("   creating new ext info"),
+  ?DEB1(5,"creating new ext info"),
   rehash_ext_from_db(FIno,Path).
 
 
@@ -112,7 +112,7 @@ append(Parent,ChildInoName,ChildName,Stat) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
-  ?DEB2("    generating ext info for ~s",Path),
+  ?DEB2(3,"generating ext info for ~s",Path),
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
   ExtAmount=lists:foldr(fun(_,N) -> N+1 end,0,ExtInfo0),
   ExtInfo1=convert(ExtInfo0),
@@ -136,12 +136,12 @@ keyvalue([A|[]]) ->
 keyvalue(A) ->
     lists:foldl(
         fun(X,{[],[]}) ->
-            ?DEB2("init: ~p",X),
+            ?DEB2(5,"init: ~p",X),
             {[],X};
            (X,{[],Z}) ->
             {X,Z};
            (X,{Y,Z}) ->
-            ?DEBL("recurs: ~p,~p,~p",[X,Y,Z]),
+            ?DEBL(5,"recurs: ~p,~p,~p",[X,Y,Z]),
             {X++"/"++Y,Z}
         end,
         {[],[]},

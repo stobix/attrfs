@@ -28,7 +28,7 @@
 -include("../include/debug.hrl").
 
 start_link() ->
-  ?DEB1("Starting inode supervisor"),
+  ?DEB1(1,"Starting inode supervisor"),
   supervisor:start_link(?MODULE,[]).
 
 init(_) ->

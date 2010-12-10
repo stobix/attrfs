@@ -87,7 +87,7 @@ stop(_State) ->
 start_link() -> start_link(1).
 
 start_link(SmallestNumber) ->
-  ?DEB1("Starting inode server"),
+  ?DEB1({inode,1},"Starting inode server"),
   gen_server:start_link({local,?MODULE},?MODULE,SmallestNumber,[]).
 
 init(_SmallestNumber) ->
@@ -149,7 +149,7 @@ get(Name,Server) ->
   case is_numbered(Name,Server) of
     false -> 
       Number=?MODULE:get(Server),
-      ?DEBL("   binding ~p to ~p",[Name,Number]),
+      ?DEBL({inode,2},"binding ~p to ~p",[Name,Number]),
       gen_server:cast(?MODULE,{register,Name,Number,Server}),
       Number;
     Number -> Number

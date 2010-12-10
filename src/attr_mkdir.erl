@@ -39,7 +39,7 @@ make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
   make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
 
 make_dir(_Ctx,_ParentInode,_ParentName,_DirType,_Name,_Mode) ->
-  ?DEB2("   ~p , not supported",_DirType),
+  ?DEB2(3,"~p , not supported",_DirType),
   #fuse_reply_err{err=enotsup}.
 
 
@@ -47,7 +47,7 @@ make_dir(_Ctx,_ParentInode,_ParentName,_DirType,_Name,_Mode) ->
 %%--------------------------------------------------------------------------
 
 make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode) ->
-  ?DEB1("   Creating an attribute dir"),
+  ?DEB1(6,"Creating an attribute dir"),
   MyName=[Name|ParentName],
   case make_general_dir(Ctx,ParentInode,MyName,Mode,attribute_dir) of
     {ok,Stat} ->
@@ -72,13 +72,14 @@ make_param(Stat) ->
 %% Creates a dir inode entry of type DirType and inserts it into the inode table as a child of ParentInode; Creates and returns dirstats with actual time info, and the UID and GID provided in CTX and the mode provided in Mode.
 %%--------------------------------------------------------------------------
 make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
+  ?DEB1(6,"make_general_dir"),
   case inode:is_numbered(Name,ino) of
     false ->
       {ok,MyInode}=inode:number(Name,ino),
-      ?DEBL("   creating new directory entry called ~p",[Name]),
+      ?DEBL(8,"creating new directory entry called ~p",[Name]),
       {MegaNow,NormalNow,_}=now(),
       Now=MegaNow*1000000+NormalNow,
-      ?DEBL("   atime etc: ~p",[Now]),
+      ?DEBL(8,"atime etc: ~p",[Now]),
       #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
       DirStat=
         #stat{
@@ -102,7 +103,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
       insert_entry(ParentInode,DirEntry),
       {ok,DirStat};
     _ ->
-      ?DEB2("   ~p already has an inode! Not creating duplicate folder...",Name),
+      ?DEB2(6,"~p already has an inode! Not creating duplicate folder...",Name),
       error
   end.
 
@@ -110,7 +111,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.
 %%--------------------------------------------------------------------------
 insert_entry(ParentInode,ChildEntry) ->
-  ?DEBL("    inserting new entry as child for ~p",[ParentInode]),
+  ?DEBL(6,"inserting new entry as child for ~p",[ParentInode]),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,

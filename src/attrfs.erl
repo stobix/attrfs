@@ -26,8 +26,8 @@
 -include("../include/attrfs.hrl").
 
 start(_dont,_care) ->
-  ?DEB2("Starting ~p",?MODULE),
-  ?DEB1("  getting arguments"),
+  ?DEB2(1,"Starting ~p",?MODULE),
+  ?DEB1(1,"  getting arguments"),
   DirFrom=case application:get_env(?MODULE,from_dir) of
     {ok,DF} -> [DF];
     undefined -> vget(from_dirs)
@@ -38,11 +38,11 @@ start(_dont,_care) ->
   MountOpts=vget(mount_opts),
 
 
-  ?DEBL("Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
+  ?DEBL(1,"Starting ~p mirroring from ~p to ~p using database ~p",[?MODULE,DirFrom,DirTo,DB]),
   case attrfs_sup:start_link(DirFrom,DirTo,DB,MountOpts,LinkedIn) of
     ok -> {ok,self()}; % Why do I sometimes need this? Why would supervisor:start_link suddenly start returning ok instead of {ok,Pid}?
    {ok,_Pid}=A -> A;
-   E -> ?DEB2("Got an error while starting! Exiting! (~p)",E),E
+   E -> ?DEB2(1,"Got an error while starting! Exiting! (~p)",E),E
   end.
 
 stop(_State) -> ok.
@@ -54,9 +54,9 @@ stop(_State) -> ok.
 vget(Attribute) ->
   case application:get_env(?MODULE,Attribute) of
     {ok,Value} -> 
-      ?DEBL("  ~p: ~p",[Attribute,Value]),
+      ?DEBL(2,"  ~p: ~p",[Attribute,Value]),
       Value;
     undefined -> 
-      ?DEB2("  ~p not defined! check your config file!",Attribute),
+      ?DEB2(1,"  ~p not defined! check your config file!",Attribute),
     exit("not found")
   end.
