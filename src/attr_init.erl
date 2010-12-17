@@ -44,35 +44,43 @@ init({MirrorDirs,DB}) ->
   {ok,RealIno}=inode:number(?REAL_FOLDR,ino),
   {ok,AllIno}=inode:number(?ALL_FOLDR,ino),
   {ok,DupIno}=inode:number(?DUP_FOLDR,ino),
+  {ok,LogicIno}=inode:number(?LOGIC_FOLDR,ino),
 
-%  ?DEBL("   inodes;\troot:~w, real:~w, attribs:~w",[RootIno,RealIno,AttribIno]),
+  ?DEBL({init,5},"inodes;\troot:~w, real:~w, attribs:~w",[RootIno,RealIno,AttribIno]),
   ?DEB1({init,1},"creating root entry"),
   % creating base folders.
 
+  LogicEntry=
+    #inode_entry{
+      name=?LOGIC_FOLDR,
+      children=[],
+      type=logic_dir,
+      stat=?DIR_STAT(8#444,LogicIno),
+      ext_info=[],
+      ext_io=attr_ext:ext_info_to_ext_io([])
+    },
+  tree_srv:enter(LogicIno,LogicEntry,inodes),
   AttributeEntry=
     #inode_entry{
-      name=[],
+      name=?ATTR_FOLDR,
       children=[],
       type=attribute_dir,
-      stat=#stat{ 
           % For now I'll set all access here, and limit access on a per-user-basis.
           % Maybe even make this folder "magic", so that different users think that they own it?
           % More on this when I start using the Ctx structure everywhere.
-          st_mode=?M_DIR(8#777),
-          st_ino=AttribIno
-        },
+      stat=?DIR_STAT(8#777,AttribIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AttribIno,AttributeEntry,inodes),
-  ?DEB1({init,1},"  Traversing all mirror dirs"),
+  ?DEB1({init,1},"Traversing all mirror dirs"),
   % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
   {RealChildren,AllChildren}=lists:mapfoldl(
     fun(MirrorDir,Children) ->
-      ?DEB2({init,1},"   mirroring dir ~s",MirrorDir),
+      ?DEB2({init,1},"mirroring dir ~s",MirrorDir),
       {ChildName,ChildIno,ChildType,ChildChildren}=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
       Child={ChildName,ChildIno,ChildType},
-      ?DEB2({init,1},"   got ~s",ChildName),
+      ?DEB2({init,1},"got ~s",ChildName),
       {Child,ChildChildren++Children}
     end,
     [],
@@ -82,11 +90,7 @@ init({MirrorDirs,DB}) ->
       name=?ALL_FOLDR,
       children=AllChildren,
       type=internal_dir,
-      stat=
-        #stat{
-          st_mode=8#555 bor ?S_IFDIR,
-          st_ino=AllIno
-        },
+      stat=?DIR_STAT(8#555,AllIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
@@ -96,11 +100,7 @@ init({MirrorDirs,DB}) ->
       name=?DUP_FOLDR,
       children=make_duplicate_children(),
       type=internal_dir,
-      stat=
-        #stat{
-          st_mode=8#555 bor ?S_IFDIR,
-          st_ino=DupIno
-        },
+      stat=?DIR_STAT(8#555,DupIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
@@ -114,48 +114,43 @@ init({MirrorDirs,DB}) ->
         {?DUP_FOLDR,DupIno,internal_dir}|
           RealChildren],
       type=internal_dir,
-      stat=
-        #stat{
-          st_mode=8#555 bor ?S_IFDIR,
-          st_ino=RealIno
-        },
+      stat=?DIR_STAT(8#555,RealIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(RealIno,RealEntry,inodes),
   RootEntry=
     #inode_entry{
-      name=root,
-      children=[{?REAL_FOLDR,RealIno,internal_dir},{?ATTR_FOLDR_FS_NAME,AttribIno,attribute_dir}],
+      name=?ROOT_FOLDR,
+      children=[
+        {?REAL_FOLDR,RealIno,internal_dir},
+        {?LOGIC_FOLDR,LogicIno,logic_dir},
+        {?ATTR_FOLDR_FS_NAME,AttribIno,attribute_dir}],
       type=internal_dir, 
-      stat=
-        #stat{
-          st_mode=8#755 bor ?S_IFDIR,
-          st_ino=RootIno
-        },
+      stat=?DIR_STAT(8#755,RootIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
-  ?DEB1(5,"   updating root inode entry"),
+  ?DEB1({init,5},"   updating root inode entry"),
   tree_srv:enter(RootIno,RootEntry,inodes).
 
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
-  ?DEBL(6,"   opening attribute database file ~s as ~s", [DB, ?ATTR_DB]),
+  ?DEBL({init,6},"   opening attribute database file ~s as ~s", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   tree_srv:new(inodes), % contains inode entries
   tree_srv:new(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
   attr_open:init(),
-  ?DEB1(8,"   created inode and key trees"),
+  ?DEB1({init,8},"   created inode and key trees"),
   inode:initiate(ino), % the inode table
   inode:initiate(fino). % the open files "inode" table
 
 type_and_children(Path,FileInfo) ->
         case FileInfo#file_info.type of
           directory ->
-%            ?DEB1("    directory"),
+            ?DEB1({init,7},"directory"),
             {ok,ChildNames}=file:list_dir(Path),
-%            ?DEB2("     directory entries:~s",ChildNames),
+            ?DEB2({init,7},"directory entries:~s",ChildNames),
             {NameInodePairs,MultitudeOfChildren}=
               lists:mapfoldl(
                 fun(ChildName,OtherChildren) -> 
@@ -174,7 +169,7 @@ type_and_children(Path,FileInfo) ->
               ),
             {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},MultitudeOfChildren};
           regular ->
-%            ?DEB1("    regular"),
+            ?DEB1({init,7},"regular"),
             {ok,[],#external_file{external_file_info=FileInfo,path=Path},[]};
           _ ->
             {error,not_supported} % for now
@@ -184,49 +179,49 @@ type_and_children(Path,FileInfo) ->
 get_unique(Name0) ->
   case inode:number(Name0,ino) of
     {error,{is_numbered,{Name0,Ino0}}} ->
-      ?DEB2(7,"~s is a duplicate!",Name0),
+      ?DEB2({init,7},"~s is a duplicate!",Name0),
       {value,Entry0}=tree_srv:lookup(Ino0,inodes),
       case Entry0#inode_entry.type of
         #external_file{path=Path0} ->
-          ?DEB2(9,"~s is a file!",Name0),
+          ?DEB2({init,9},"~s is a file!",Name0),
           {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
-          ?DEBL(9,"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
+          ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
           {Name,[{Name0,Path0}|PossiblePaths],Ino};
         _ ->
           %We don't care if external dirs have duplicate names
           get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX))
       end;
     {ok,Ino} ->
-      ?DEB2(7,"~p is not a duplicate!",Name0),
+      ?DEB2({init,7},"~p is not a duplicate!",Name0),
       {Name0,[],Ino}
   end.
 
 make_inode_list({Path,Name0}) ->
-  ?DEBL(6,"   reading file info for ~s into ~s",[Path,Name0]),
+  ?DEBL({init,6},"reading file info for ~s into ~s",[Path,Name0]),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
-      ?DEB1(8,"   got file info"),
+      ?DEB1({init,8},"got file info"),
       {Name,OlderEntries,Ino} =get_unique(Name0),
       ?DEB2(8,"   got unique name ~p",Name),
       if
         Name==Name0 ->
           ok;
         true ->
-          ?DEB1(8,"   updating duplicate list"),
+          ?DEB1({init,8},"updating duplicate list"),
           tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates)
       end,
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
-      ?DEB2(6,"    Generating ext info for ~p",Path),
+      ?DEB2({init,6},"Generating ext info for ~p",Path),
       {ExtInfo,ExtIo,ExtAmount}=attr_ext:generate_ext_info_io(Path), 
-      ?DEB2(8,"     ext info: ~p", ExtInfo),
+      ?DEB2({init,8},"ext info: ~p", ExtInfo),
       % XXX: This will break if provided with a local date and time that does not
       % exist. Shouldn't be much of a problem.
       EpochAtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.atime)),
       EpochCtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.ctime)),
       EpochMtime=lists:nth(1,calendar:local_time_to_universal_time_dst(FileInfo#file_info.mtime)),
-      ?DEB2(8,"    atime:~w~n",EpochAtime),
-      ?DEB2(8,"    ctime:~w~n",EpochCtime),
-      ?DEB2(8,"    mtime:~w~n",EpochMtime),
+      ?DEB2({init,8},"atime:~w~n",EpochAtime),
+      ?DEB2({init,8},"ctime:~w~n",EpochCtime),
+      ?DEB2({init,8},"mtime:~w~n",EpochMtime),
       MyStat0=
         attr_tools:statify_file_info(
           FileInfo#file_info{
@@ -247,10 +242,10 @@ make_inode_list({Path,Name0}) ->
           ext_io=ExtIo
         },
       tree_srv:enter(Ino,InodeEntry,inodes),
-      ?DEB2(8,"    looking up ext folders for ~p",Name),
+      ?DEB2({init,8},"looking up ext folders for ~p",Name),
       % I need to go from [[String]] to [String] here...
       ExtFolders=attr_tools:flatten1(dets:match(?ATTR_DB,{Path,'$1'})),
-      ?DEBL(8,"    creating ext folders ~p for ~p",[ExtFolders,Name]),
+      ?DEBL({init,8},"creating ext folders ~p for ~p",[ExtFolders,Name]),
       lists:foreach(
         fun(Attr) -> 
           attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) 
@@ -258,18 +253,18 @@ make_inode_list({Path,Name0}) ->
         ExtFolders),
     {Name,Ino,Type,AllChildren};
     E ->
-      ?DEBL(1,"   got ~w when trying to read ~p.",[E,Path]),
-      ?DEB1(1,"   are you sure your app file is correctly configured?"),
+      ?DEBL(1,"got ~w when trying to read ~p.",[E,Path]),
+      ?DEB1(1,"are you sure your app file is correctly configured?"),
       ?DEB1(1,">>>exiting<<<"),
       exit(E)
   end.
 
 
 make_duplicate_children() ->
-  ?DEB1(3,"   Generating duplicates dir"),
+  ?DEB1({init,3},"Generating duplicates dir"),
   lists:map(
     fun({Name,List0}) ->
-      ?DEBL(8,"   Making inode number for {duplicate,~p}",[Name]),
+      ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
       Type= duplicate_file,
       IOList=lists:foldr(
@@ -287,20 +282,11 @@ make_duplicate_children() ->
         ext_io=attr_ext:ext_info_to_ext_io([]),
         stat=?FILE_STAT(8#755,Ino,size(Data))
         },
-      ?DEB1(8,"   entering dup entry into inode list"),
+      ?DEB1({init,8},"   entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),
-      ?DEB1(8,"   done"),
+      ?DEB1({init,8},"   done"),
       {Name++?DUP_EXT,Ino,#duplicate_file{}}
     end,
     tree_srv:to_list(duplicates)
       ).
-
-
-        
-
-
-
-
-
-
 

@@ -41,6 +41,7 @@
 -define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attribs"))).
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
 -define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,"duplicates"))).
+-define(LOGIC_FOLDR,(attr_tools:get_or_default(logic_name,"logic"))).
 -define(AND_FOLDR,(attr_tools:get_or_default(and_name,"AND"))).
 -define(OR_FOLDR,(attr_tools:get_or_default(or_name,"OR"))).
 -define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,"BUTNOT"))).
