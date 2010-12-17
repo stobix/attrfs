@@ -69,7 +69,7 @@ init({MirrorDirs,DB}) ->
   % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
   {RealChildren,AllChildren}=lists:mapfoldl(
     fun(MirrorDir,Children) ->
-      ?DEB2({init,1},"   mirroring dir ~w",MirrorDir),
+      ?DEB2({init,1},"   mirroring dir ~s",MirrorDir),
       {ChildName,ChildIno,ChildType,ChildChildren}=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
       Child={ChildName,ChildIno,ChildType},
       ?DEB2({init,1},"   got ~s",ChildName),

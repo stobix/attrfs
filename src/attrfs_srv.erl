@@ -815,8 +815,9 @@ setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
     ,st_size=
       case (?FUSE_SET_ATTR_SIZE band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    setting size"),
-          Attr#stat.st_size;
+          ?DEB1(4,"    ignoring setting size"),
+        %  Attr#stat.st_size;
+          Stat#stat.st_size;
         true ->
           ?DEB1(4,"    not setting size"),
           Stat#stat.st_size
@@ -924,7 +925,7 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
-  ?DEB1(1,">symlink (enotsup)"),
+  ?DEB1(1,">symlink"),
   {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -942,7 +943,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
   ParentType=ParentEntry#inode_entry.type,
   ParentName=ParentEntry#inode_entry.name,
-  ?DEBL(4,"parent type ~w",[ParentType]),
+  ?DEBL(4,"parent type ~s",[io_lib:write(ParentType)]),
     Reply=
       case ParentType of
         attribute_dir ->
@@ -959,7 +960,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
               %% attribute from the file; Removing a value subfolder
               %% is NOT the same as removing a whole attribute.
               %% Thus, I'm NOT calling removexattr here.
-              ?DEBL(4,"child type ~w",[Type]),
+              ?DEBL(4,"child type ~s",[io_lib:write(Type)]),
               case Type of 
                 #external_file{path=Path} ->
                   ?DEBL(4,"Removing ~w from ~w", [ParentEntry#inode_entry.name,Name]),
@@ -982,12 +983,13 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %% Maybe I'll also support writing to real files later on.
 %% For now, let's just ignore all data written to external files, and the problem will be temporarily mitigated.
 %%--------------------------------------------------------------------------
-write(_Ctx,_Inode,_Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
-  ?DEB1(1,">write)"),
-  ?DEB2(2,"|  _Inode: ~w",_Inode),
-  ?DEB2(2,"|  _Offset: ~w",_Offset),
+write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
+  ?DEB1(1,">write"),
+  ?DEB2(2,"|  _Inode: ~b",_Inode),
+  ?DEB2(2,"|  _Offset: ~b",_Offset),
+  ?DEB2(2,"|  _Data: ~s",Data),
   ?DEB2(2,"|  _FI: ~w",_Fuse_File_Info),
-  {#fuse_reply_err{err=enotsup},State}.
+  {#fuse_reply_write{count=size(Data)},State}.
 
 %%%=========================================================================
 %%%                        NON-API FUNCTIONS 
