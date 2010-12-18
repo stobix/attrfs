@@ -54,7 +54,7 @@ direntries(Inode) ->
 
 
 %%--------------------------------------------------------------------------
-%% direntrify takes a [{Name,Inode,Type}] and returns a [fuserl:#{direntry}]
+%% direntrify takes a [{Name,Inode,Type}] and returns a [fuserl:#direntry{}]
 %%--------------------------------------------------------------------------
 direntrify([]) -> 
   ?DEB1(8,"Done converting children"),
@@ -75,6 +75,11 @@ direntrify([{Name,Inode,_Type}|Children]) ->
 
 
 
+%%--------------------------------------------------------------------------
+%% Finds the previous logical connective in a directory tree string list, 
+%%  if any, and returns the "tail" of the directory tree upwards from the 
+%%  logical connective.
+%%--------------------------------------------------------------------------
 find_conn([]) -> [];
 find_conn([A|As]=Conn) ->
   case ?CONNS(A) of
@@ -86,7 +91,7 @@ find_conn([A|As]=Conn) ->
 
 %%--------------------------------------------------------------------------
 %% children returns the children for the inode, if the inode is 
-%% present. Returns like gb_trees:lookup
+%%  present. Returns like gb_trees:lookup
 %%--------------------------------------------------------------------------
 
 
@@ -99,23 +104,15 @@ children(#inode_entry{}=Entry) ->
     case Entry#inode_entry.type of
       logic_dir ->
         % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
-        generate_logic_attribute_dir_children(Name,[]);
-        %generate_logic_attribute_dir_children(Name,?ATTR_FOLDR);
+        generate_logic_dir_children(Name,?ATTR_FOLDR);
 
       attribute_dir ->
-        ?DEB1(5,"attribute dir; generating lodic dirs"),
-        MyLogicDirs = generate_logic_dirs(Name),
-        ?DEB1(5,"filtering children"),
-        MyChildren = filter_children(find_conn(Name),Entry#inode_entry.children),
-        ?DEB1(5,"combining children"),
-        % Lets push the logic dirs to the childrens list, removing old logic dirs.
-        MyFinalChildren=lists:foldl(fun(Item,Acc) -> attr_tools:keymergeunique(Item,Acc) end, MyChildren,MyLogicDirs),
-        ?DEB2(5,"children: ~p",MyFinalChildren),
-        MyFinalChildren;
+        Entry#inode_entry.children;
 
       #dir_link{link=Ino} ->
-        ?DEB1(5,"dir link"),
-        MyChildren=generate_dir_link_children(Ino,Name),
+      % For now, I assume that all dir links are children of logical dirs, 
+        ?DEB1(5,"logical dir link"),
+        MyChildren=generate_logic_link_children(Ino,Name),
         ?DEB2(5,"generated children: ~p",MyChildren),
         MyChildren;
 
@@ -134,8 +131,9 @@ children(Inode) ->
    none -> none
  end.
 
-generate_dir_link_children(Ino,Name) ->
-  ?DEB1(3,">generate_dir_link_children"),
+
+generate_logic_link_children(Ino,Name) ->
+  ?DEB1(3,">generate_logic_link_children"),
   {value,Entry}=tree_srv:lookup(Ino,inodes),
   EntryType=Entry#inode_entry.type,
   case EntryType of
@@ -193,7 +191,7 @@ filter_children_entry(InoOrEntry,Name) ->
   %We've gotten the parent's children. now, using the connecive we've got, we combine these with the children of the dirs before the connective
   filter_children(find_conn(Name),Children).
 
-%% The first argument is a recursive list of ordered pairs, with the first element containing directory parents and the second containing the last element, a logic connective.
+%% The first argument is a list of parents, starting with a logical connective,unless the list is empty.
 %% LastChildrenUnfiltered is the children after the final logical connective in the list.
 %% XXX: This thing tails in the wrong way! This will consume much memory if we have very complicated connections.
 
@@ -205,7 +203,7 @@ filter_children([Connective|Parents],Children) ->
         false -> false;
         Ino ->
           % Since directories are filtered when created, I need not filter the children of the parent anew.
-          {value,PrevChildren} = children(Ino),
+          {value,PrevChildren}=children(Ino),
           ?DEBL(8,"Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
           attr_filter:filter(PrevChildren,Connective,Children)
       end;
@@ -225,7 +223,13 @@ filter_children([],LastChildrenUnfiltered) ->
 link_ino({_,Entry}) ->
   (Entry#inode_entry.type)#dir_link.link.
 
-generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
+%%--------------------------------------------------------------------------
+%% generate_logic_attribute_dir_children takes the name of a logic folder 
+%%  and a dir whose children will be linked to the logic dir.
+%% Since directories for some reason cannot share inode numbers, I need to
+%%  have a different inode number for each directory link.
+%%--------------------------------------------------------------------------
+generate_logic_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
   ?DEB1(6,">generate_logic_attribute_dir_children"),
   {ok,MIno}=inode:n2i(MirrorDir,ino),
@@ -243,7 +247,7 @@ generate_logic_attribute_dir_children(LogicName,MirrorDir) ->
           LinkType=#dir_link{link=Inode},
           Stat=Entry#inode_entry.stat,
           Mode=Stat#stat.st_mode,
-          LinkStat=Stat#stat{st_mode= (bnot 8#222) band Mode},
+          LinkStat=?ST_MODE(Stat,(bnot 8#222) band Mode), % Remove write permissions from child.
           LinkEntry=Entry#inode_entry{
             name=LinkName,
             links=[],
@@ -290,7 +294,8 @@ generate_logic_dir(Parent,X) ->
   Name=[X|Parent],
   Ino=inode:get(Name,ino),
   PStat=PEntry#inode_entry.stat,
-  Stat=PStat#stat{st_mode=?S_IFDIR bor 8#555},
+  % Logical dirs will not be writeable. Therefore, I do not directly copy the mode of the parent
+  Stat=?ST_MODE(PStat,?M_DIR(8#555)), 
   Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[],stat=Stat},
   ?DEB1(8,"saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),

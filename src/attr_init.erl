@@ -55,7 +55,7 @@ init({MirrorDirs,DB}) ->
       name=?LOGIC_FOLDR,
       children=[],
       type=logic_dir,
-      stat=?DIR_STAT(8#444,LogicIno),
+      stat=?DIR_STAT(8#555,LogicIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
@@ -105,7 +105,7 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(DupIno,DupEntry,inodes),
-  ?DEB1({init,1},"  duplicate folder done"),
+  ?DEB1({init,1},"duplicate folder done"),
   RealEntry=
     #inode_entry{
       name=?REAL_FOLDR,
@@ -131,19 +131,19 @@ init({MirrorDirs,DB}) ->
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
-  ?DEB1({init,5},"   updating root inode entry"),
+  ?DEB1({init,5},"updating root inode entry"),
   tree_srv:enter(RootIno,RootEntry,inodes).
 
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
-  ?DEBL({init,6},"   opening attribute database file ~s as ~s", [DB, ?ATTR_DB]),
+  ?DEBL({init,6},"opening attribute database file ~s as ~s", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   tree_srv:new(inodes), % contains inode entries
   tree_srv:new(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
   attr_open:init(),
-  ?DEB1({init,8},"   created inode and key trees"),
+  ?DEB1({init,8},"created inode and key trees"),
   inode:initiate(ino), % the inode table
-  inode:initiate(fino). % the open files "inode" table
+  inode:initiate(fino). % the open files "inode"table
 
 type_and_children(Path,FileInfo) ->
         case FileInfo#file_info.type of
@@ -202,7 +202,7 @@ make_inode_list({Path,Name0}) ->
     {ok,FileInfo} ->
       ?DEB1({init,8},"got file info"),
       {Name,OlderEntries,Ino} =get_unique(Name0),
-      ?DEB2(8,"   got unique name ~p",Name),
+      ?DEB2(8,"got unique name ~p",Name),
       if
         Name==Name0 ->
           ok;
@@ -282,9 +282,9 @@ make_duplicate_children() ->
         ext_io=attr_ext:ext_info_to_ext_io([]),
         stat=?FILE_STAT(8#755,Ino,size(Data))
         },
-      ?DEB1({init,8},"   entering dup entry into inode list"),
+      ?DEB1({init,8},"entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),
-      ?DEB1({init,8},"   done"),
+      ?DEB1({init,8},"done"),
       {Name++?DUP_EXT,Ino,#duplicate_file{}}
     end,
     tree_srv:to_list(duplicates)

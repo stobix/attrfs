@@ -57,7 +57,7 @@
 %%%=========================================================================
 -export([handle_info/2,init/1,terminate/2]).
 % TODO: Do something intelligent with this one. 
-% Returns "ok" now, totally ignoring its indata.
+% Returns "ok"now, totally ignoring its indata.
 -export([code_change/3]). 
 -export([start_link/1,start_link/5]).
 
@@ -167,39 +167,39 @@ start_link({MountDir,MirrorDir,DB}) ->
 start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
 
   ?DEB1(1,">start_link"),
-  ?DEB1(2,"   checkning if dirs are ok..."),
-  ?DEB2(2,"    ~p...",Dir),
+  ?DEB1(2,"checkning if dirs are ok..."),
+  ?DEB2(2,"~p...",Dir),
   case filelib:ensure_dir(Dir) of
     ok -> 
-      ?DEB1(2,"     path ok."),
+      ?DEB1(2,"path ok."),
       case filelib:is_dir(Dir) of
         true ->
-          ?DEB2(2,"       ~p exists, and is a dir. Ok.",Dir);
+          ?DEB2(2,"~p exists, and is a dir. Ok.",Dir);
         false->
-          ?DEB2(2,"       ~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
+          ?DEB2(2,"~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
           ?DEB1(1,"TERMINATING"),
           throw({error,dir_to_is_not_a_dir,Dir})
       end;
     E ->
-      ?DEB2(1,"     received ~p (Check your config)",E),
+      ?DEB2(1,"received ~p (Check your config)",E),
       ?DEB1(1,"TERMINATING"),
       exit(E)
   end,
-  ?DEB1(2,"    checking mirror dirs..."),
+  ?DEB1(2,"checking mirror dirs..."),
   lists:foreach(
     fun(MirrorDir) ->
       case filelib:is_dir(MirrorDir) of
         true ->
-          ?DEB2(2,"      ~p exists, and is a dir. Ok.",MirrorDir);
+          ?DEB2(2,"~p exists, and is a dir. Ok.",MirrorDir);
         false->
-          ?DEB2(2,"      ~p is not a directory!(Check your config)",MirrorDir),
+          ?DEB2(2,"~p is not a directory!(Check your config)",MirrorDir),
           ?DEB1(1,"TERMINATING"),
           throw({error,dir_from_is_not_a_dir,MirrorDir})
       end
   end,
   MirrorDirs),
   Options=[],
-  ?DEB1(2,"   starting fuserlsrv"),
+  ?DEB1(2,"starting fuserlsrv"),
   fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,{MirrorDirs,DB},Options).
 
 %%--------------------------------------------------------------------------
@@ -221,7 +221,7 @@ terminate(_Reason,_State) ->
   ?DEB1(1,">terminate"),
   ?DEB1(1,"\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n"),
   ?DEB2(1,"|  _Reason: ~p",_Reason),
-  ?DEB2(1,"   Closing database \"~p\"",?ATTR_DB),
+  ?DEB2(1,"Closing database \"~p\"",?ATTR_DB),
   dets:close(?ATTR_DB).
 
 
@@ -249,7 +249,7 @@ access(Ctx,Inode,Mask,_Continuation,State) ->
 %% Where will I allow this? Creating new real files in the real branch? Creating imaginary files elsewhere?
 %% The possibility of making a .Trash in the root folder should be considered.
 %%
-%% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying" files possible.
+%% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying"files possible.
 %%--------------------------------------------------------------------------
 create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB1(1,">create"), 
@@ -279,6 +279,7 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
                 fuse_entry_param=?ENTRY2PARAM(Entry,Inode)
               };
             _ ->
+              ?DEB1(4,"Trying to create a file outside the attribute folder! Not permitted!"),
               #fuse_reply_err{err=enotsup}
             end;
         _ ->
@@ -358,25 +359,25 @@ getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
       false -> RawName
     end,
   {value,Entry}=tree_srv:lookup(Inode,inodes),
-  ?DEB1(4,"   Got inode entry"),
+  ?DEB1(4,"Got inode entry"),
   ExtInfo=Entry#inode_entry.ext_info,
-  ?DEB1(4,"   Got extinfo"),
+  ?DEB1(4,"Got extinfo"),
   Reply=case lists:keyfind(Name,1,ExtInfo) of
     {Name,ExtInfoValue} ->
-      ?DEB1(4,"   Got attribute value"),
+      ?DEB1(4,"Got attribute value"),
       ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
       ExtSize=length(ExtAttrib),
-      ?DEBL(4,"   Converted attribute and got (~w,~w)",[ExtAttrib,ExtSize]),
+      ?DEBL(4,"Converted attribute and got (~w,~w)",[ExtAttrib,ExtSize]),
       case Size == 0 of 
-        true -> ?DEB1(4,"   They want to know our size."),#fuse_reply_xattr{count=ExtSize};
+        true -> ?DEB1(4,"They want to know our size."),#fuse_reply_xattr{count=ExtSize};
         false -> 
           case Size < ExtSize of
-            true -> ?DEBL(4,"   They are using too small a buffer; ~w < ~w ",[Size,ExtSize]),#fuse_reply_err{err=erange};
-            false -> ?DEB1(4,"   All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
+            true -> ?DEBL(4,"They are using too small a buffer; ~w < ~w ",[Size,ExtSize]),#fuse_reply_err{err=erange};
+            false -> ?DEB1(4,"All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
           end
       end;
     false ->
-      ?DEB1(4,"   Argument nonexistent, returning error"),
+      ?DEB1(4,"Argument nonexistent, returning error"),
       #fuse_reply_err{err=enodata}
   end,
   {Reply,State}.
@@ -398,20 +399,20 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
   ?DEB2(1,">listxattr inode:~w",Inode),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
-  ?DEB1(4,"   got inode entry."),
+  ?DEB1(4,"got inode entry."),
   {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
-  ?DEBL(4,"   got attributes and size (~w,~w)",[ExtAttribs,ExtSize]),
+  ?DEBL(4,"got attributes and size (~w,~w)",[ExtAttribs,ExtSize]),
   Reply=
     case Size == 0 of 
       true -> 
-        ?DEB1(4,"   they want to know our size."),
+        ?DEB1(4,"they want to know our size."),
         #fuse_reply_xattr{count=ExtSize};
       false -> 
         case Size < ExtSize of
           true -> 
-            ?DEBL(4,"   they are using a too small buffer; ~w < ~w ",[Size,ExtSize]),
+            ?DEBL(4,"they are using a too small buffer; ~w < ~w ",[Size,ExtSize]),
             #fuse_reply_err{err=erange};
-          false -> ?DEB1(4,"   all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
+          false -> ?DEB1(4,"all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
         end
     end,
   {Reply,State}.
@@ -426,19 +427,19 @@ lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
   Reply=
     case attr_lookup:children(ParentInode) of
       {value,Children} ->
-        ?DEBL(4,"   Got children for ~p",[ParentInode]),
+        ?DEBL(4,"Got children for ~p",[ParentInode]),
         case lists:keysearch(Child,1,Children) of
           {value,{_,Inode,_}} ->
-            ?DEB2(4,"   Found child ~p",Child),
+            ?DEB2(4,"Found child ~p",Child),
             {value,Entry} = tree_srv:lookup(Inode,inodes),
-            ?DEB1(4,"   Got child inode entry, returning..."),
+            ?DEB1(4,"Got child inode entry, returning..."),
             #fuse_reply_entry{fuse_entry_param=?ENTRY2PARAM(Entry,Inode)};
           false ->
-            ?DEB1(4,"   Child nonexistent!"),
+            ?DEB1(4,"Child nonexistent!"),
             #fuse_reply_err{err=enoent} % child nonexistent.
         end;
       none -> 
-        ?DEB1(4,"   Parent nonexistent!"),
+        ?DEB1(4,"Parent nonexistent!"),
         #fuse_reply_err{err=enoent} %no parent
     end,
   {Reply,State}.
@@ -473,7 +474,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
         ParentName=Parent#inode_entry.name,
         ParentType=Parent#inode_entry.type,
         Rreply=attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode),
-        ?DEB2(4,"  got reply ~p",Rreply),
+        ?DEB2(4,"got reply ~p",Rreply),
         Rreply
     end,
   {Reply,State}.
@@ -505,11 +506,11 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   _Name=Entry#inode_entry.name,
-  ?DEBL(2,"   Internal file name: ~p",[_Name]),
+  ?DEBL(2,"Internal file name: ~p",[_Name]),
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
-        ?DEBL(4,"   External file path: ~p",[Path]),
+        ?DEBL(4,"External file path: ~p",[Path]),
             case file:open(Path,[read,binary]) of
 %            case file:open(Path,[read,raw]) of
                 {ok,IoDevice} ->
@@ -521,7 +522,7 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
             end;
 %        #fuse_reply_open{fuse_file_info=Fuse_File_Info};
       duplicate_file ->
-        ?DEB1(4,"  duplicate file"),
+        ?DEB1(4,"duplicate file"),
         MyFino=inode:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{ino=Inode}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
@@ -540,12 +541,12 @@ opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
   ?DEB2(2,"|  Inode: ~w ",Inode),
   ?DEB2(2,"|  FI: ~w", FI),
   ?DEB2(2,"|  _flags: ~w",_Flags),
-%    ?DEB2("   writepage ~w",_Writepage),
-%    ?DEB2("   DirectIO ~w",_DirectIO),
-%    ?DEB2("   KeepCache ~w",_KeepCache),
-%    ?DEB2("   FileHandle ~w",_Fh),
-  ?DEB2(4,"  Getting inode entries for ~w",Inode),
-  ?DEB1(4,"  Creating directory entries from inode entries"),
+%    ?DEB2("writepage ~w",_Writepage),
+%    ?DEB2("DirectIO ~w",_DirectIO),
+%    ?DEB2("KeepCache ~w",_KeepCache),
+%    ?DEB2("FileHandle ~w",_Fh),
+  ?DEB2(4,"Getting inode entries for ~w",Inode),
+  ?DEB1(4,"Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
   MyFIno=inode:get(fino),
   attr_open:set(MyFIno,Inode,attr_opendir:direntries(Inode)),
@@ -565,21 +566,21 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB2(2,"|  Offset: ~w",Offset),
   ?DEB2(2,"|  FI: ~w", Fuse_File_Info),
     #fuse_file_info{fh=FIno}=Fuse_File_Info,
-    ?DEB2(4,"   looking up fino ~w",FIno),
+    ?DEB2(4,"looking up fino ~w",FIno),
     {value,File}=attr_open:lookup(FIno),
-    ?DEB1(4,"   extracting io_device"),
+    ?DEB1(4,"extracting io_device"),
     Reply=case File of
       #open_external_file{io_device=IoDevice} -> 
-        ?DEB1(4,"   got file and iodevice, reading..."),
+        ?DEB1(4,"got file and iodevice, reading..."),
         case file:pread(IoDevice,Offset,Size) of
           {ok, Data} ->
-            ?DEB1(4,"   data read, returning"),
+            ?DEB1(4,"data read, returning"),
             #fuse_reply_buf{buf=Data,size=erlang:size(Data)};
           eof ->
-            ?DEB1(4,"   eof reached, returning nodata"),
+            ?DEB1(4,"eof reached, returning nodata"),
             #fuse_reply_err{err=enodata};
           _E ->
-            ?DEB2(4,"   other error, returning ~w",_E),
+            ?DEB2(4,"other error, returning ~w",_E),
             #fuse_reply_err{err=eio}
         end;
       #open_duplicate_file{ino=Ino} ->
@@ -607,7 +608,7 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   Reply=
     case attr_open:lookup(FIno) of 
       {value, OpenDir} ->
-        ?DEBL(4,"  ~p =< ~p",[Offset,length(OpenDir)]),
+        ?DEBL(4,"~p =< ~p",[Offset,length(OpenDir)]),
         DirEntryList = 
           case Offset=<length(OpenDir) of
             true ->
@@ -627,7 +628,7 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
             false ->
                 []
           end,
-        ?DEB2(4,"   returning ~p",DirEntryList),
+        ?DEB2(4,"returning ~p",DirEntryList),
         #fuse_reply_direntrylist{ direntrylist = DirEntryList };
     none ->
         #fuse_reply_err{err=enoent} % XXX: What should this REALLY return when the file is not open for this user?
@@ -684,14 +685,14 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
   Syek=string:tokens(Name,?KEY_SEP),
-  ?DEB2(4,"   tokenized key: ~w",[Syek]),
+  ?DEB2(4,"tokenized key: ~w",[Syek]),
   Keys=lists:reverse(Syek),
-  ?DEBL(4,"   key to be deleted: ~w",[Keys]),
+  ?DEBL(4,"key to be deleted: ~w",[Keys]),
       attr_remove:remove_key_values(Path,Inode,Keys),
-      ?DEB1(4,"   Removed attribute, if any, from database and inode entry"),
+      ?DEB1(4,"Removed attribute, if any, from database and inode entry"),
       {#fuse_reply_err{err=ok},State};
     _ ->
-      ?DEB1(4,"   Non-supported inode type"),
+      ?DEB1(4,"Non-supported inode type"),
       {#fuse_reply_err{err=enosup},State}
   end.
 
@@ -738,7 +739,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
   {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
   PType=PEntry#inode_entry.type,
   PName=PEntry#inode_entry.name,
-  ?DEBL(2,"   parent type ~w",[PType]),
+  ?DEBL(2,"parent type ~w",[PType]),
   % So I don't have to lookup two entries, I match the parent type instead of the child type.
   Reply=
     case PType of
@@ -770,56 +771,56 @@ setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
     st_uid=
       case (?FUSE_SET_ATTR_UID band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    setting UID"),
+          ?DEB1(4,"setting UID"),
           Attr#stat.st_uid;
         true ->
-          ?DEB1(4,"    not setting UID"),
+          ?DEB1(4,"not setting UID"),
           Stat#stat.st_uid
       end
     ,st_gid=
       case (?FUSE_SET_ATTR_GID band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    setting GID"),
+          ?DEB1(4,"setting GID"),
           Attr#stat.st_gid;
         true ->
-          ?DEB1(4,"    not setting GID"),
+          ?DEB1(4,"not setting GID"),
           Stat#stat.st_gid
       end
     ,st_atime=
       case (?FUSE_SET_ATTR_ATIME band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    setting atime"),
+          ?DEB1(4,"setting atime"),
           Attr#stat.st_atime;
         true ->
-          ?DEB1(4,"    not setting atime"),
+          ?DEB1(4,"not setting atime"),
           Stat#stat.st_atime
       end
     ,st_mtime=
       case (?FUSE_SET_ATTR_MTIME band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    setting mtime"),
+          ?DEB1(4,"setting mtime"),
           Attr#stat.st_mtime;
         true ->
-          ?DEB1(4,"    not setting mtime"),
+          ?DEB1(4,"not setting mtime"),
           Stat#stat.st_mtime
       end
     ,st_mode=
       case (?FUSE_SET_ATTR_MODE band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    setting mode"),
+          ?DEB1(4,"setting mode"),
           Attr#stat.st_mode;
         true ->
-          ?DEB1(4,"    not setting mode"),
+          ?DEB1(4,"not setting mode"),
           Stat#stat.st_mode
       end
     ,st_size=
       case (?FUSE_SET_ATTR_SIZE band ToSet) == 0 of
         false ->
-          ?DEB1(4,"    ignoring setting size"),
+          ?DEB1(4,"ignoring setting size"),
         %  Attr#stat.st_size;
           Stat#stat.st_size;
         true ->
-          ?DEB1(4,"    not setting size"),
+          ?DEB1(4,"not setting size"),
           Stat#stat.st_size
       end
   },
@@ -851,9 +852,9 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   ?DEB2(2,"|  Key: ~w ",RawKey),
   ?DEB2(2,"|  Value: ~w ",RawValue),
   ?DEB2(2,"|  _Flags: ~w ",_Flags),
-  ?DEB1(4,"   getting inode entry"),
+  ?DEB1(4,"getting inode entry"),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
-  ?DEB1(4,"   transforming input data"),
+  ?DEB1(4,"transforming input data"),
   Key=
     case string:str(RawKey,"system")==1 of
       true -> "."++RawKey;
@@ -861,30 +862,30 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     end,
 
   Values=string:tokens(RawValue,?VAL_SEP),
-  ?DEB2(4,"   got values: ~w",Values),
+  ?DEB2(4,"got values: ~w",Values),
 
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
-        ?DEB1(4,"   entry is an external file"),
+        ?DEB1(4,"entry is an external file"),
         Syek=string:tokens(Key,?KEY_SEP),
-        ?DEB2(4,"   tokenized key: ~w",[Syek]),
+        ?DEB2(4,"tokenized key: ~w",[Syek]),
         Keys=lists:reverse(Syek),
-        ?DEBL(4,"   key to be inserted: ~w",[Keys]),
+        ?DEBL(4,"key to be inserted: ~w",[Keys]),
         case Values of
           [] -> attr_ext:add_new_attribute(Path,Inode,Entry,Keys);
           _Values ->
             lists:foreach(
               fun(Value) -> 
                 Attr=[Value|Keys],
-                ?DEBL(4,"   adding attribute {~p} for file ~p to database",[Attr,Path]),
+                ?DEBL(4,"adding attribute {~p} for file ~p to database",[Attr,Path]),
                 attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
               end,
               Values)
         end,
         #fuse_reply_err{err=ok};
       _ ->
-        ?DEB1(4,"   entry not an external file, skipping..."),
+        ?DEB1(4,"entry not an external file, skipping..."),
         #fuse_reply_err{err=enotsup}
     end,
   {Reply,State}.
@@ -1002,23 +1003,23 @@ write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %% Getattr internal functions
 %%--------------------------------------------------------------------------
 getattr_internal(Inode,Continuation) ->
-  ?DEB2(3,"  >getattr_internal inode:~w",Inode),
+  ?DEB2(3,">getattr_internal inode:~w",Inode),
   case tree_srv:lookup(Inode,inodes) of
     none ->
-      ?DEB1(5,"   Non-existent file"),
+      ?DEB1(5,"Non-existent file"),
       Reply=#fuse_reply_err{err=enoent};
     {value,Entry} ->
-      ?DEB1(5,"   File exists, returning info"),
+      ?DEB1(5,"File exists, returning info"),
       Reply=
         #fuse_reply_attr{
           attr=Entry#inode_entry.stat,
           attr_timeout_ms=5
         };
     _A -> 
-      ?DEB2(5,"   This should not be happening: ~p",_A),
+      ?DEB2(5,"This should not be happening: ~p",_A),
       Reply=#fuse_reply_err{err=enotsup}
   end,
-  ?DEB1(5,"   Sending reply"),
+  ?DEB1(5,"Sending reply"),
   fuserlsrv:reply(Continuation,Reply).
 
 %%%=========================================================================

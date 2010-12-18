@@ -55,24 +55,32 @@
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}
 
+% Without one these set, files and directories will not get recognized.
 -define(FILE_BIT, 8#100000).
 -define(DIR_BIT, ?S_IFDIR).
 
+% Makes the stat user executable.
 -define(UEXEC(X), (X#stat{st_mode=(X#stat.st_mode bor 8#100)})).
 
-
+%Sets, respectively, the dir bit and file bit of the mode provided.
 -define(M_DIR(X),?DIR_BIT bor (X)).
 -define(M_FILE(X),?FILE_BIT bor (X)).
 
+% Used to change a stat to a dir stat
+-define(DIR(Stat),Stat#stat{st_mode=(Stat#stat.st_mode band 8#777)bor?S_IFDIR}).
 
+% Used to create a new dir stat
 -define(DIR_STAT(Mode,Ino),((attr_tools:curr_time_stat())#stat{st_mode=?M_DIR(Mode),st_ino=(Ino)})).
-%% Files with no size specified outputs no data on read.
+% Used to create a new file stat
+% Files with no size specified outputs no data on read.
 -define(FILE_STAT(Mode,Ino,Size),((attr_tools:curr_time_stat())#stat{st_mode=?M_FILE(Mode),st_ino=(Ino),st_size=Size})).
 
+% Used to set the stat ino, mode or nlink, respectively.
 -define(ST_INO(Stat,Ino),(Stat#stat{st_ino=Ino})).
 -define(ST_MODE(Stat,Mode),(Stat#stat{st_mode=Mode})).
 -define(ST_NLINK(Stat,NLink),(Stat#stat{st_nlink=NLink})).
 
+% "Standard directory mode". Thought to be used as a user settable
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 
 -record(initargs,
@@ -148,10 +156,8 @@
         % file system server.
         {
         % The unique name the file uses internally. 
-        % Name, for normal files (How do I fix duplicates?)
-        % {Parent, Name} for Attribute value dirs
-        % {{Grandparent,Parent},Name} for logical dirs.
-        % maybe {Ggp,Gp,P,N} for parentheses foo/or/(/a/AND/B/)
+        %  Name, for normal files
+        %  [Name,Parent] for Attribute value dirs and logical dirs.
         name::inode_entry_name() 
         % children are the children of the file/dir
         ,children::name_list()
@@ -182,12 +188,11 @@
 
 -record(state,
         {
-        open_files%%::#gb_trees{} of #direntry{} with inode_number() keys 
+        open_files%%::#gb_trees{} with inode_number() keys 
         }).
 
--define (DIR (Stat), Stat#stat{ st_mode = (Stat#stat.st_mode band 8#777) bor ?S_IFDIR }).
-%-define (DIR (Stat), Stat).
 
+% Transformsa an #inode_entry inte a #fuse_entry_param
 -define (ENTRY2PARAM (Entry,Inode), 
     #fuse_entry_param{ ino=Inode,
                        generation=0,
@@ -195,14 +200,3 @@
                        attr_timeout_ms=1000,
                        entry_timeout_ms=1000}).
 
-
-%these I stole from fuserlproc. Maybe they'll come in handy.
-%-define (DIRATTR (X), #stat{ st_ino = (X), 
-%                             st_mode = ?S_IFDIR bor 8#0555, 
-%                             st_nlink = 1 }).
-%
-%
-%-define(STAT (X,Y,Z), #stat{ st_ino = (X),
-%                             st_mode = (Y),
-%                             st_nlink = Z
-%                                 }.

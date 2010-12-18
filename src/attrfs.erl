@@ -27,7 +27,7 @@
 
 start(_dont,_care) ->
   ?DEB2(1,"Starting ~p",?MODULE),
-  ?DEB1(1,"  getting arguments"),
+  ?DEB1(1,"getting arguments"),
   DirFrom=case application:get_env(?MODULE,from_dir) of
     {ok,DF} -> [DF];
     undefined -> vget(from_dirs)
@@ -54,9 +54,9 @@ stop(_State) -> ok.
 vget(Attribute) ->
   case application:get_env(?MODULE,Attribute) of
     {ok,Value} -> 
-      ?DEBL(2,"  ~p: ~p",[Attribute,Value]),
+      ?DEBL(2,"~p: ~p",[Attribute,Value]),
       Value;
     undefined -> 
-      ?DEB2(1,"  ~p not defined! check your config file!",Attribute),
+      ?DEB2(1,"~p not defined! check your config file!",Attribute),
     exit("not found")
   end.
