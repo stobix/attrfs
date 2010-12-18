@@ -745,18 +745,16 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
     case PType of
       attribute_dir ->
         Name=binary_to_list(BName),
-        attr_remove:remove_child_from_parent(Name,PName),
-        % This case clause is needed since files and directories inside attribute dirs have different name structures.
-        OldIno=
-          case inode:n2i(Name,ino) of
-            {ok,OldIno0} -> OldIno0;
-            {error,_} -> 
-              case inode:n2i([Name|PName],ino) of
-                {ok,OldIno0} -> OldIno0;
-                E -> E
-              end
-          end,
-        inode:release(OldIno,ino);
+        {ok,Ino}=inode:n2i([Name|PName],ino),
+        {value,Entry}=tree_srv:lookup(Ino,inodes),
+        case Entry#inode_entry.children of
+          [] ->
+            attr_remove:remove_child_from_parent(Name,PName),
+            inode:release(Ino,ino),
+            ok;
+          _Children ->
+            enotempty
+        end;
       _ ->
         enotsup
     end,
