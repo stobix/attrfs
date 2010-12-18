@@ -37,8 +37,6 @@
 
 -export([find_conn/1]).
 
--export([link_ino/1]).
-
 -define(CONNS(X),((X==?AND_FOLDR) or (X==?OR_FOLDR) or (X==?BUTNOT_FOLDR))).
 
 %%--------------------------------------------------------------------------
@@ -216,22 +214,15 @@ filter_children([Connective|Parents],Children) ->
 filter_children([],LastChildrenUnfiltered) ->
       LastChildrenUnfiltered.
 
-
-
-
-
-link_ino({_,Entry}) ->
-  (Entry#inode_entry.type)#dir_link.link.
-
 %%--------------------------------------------------------------------------
-%% generate_logic_attribute_dir_children takes the name of a logic folder 
+%% generate_logic_dir_children takes the name of a logic folder 
 %%  and a dir whose children will be linked to the logic dir.
 %% Since directories for some reason cannot share inode numbers, I need to
 %%  have a different inode number for each directory link.
 %%--------------------------------------------------------------------------
 generate_logic_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
-  ?DEB1(6,">generate_logic_attribute_dir_children"),
+  ?DEB1(6,">generate_logic_dir_children"),
   {ok,MIno}=inode:n2i(MirrorDir,ino),
   ?DEB2(8,"attributes ino: ~p",MIno),
   ?DEB1(8,"getting attributes entry "),

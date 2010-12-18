@@ -13,9 +13,9 @@
       {linked_in,true},
       {real_name,"real"},
       {attr_name,"attributes"},
-      {and_name,".AND"},
-      {or_name,".OR"},
-      {butnot_name,".BUTNOT"},
+      {and_name,"AND"},
+      {or_name,"OR"},
+      {butnot_name,"BUTNOT"},
       {all_name,"all"},
       {dup_name,"duplicates"},
       {mount_opts, "allow_other,default_permissions"}
