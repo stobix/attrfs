@@ -28,6 +28,7 @@ fs_prereq() ->
              {linked_in,true},
              {real_name,"r"},
              {attr_name,"a"},
+             {logic_name,"l"},
              {all_name,"all"},
              {dup_name,"dup"},
              {and_name,"&"},
@@ -82,7 +83,7 @@ ls_test() ->
   [?_assertCmdOutput("a\nr\n","ls test/to")].
 
 create_test_() ->
-  [?_assertCmdOutput("a\nr\n","ls test/to"),
+  [?_assertCmdOutput("a\nl\nr\n","ls test/to"),
    ?_assertCmd("mkdir -p test/to/a/a/b"),
    move_to("a/b/"),
    ?_assertCmdOutput("Attribute \"a\" had a 1 byte value for test/to/r/from/foo:\nb\n","attr -g a test/to/r/from/foo"),
@@ -132,8 +133,8 @@ access_test_() ->
   Foo="test/to/r/from/foo",
   ABCFoo="test/to/a/b/c/foo",
   ABC="test/to/a/b/c",
-  ABCANDAB="test/to/a/b/c/\\&/b/c",
-  ABCANDABFoo="test/to/a/b/c/\\&/b/c/foo",
+  ABCANDAB="test/to/l/b/c/\\&/b/c",
+  ABCANDABFoo="test/to/l/b/c/\\&/b/c/foo",
   [?_assertCmd("attr -s b -V c " ++ Foo),
    ?_assertCmdOutput("drwxr-xr-x\n","ls -ld " ++ ABC         ++ "|cut -f1 -d \" \""),
    ?_assertCmdOutput("-rw-r--r--\n","ls -l "  ++ ABCFoo      ++ "|cut -f1 -d \" \""),
@@ -159,6 +160,24 @@ all_test_() ->
    ?_assertCmdStatus(1,"ls test/to/a/a/b/c|grep foo"),
    ?_assertCmd("attr -r \"a/b\" "++Bar)
    ].
+
+rmdir_test_() ->
+  From="test/to/r/from/",
+  To="test/to/a/",
+  Foo=From++"foo",
+  Bar=From++"bar",
+  Key="b/c",
+  Val="d",
+  AFoo=To++Key++"/"++Val++"/foo",
+  ABar=To++Key++"/"++Val++"/bar",
+  [?_assertCmd("attr -s \""++Key++"\" -V "++Val++" "++Foo),
+   ?_assertCmd("attr -s \""++Key++"\" -V "++Val++" "++Bar),
+   ?_assertCmd("rm "++AFoo),
+   ?_assertCmd("attr -g \""++Key++"\" "++Bar),
+   ?_assertCmdStatus(2,"ls "++AFoo),
+   ?_assertCmd("rm -r "++To++Key++"/"++Val),
+   ?_assertCmdStatus(2,"ls "++ABar),
+   ?_assertCmdStatus(1,"attr -g \""++Key++"\" "++Bar)].
 
 namespace_test_() ->
   Foo="test/to/r/from/foo",

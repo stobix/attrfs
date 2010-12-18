@@ -393,7 +393,7 @@ register__(Name,Number,{CurrentHighest,Frees,Reserved}) ->
 
 return__(NewFree, {CurrentHighest,Frees,Reserved}) ->
   NewReserved=lists:keydelete(NewFree,2,Reserved),
-  {noreply,{CurrentHighest,[NewFree|Frees],NewReserved}}.
+  {CurrentHighest,[NewFree|Frees],NewReserved}.
 
 
 -ifdef(EUNIT).

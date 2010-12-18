@@ -734,8 +734,8 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
   ?DEB1(1,">rmdir"),
   ?DEB2(2,"|  Ctx:~w",_Ctx),
-  ?DEB2(2,"|  PIno: ~w ",ParentInode),
-  ?DEB2(2,"|  BName: ~w",BName),
+  ?DEB2(2,"|  PIno: ~p ",ParentInode),
+  ?DEB2(2,"|  BName: ~p",BName),
   {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
   PType=PEntry#inode_entry.type,
   PName=PEntry#inode_entry.name,
@@ -746,9 +746,17 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
       attribute_dir ->
         Name=binary_to_list(BName),
         attr_remove:remove_child_from_parent(Name,PName),
-        {ok,OldIno}=inode:n2i(Name,ino),
-        inode:release(OldIno,ino),
-        ok;
+        % This case clause is needed since files and directories inside attribute dirs have different name structures.
+        OldIno=
+          case inode:n2i(Name,ino) of
+            {ok,OldIno0} -> OldIno0;
+            {error,_} -> 
+              case inode:n2i([Name|PName],ino) of
+                {ok,OldIno0} -> OldIno0;
+                E -> E
+              end
+          end,
+        inode:release(OldIno,ino);
       _ ->
         enotsup
     end,

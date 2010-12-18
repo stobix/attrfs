@@ -37,6 +37,10 @@
          remove_key_values/3,
          remove_empty_dir/2]).
 
+%%--------------------------------------------------------------------------
+%% Takes a child name, a parent name, and removes the child from the list of
+%%  children in the inode entry of the parent.
+%%--------------------------------------------------------------------------
 remove_child_from_parent(ChildName,ParentName) ->
   {ok,Inode}=inode:n2i(ParentName,ino),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
