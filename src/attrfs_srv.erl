@@ -235,13 +235,13 @@ terminate(_Reason,_State) ->
 %%Check file access permissions. Mask is a bitmask consisting of ?F_OK, ?X_OK, ?W_OK, and ?R_OK, which are portably defined in fuserl.hrl . #fuse_reply_err{err = ok} indicates success. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type access_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-access(Ctx,Inode,Mask,_Continuation,State) ->
+access(Ctx,Inode,Mask,Continuation,State) ->
   ?DEB1(1,">access"),
   ?DEB2(2,"|  Ctx: ~w ",Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
   ?DEB2(2,"|  Mask: ~w ",Mask),
-  Reply=attr_tools:test_access(Inode,Mask,Ctx),
-  {#fuse_reply_err{err=Reply},State}.
+  spawn(fun() -> attr_async:access(Ctx,Inode,Mask,Continuation) end),
+  {noreply,State}.
 
 %%--------------------------------------------------------------------------
 %% Create and open a file. Mode is a bitmask consisting of ?S_XXXXX macros portably defined in fuserl.hrl . If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type create_async_reply (). 
@@ -333,7 +333,7 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
   ?DEBL(1,">getattr inode:~w",[Inode]),
   % I must do this by spawning, lest fuserl hangs erl and fuse!!!
-  spawn(fun() -> getattr_internal(Inode,Continuation) end),
+  spawn(fun() -> attr_async:getattr(Inode,Continuation) end),
   {noreply,State}.
 
 
@@ -350,37 +350,11 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 %%--------------------------------------------------------------------------
-getxattr(_Ctx,Inode,BName,Size,_Continuation,State) ->
+getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
   RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEBL(1,">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
-  Name=
-    case string:str(RawName,"system")==1 of
-      true -> "."++RawName;
-      false -> RawName
-    end,
-  {value,Entry}=tree_srv:lookup(Inode,inodes),
-  ?DEB1(4,"Got inode entry"),
-  ExtInfo=Entry#inode_entry.ext_info,
-  ?DEB1(4,"Got extinfo"),
-  Reply=case lists:keyfind(Name,1,ExtInfo) of
-    {Name,ExtInfoValue} ->
-      ?DEB1(4,"Got attribute value"),
-      ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
-      ExtSize=length(ExtAttrib),
-      ?DEBL(4,"Converted attribute and got (~w,~w)",[ExtAttrib,ExtSize]),
-      case Size == 0 of 
-        true -> ?DEB1(4,"They want to know our size."),#fuse_reply_xattr{count=ExtSize};
-        false -> 
-          case Size < ExtSize of
-            true -> ?DEBL(4,"They are using too small a buffer; ~w < ~w ",[Size,ExtSize]),#fuse_reply_err{err=erange};
-            false -> ?DEB1(4,"All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
-          end
-      end;
-    false ->
-      ?DEB1(4,"Argument nonexistent, returning error"),
-      #fuse_reply_err{err=enodata}
-  end,
-  {Reply,State}.
+  spawn(fun() -> attr_async:getxattr(Inode,RawName,Size,Continuation) end),
+  {noreply,State}.
     
     
 %%--------------------------------------------------------------------------
@@ -421,28 +395,11 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 %% Lookup a directory entry by name and get its attributes. Returning an entry with inode zero means a negative entry which is cacheable, whereas an error of enoent is a negative entry which is not cacheable. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type lookup_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-lookup(_Ctx,ParentInode,BinaryChild,_Continuation,State) ->
+lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
   Child=binary_to_list(BinaryChild),
   ?DEBL(1,">lookup Parent: ~p Name: ~s",[ParentInode,Child]),
-  Reply=
-    case attr_lookup:children(ParentInode) of
-      {value,Children} ->
-        ?DEBL(4,"Got children for ~p",[ParentInode]),
-        case lists:keysearch(Child,1,Children) of
-          {value,{_,Inode,_}} ->
-            ?DEB2(4,"Found child ~p",Child),
-            {value,Entry} = tree_srv:lookup(Inode,inodes),
-            ?DEB1(4,"Got child inode entry, returning..."),
-            #fuse_reply_entry{fuse_entry_param=?ENTRY2PARAM(Entry,Inode)};
-          false ->
-            ?DEB1(4,"Child nonexistent!"),
-            #fuse_reply_err{err=enoent} % child nonexistent.
-        end;
-      none -> 
-        ?DEB1(4,"Parent nonexistent!"),
-        #fuse_reply_err{err=enoent} %no parent
-    end,
-  {Reply,State}.
+  spawn(fun() -> attr_async:lookup(ParentInode,Child,Continuation) end),
+  {noreply,State}.
 
 %%--------------------------------------------------------------------------
 %% Make a directory. Mode is a mask composed of the ?S_XXXXX macros which are (portably) defined in fuserl.hrl. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type mkdir_async_reply ().
@@ -925,7 +882,6 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
   }.
 
 
-%    {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
 %% Create a symbolic link. Link is the contents of the link. Name is the name to create. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type symlink_async_reply ().
@@ -997,40 +953,6 @@ write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
   ?DEB2(2,"|  _Data: ~s",Data),
   ?DEB2(2,"|  _FI: ~w",_Fuse_File_Info),
   {#fuse_reply_write{count=size(Data)},State}.
-
-%%%=========================================================================
-%%%                        NON-API FUNCTIONS 
-%%%=========================================================================
-
-%%%=========================================================================
-%%% Callback function internals
-%%%=========================================================================
-%%--------------------------------------------------------------------------
-%% Getattr internal functions
-%%--------------------------------------------------------------------------
-getattr_internal(Inode,Continuation) ->
-  ?DEB2(3,">getattr_internal inode:~w",Inode),
-  case tree_srv:lookup(Inode,inodes) of
-    none ->
-      ?DEB1(5,"Non-existent file"),
-      Reply=#fuse_reply_err{err=enoent};
-    {value,Entry} ->
-      ?DEB1(5,"File exists, returning info"),
-      Reply=
-        #fuse_reply_attr{
-          attr=Entry#inode_entry.stat,
-          attr_timeout_ms=5
-        };
-    _A -> 
-      ?DEB2(5,"This should not be happening: ~p",_A),
-      Reply=#fuse_reply_err{err=enotsup}
-  end,
-  ?DEB1(5,"Sending reply"),
-  fuserlsrv:reply(Continuation,Reply).
-
-%%%=========================================================================
-%%%                       SHARED UTILITY FUNCTIONS
-%%%=========================================================================
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS
