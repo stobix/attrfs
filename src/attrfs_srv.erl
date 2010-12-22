@@ -585,7 +585,7 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
             false ->
                 []
           end,
-        ?DEB2(4,"returning ~p",DirEntryList),
+        ?DEB2(9,"returning ~p",DirEntryList),
         #fuse_reply_direntrylist{ direntrylist = DirEntryList };
     none ->
         #fuse_reply_err{err=enoent} % XXX: What should this REALLY return when the file is not open for this user?

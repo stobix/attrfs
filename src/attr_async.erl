@@ -112,9 +112,9 @@ lookup(ParentInode,Child,Continuation) ->
         ?DEB1(4,"Parent nonexistent!"),
         #fuse_reply_err{err=enoent} %no parent
     end,
-  fuserlsrv:reply(Reply,Continuation).
+  fuserlsrv:reply(Continuation,Reply).
 
 
 access(Ctx,Inode,Mask,Continuation) ->
   Reply=attr_tools:test_access(Inode,Mask,Ctx),
-  fuserlsrv:reply(#fuse_reply_err{err=Reply},Continuation).
+  fuserlsrv:reply(Continuation,#fuse_reply_err{err=Reply}).
