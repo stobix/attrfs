@@ -240,7 +240,10 @@ access(Ctx,Inode,Mask,Continuation,State) ->
   ?DEB2(2,"|  Ctx: ~w ",Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
   ?DEB2(2,"|  Mask: ~w ",Mask),
-  spawn(fun() -> attr_async:access(Ctx,Inode,Mask,Continuation) end),
+  attr_reply:watch(
+      fun(Token) -> attr_async:access(Ctx,Inode,Mask,Token) end,
+      Continuation,
+      #fuse_reply_err{err=eacces}),
   {noreply,State}.
 
 %%--------------------------------------------------------------------------
@@ -333,7 +336,10 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
   ?DEBL(1,">getattr inode:~w",[Inode]),
   % I must do this by spawning, lest fuserl hangs erl and fuse!!!
-  spawn(fun() -> attr_async:getattr(Inode,Continuation) end),
+  attr_reply:watch(
+      fun(Token) -> attr_async:getattr(Inode,Token) end,
+      Continuation,
+      #fuse_reply_err{err=enotsup}),
   {noreply,State}.
 
 
@@ -353,7 +359,9 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
   RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEBL(1,">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
-  spawn(fun() -> attr_async:getxattr(Inode,RawName,Size,Continuation) end),
+  attr_reply:watch(fun(Token) -> attr_async:getxattr(Inode,RawName,Size,Token) end,
+    Continuation,
+    #fuse_reply_err{err=enodata}),
   {noreply,State}.
     
     
@@ -398,7 +406,10 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
   Child=binary_to_list(BinaryChild),
   ?DEBL(1,">lookup Parent: ~p Name: ~s",[ParentInode,Child]),
-  spawn(fun() -> attr_async:lookup(ParentInode,Child,Continuation) end),
+    attr_reply:watch(
+      fun(Token) -> attr_async:lookup(ParentInode,Child,Token) end,
+      Continuation,
+      #fuse_reply_err{err=enoent}),
   {noreply,State}.
 
 %%--------------------------------------------------------------------------
