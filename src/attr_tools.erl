@@ -138,10 +138,10 @@ remove_from_start_test_() ->
 transmogrify(Boolean,NewTrue,NewFalse) ->
   if 
     Boolean -> 
-      ?DEBL("   transmogrifying ~p into ~p",[Boolean,NewTrue]),
+      ?DEBL(5,"transmogrifying ~p into ~p",[Boolean,NewTrue]),
       NewTrue;
     true -> 
-      ?DEBL("   transmogrifying ~p into ~p",[Boolean,NewFalse]),
+      ?DEBL(5,"transmogrifying ~p into ~p",[Boolean,NewFalse]),
       NewFalse
   end.
 
@@ -153,19 +153,19 @@ transmogrify_test_() ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 test_access(Inode,Mask,Ctx) ->
-  ?DEB1("   checking access..."),
+  ?DEB1(5,"checking access..."),
   case tree_srv:lookup(Inode,inodes) of
     {value, Entry} ->
       % Can I use the mask like this?
       case Mask of
         ?F_OK ->
-          ?DEB1("   file existing"),
+          ?DEB1(7,"file existing"),
           ok;
         _ -> 
           transmogrify(has_rwx_access(Entry,Mask,Ctx),ok,eacces)
       end;
     none ->
-      ?DEB1("   file does not exist!"),
+      ?DEB1(7,"file does not exist!"),
       enoent
   end.
 
@@ -278,7 +278,6 @@ has_user_perms(Mode,Mask) ->
 %% or create a tree with my own insertion algorithm.
 
 merge_duplicates(List) ->
-  ?DEB2(" indata: ~p",List),
   Tree=make_unduplicate_tree(List),
   gb_trees:to_list(Tree).
 
@@ -294,7 +293,7 @@ merge_duplicates_test_() ->
 -endif.
 %%--------------------------------------------------------------------------
 %% Takes a [{Key,Val}] and transforms it into a gb_tree where each key only has one val.
-%% If the list contains several identical keys, their values are combined using "," as a separator.
+%% If the list contains several identical keys, their values are combined using ","as a separator.
 %%--------------------------------------------------------------------------
 make_unduplicate_tree(List) ->
   make_unduplicate_tree(List,gb_trees:empty()).
@@ -317,7 +316,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
 %%--------------------------------------------------------------------------
 dir(Stat) ->
   NewMode= ?STD_DIR_MODE,
-  ?DEBL("   transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
+  ?DEBL(5,"transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
 
 
@@ -325,7 +324,7 @@ dir(Stat) ->
 %% returns a stat with the current time in it.
 %%--------------------------------------------------------------------------
 curr_time_stat() ->
-  {MegaNow,NormalNow,_} = now(),
+  {MegaNow,NormalNow,_}=now(),
   Now=MegaNow*1000000+NormalNow,
     #stat{
       st_atime=Now,
@@ -348,7 +347,7 @@ datetime_to_epoch_test_() ->
 %% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
 %%--------------------------------------------------------------------------
 statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-  ?DEBL("    converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
+  ?DEBL(7,"converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
   #stat{
     st_dev= {MajorDevice,MinorDevice},
     st_ino=Inode,
@@ -369,26 +368,27 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 %%--------------------------------------------------------------------------
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry{}) ->
   PName=ParentEntry#inode_entry.name,
-  ?DEBL(" »append_child: Child: ~p Parent: ~p",[NewChild,ParentEntry#inode_entry.name]),
+  ?DEBL(7,"»append_child: Child: ~p Parent: ~p",[element(1,NewChild),ParentEntry#inode_entry.name]),
   Children=ParentEntry#inode_entry.children,
-  ?DEB2("     children: ~p",Children),
+  ?DEB2(9,"children: ~p",Children),
   NewChildren=attr_tools:keymergeunique(NewChild,Children),
-  ?DEB2("     merged children: ~p",NewChildren),
+  ?DEB2(9,"merged children: ~p",NewChildren),
   NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
-  ?DEB1("     created new parent entry"),
+  ?DEB1(9,"created new parent entry"),
   {ok,ParentIno}=inode:n2i(PName,ino),
-  ?DEB2("     parent inode: ~p",ParentIno),
+  ?DEB2(9,"parent inode: ~p",ParentIno),
   tree_srv:enter(ParentIno,NewParentEntry,inodes),
-  ?DEB1("     new parent inserted");
+  ?DEB1(9,"new parent inserted"),
+  ok;
 
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
-  ?DEBL(" »append_child: ~p (~p)",[NewChild,ParentIno]),
+  ?DEBL(7,"»append_child: ~p (~p)",[NewChild,ParentIno]),
   case tree_srv:lookup(ParentIno,inodes) of
     {value,ParentEntry} -> 
-        ?DEB1("   got parent entry"),
+        ?DEB1(9,"got parent entry"),
         append_child(NewChild,ParentEntry);
     none ->
-        ?DEB1("   DID NOT get parent entry"),
+        ?DEB1(9,"DID NOT get parent entry"),
         throw({error,{parent_unbound,ParentIno}})
   end.
 
@@ -399,9 +399,9 @@ append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
 get_or_default(Attribute,Default) ->
   case application:get_env(attrfs,Attribute) of
     {ok,Value} ->
-      ?DEBL("  ~p: ~p",[Attribute,Value]),
+      ?DEBL(9,"~p: ~p",[Attribute,Value]),
       Value;
     undefined ->
-      ?DEBL("  ~p not defined. Defaulting to ~p", [Attribute,Default]),
+      ?DEBL(9,"~p not defined. Defaulting to ~p", [Attribute,Default]),
       Default
   end.

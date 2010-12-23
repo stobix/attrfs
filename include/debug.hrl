@@ -18,20 +18,32 @@
 %%%
 %%%=========================================================================
 -ifndef(debug_hrl).
+
+
 -define(debug_hrl,[]).
+
+
 -ifdef(debug).
+
 -ifdef(timestamp).
--define(DEB1(X),io:format("[~2..0p:~2..0p:~2..0p] ~p:~p ~s~n",tuple_to_list(time())++[?MODULE,?LINE,X])).
--define(DEB2(X,Y),io:format("[~2..0p:~2..0p:~2..0p] ~p:~p "++X++"~n",tuple_to_list(time())++[?MODULE,?LINE,Y])).
--define(DEBL(X,Y),io:format("[~2..0p:~2..0p:~2..0p] ~p:~p "++X++"~n",tuple_to_list(time())++[?MODULE,?LINE]++Y)).
+-define(F1,debug:timestamp).
+-define(F2,debug:timestamp).
 -else.
--define(DEB1(X),io:format("~p:~p ~s~n",[?MODULE,?LINE,X])).
--define(DEB2(X,Y),io:format("~p:~p "++X++"~n",[?MODULE,?LINE,Y])).
--define(DEBL(X,Y),io:format("~p:~p "++X++"~n",[?MODULE,?LINE]++Y)).
+-define(F1,debug:msg).
+-define(F2,debug:msg).
 -endif.
+
 -else.
--define(DEB1(X),void).
--define(DEB2(X,Y),void).
--define(DEBL(X,Y),void).
+
+-define(F1(M,L1,L2,X),void).
+-define(F2(M,L1,L2,X,Y),void).
+
 -endif.
+
+
+-define(DEB1(L,X),?F1(L,?MODULE,?LINE,X)).
+-define(DEB2(L,X,Y),?F2(L,?MODULE,?LINE,X,[Y])).
+-define(DEBL(L,X,Y),?F2(L,?MODULE,?LINE,X,Y)).
+
+
 -endif.

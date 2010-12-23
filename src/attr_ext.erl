@@ -53,16 +53,16 @@ rehash_ext_from_db(Inode,Path) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 add_new_attribute(Path,FIno,FEntry,Attr) ->
-  ?DEB1("  >add_new_attribute"),
+  ?DEB1(3,">add_new_attribute"),
   % Add the new attribute, if non-existent.
-  ?DEBL("   inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
+  ?DEBL(5,"inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
   length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
     (ok=dets:insert(?ATTR_DB,{Path,Attr})),
-  ?DEBL("   database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
+  ?DEBL(5,"database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
   #inode_entry{stat=Stat,name=FName}=FEntry,
-  ?DEBL("   appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+  ?DEBL(5,"appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
   append_attribute(Attr,FName,?UEXEC(Stat)),
-  ?DEB1("   creating new ext info"),
+  ?DEB1(5,"creating new ext info"),
   rehash_ext_from_db(FIno,Path).
 
 
@@ -71,7 +71,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 append_attribute(Attr,FName,Stat) ->
-  ?DEBL("    appending ~p/~p",[Attr,FName]),
+  ?DEBL(3,"appending ~p/~p",[Attr,FName]),
   append(Attr,FName,FName,Stat).
 
 
@@ -79,17 +79,17 @@ append_attribute(Attr,FName,Stat) ->
 %% the lists of children along the way.
 
 append(Parent,ChildInoName,ChildName,Stat) ->
-  ?DEBL(" »append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
+  ?DEBL(6,"append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
   {ok,ChildIno}=inode:n2i(ChildInoName,ino),
   ParentIno=inode:get(Parent,ino),
   {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
-  ?DEB1("    got child entry"),
+  ?DEB1(8,"got child entry"),
   ChildType=ChildEntry#inode_entry.type,
   ChildTriplet={ChildName,ChildIno,ChildType},
   case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry.
     none ->
-      ?DEBL("   adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
+      ?DEBL(8,"adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
       PEntry=
         #inode_entry{
           type=attribute_dir,
@@ -99,20 +99,20 @@ append(Parent,ChildInoName,ChildName,Stat) ->
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
         },
-      ?DEB1("  entering new entry into server"),
+      ?DEB1(8,"entering new entry into server"),
       tree_srv:enter(ParentIno,PEntry,inodes),
       [PName|GrandParent]=Parent, %Since attribute folder names are defined recursively.
-      ?DEBL("  checking parent of parent (~p)",[GrandParent]),
+      ?DEBL(8,"checking parent of parent (~p)",[GrandParent]),
       append(GrandParent,Parent,PName,Stat);
     {value,PEntry} ->
-      ?DEBL("   merging ~p into ~p",[ChildTriplet,PEntry#inode_entry.children]),
+      ?DEBL(8,"merging ~w into ~w",[ChildTriplet,PEntry#inode_entry.children]),
       attr_tools:append_child(ChildTriplet,PEntry)
   end.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
-  ?DEB2("    generating ext info for ~p",Path),
+  ?DEB2(3,"generating ext info for ~s",Path),
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
   ExtAmount=lists:foldr(fun(_,N) -> N+1 end,0,ExtInfo0),
   ExtInfo1=convert(ExtInfo0),
@@ -136,12 +136,12 @@ keyvalue([A|[]]) ->
 keyvalue(A) ->
     lists:foldl(
         fun(X,{[],[]}) ->
-            ?DEB2("init: ~p",X),
+            ?DEB2(5,"init: ~p",X),
             {[],X};
            (X,{[],Z}) ->
             {X,Z};
            (X,{Y,Z}) ->
-            ?DEBL("recurs: ~p,~p,~p",[X,Y,Z]),
+            ?DEBL(5,"recurs: ~p,~p,~p",[X,Y,Z]),
             {X++"/"++Y,Z}
         end,
         {[],[]},
@@ -151,16 +151,16 @@ keyvalue(A) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 generate_ext_info_io(Path) ->
-  ?DEB2("   generating ext info for ~p",Path),
+  ?DEB2(3,"generating ext info for ~p",Path),
   {ExtInfo,ExtAmount}=generate_ext_info(Path),
-  ?DEB2("   generating ext io for ~p",ExtInfo),
+  ?DEB2(5,"generating ext io for ~p",ExtInfo),
   ExtIo=ext_info_to_ext_io(ExtInfo),
   {ExtInfo,ExtIo,ExtAmount}.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
-  ?DEB1("   Creating ext_io"),
+  ?DEB1(6,"Creating ext_io"),
   ext_info_to_ext_io(InternalExtInfoTupleList,[]).
 
 %%--------------------------------------------------------------------------
@@ -168,8 +168,8 @@ ext_info_to_ext_io(InternalExtInfoTupleList) ->
 ext_info_to_ext_io([],B) -> 
   B0=B++"\0",
   B0len=length(B0),
-  ?DEB1("   Done creating ext_io"),
-  ?DEBL("   Final string: \"~p\", size: ~p",[B0,B0len]),
+  ?DEB1(8,"Done creating ext_io"),
+  ?DEBL(8,"Final string: \"~p\", size: ~p",[B0,B0len]),
   {B0len,B0};
 
 %%--------------------------------------------------------------------------
@@ -178,15 +178,15 @@ ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
   Name0=
     case string:str(Name,"system")==1 of
       false ->
-        ?DEB2("    Adding zero to end of name ~p, and \"user.\" to the start",Name),
+        ?DEB2(8,"Adding zero to end of name ~p, and \"user.\" to the start",Name),
         "user."++Name++"\0";
       true -> 
-        ?DEB2("    Adding zero to end of name ~p",Name),
+        ?DEB2(8,"Adding zero to end of name ~p",Name),
         Name++"\0"
     end,
-  ?DEB1("    Appending name to namelist"),
+  ?DEB1(8,"Appending name to namelist"),
   NewString=String++Name0,
-  ?DEB1("    Recursion"),
+  ?DEB1(8,"Recursion"),
   ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
 

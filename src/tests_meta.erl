@@ -3,7 +3,7 @@
 -include("../include/attrfs.hrl").
 -include("../include/debug.hrl").
 
--export([test/0,fs_prereq/0,switch/0]).
+-export([test/0,fs_prereq/0,switch/0,timer/1,timer/2]).
 
 test() ->
   eunit:test({setup,fun fs_prereq/0,fun fs_cleanup/1,tests_meta}).
@@ -28,11 +28,15 @@ fs_prereq() ->
              {linked_in,true},
              {real_name,"r"},
              {attr_name,"a"},
+             {logic_name,"l"},
              {all_name,"all"},
              {dup_name,"dup"},
              {and_name,"&"},
              {or_name,"|"},
              {butnot_name,"&~"},
+             {dup_prefix,"d"},
+             {dup_suffix,"u"},
+             {dup_ext,"tsk"},
              {mount_opts,"allow_other,default_permissions"}]}]},
   file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
   application:stop(attrfs),
@@ -42,7 +46,7 @@ fs_prereq() ->
   ?assertCmd("touch test/from/foo"),
   ?assertCmd("touch test/from/bar"),
   switch(),
-  application:start(attrfs).
+  utils:chain(attrfs).
 
 fs_cleanup(_) ->
   ?debugMsg("cleaning up"),
@@ -79,7 +83,7 @@ ls_test() ->
   [?_assertCmdOutput("a\nr\n","ls test/to")].
 
 create_test_() ->
-  [?_assertCmdOutput("a\nr\n","ls test/to"),
+  [?_assertCmdOutput("a\nl\nr\n","ls test/to"),
    ?_assertCmd("mkdir -p test/to/a/a/b"),
    move_to("a/b/"),
    ?_assertCmdOutput("Attribute \"a\" had a 1 byte value for test/to/r/from/foo:\nb\n","attr -g a test/to/r/from/foo"),
@@ -116,13 +120,21 @@ multiple_create_test_() ->
    ?_assertCmd("attr -r \"a/b\" "++Bar)
    ].
 
+move_test() ->
+  A="test/to/a/",
+  F=A++"F",
+  W=A++"W",
+  [?_assertCmd("mkdir "++F),
+   ?_assertCmd("mkdir "++W),
+   ?_assertCmd("mv "++W++" "++F),
+   ?_assertCmd("ls -l "++F++"|grep W")].
 
 access_test_() ->
   Foo="test/to/r/from/foo",
   ABCFoo="test/to/a/b/c/foo",
   ABC="test/to/a/b/c",
-  ABCANDAB="test/to/a/b/c/\\&/b/c",
-  ABCANDABFoo="test/to/a/b/c/\\&/b/c/foo",
+  ABCANDAB="test/to/l/b/c/\\&/b/c",
+  ABCANDABFoo="test/to/l/b/c/\\&/b/c/foo",
   [?_assertCmd("attr -s b -V c " ++ Foo),
    ?_assertCmdOutput("drwxr-xr-x\n","ls -ld " ++ ABC         ++ "|cut -f1 -d \" \""),
    ?_assertCmdOutput("-rw-r--r--\n","ls -l "  ++ ABCFoo      ++ "|cut -f1 -d \" \""),
@@ -149,22 +161,155 @@ all_test_() ->
    ?_assertCmd("attr -r \"a/b\" "++Bar)
    ].
 
+rmdir_test_() ->
+  From="test/to/r/from/",
+  To="test/to/a/",
+  Foo=From++"foo",
+  Bar=From++"bar",
+  Key="b/c",
+  Val="d",
+  AFoo=To++Key++"/"++Val++"/foo",
+  ABar=To++Key++"/"++Val++"/bar",
+  [?_assertCmd("attr -s \""++Key++"\" -V "++Val++" "++Foo),
+   ?_assertCmd("attr -s \""++Key++"\" -V "++Val++" "++Bar),
+   ?_assertCmd("rm "++AFoo),
+   ?_assertCmd("attr -g \""++Key++"\" "++Bar),
+   ?_assertCmdStatus(2,"ls "++AFoo),
+   ?_assertCmd("rm -r "++To++Key++"/"++Val),
+   ?_assertCmdStatus(2,"ls "++ABar),
+   ?_assertCmdStatus(1,"attr -g \""++Key++"\" "++Bar)].
+
 namespace_test_() ->
   Foo="test/to/r/from/foo",
   [?_assertCmd("attr -s foo -V foo "++Foo),
    ?_assertCmdOutput("Attribute \"foo\" had a 3 byte value for test/to/r/from/foo:\nfoo\n","attr -g foo "++Foo),
    ?_assertCmd("ls test/to/a/foo/foo/foo"),
-   ?_assertCmd("attr -r foo "++ Foo)].
+   ?_assertCmd("attr -r foo "++ Foo),
+   ?_assertCmd("mkdir test/to/a/from")].
   
 
 dups_test_() -> 
-  DupEtaoin="test/to/r/dup/etaoin",
+  DupEtaoin="test/to/r/dup/etaointsk",
   AllEtaoin="test/to/r/all/etaoin",
-  AllDupEtaoin="test/to/r/all/duplicate-etaoin",
+  AllDupEtaoin="test/to/r/all/detaoinu",
   [?_assertCmd("ls "++DupEtaoin),
    ?_assertCmd("ls "++AllEtaoin),
    ?_assertCmd("ls "++AllDupEtaoin),
-   ?_assertCmdOutput("[{\"duplicate-etaoin\",\"test/from/also/etaoin\"},{\"etaoin\",\"test/from/etaoin\"}]","cat "++DupEtaoin)
+   ?_assertCmdOutput("\"detaoinu\":\t \"test/from/also/etaoin\"\n\"etaoin\":\t \"test/from/etaoin\"\n","cat "++DupEtaoin)
    
   ].
   
+timer_prereq(Amount) ->
+  ?debugMsg("preparing timer"),
+  ?assertCmd("mkdir -p test/from/"),
+  ?assertCmd("mkdir -p test/to"),
+  MyAttrApp=
+    {application,attrfs,
+      [{description,"A file system used to sort files by attributes."},
+       {vsn,0.9},
+       {modules,[attrfs,attrfs_srv,attrfs_sup,inode,inode_sup,
+                 tree_srv,tree_sup]},
+       {applications,[kernel,stdlib,fuserl]},
+       {registered,[attrfs]},
+       {mod,{attrfs,[]}},
+       {env,[{to_dir,"test/to"},
+             {from_dir,"test/from"},
+             {attributes_db,"test/attrs"},
+             {linked_in,true},
+             {real_name,"r"},
+             {attr_name,"a"},
+             {all_name,"all"},
+             {dup_name,"dup"},
+             {mount_opts,"allow_other,default_permissions"}]}]},
+  file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
+  application:stop(attrfs),
+  application:unload(attrfs),
+  lists:foreach(fun(X) ->
+    ?assertCmd("touch test/from/"++integer_to_list(X))
+    end,
+    lists:seq(1,Amount)),
+  switch(),
+  utils:chain(attrfs).
+
+timer_prereq(Amount,AmountDup) ->
+  ?debugMsg("preparing timer"),
+  ?assertCmd("mkdir -p test/from/dup"),
+  ?assertCmd("mkdir -p test/to"),
+  MyAttrApp=
+    {application,attrfs,
+      [{description,"A file system used to sort files by attributes."},
+       {vsn,0.9},
+       {modules,[attrfs,attrfs_srv,attrfs_sup,inode,inode_sup,
+                 tree_srv,tree_sup]},
+       {applications,[kernel,stdlib,fuserl]},
+       {registered,[attrfs]},
+       {mod,{attrfs,[]}},
+       {env,[{to_dir,"test/to"},
+             {from_dir,"test/from"},
+             {attributes_db,"test/attrs"},
+             {linked_in,true},
+             {real_name,"r"},
+             {attr_name,"a"},
+             {all_name,"all"},
+             {dup_name,"dup"},
+             {dup_prefix,""},
+             {dup_suffix,"d"},
+             {mount_opts,"allow_other,default_permissions"}]}]},
+  file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
+  application:stop(attrfs),
+  application:unload(attrfs),
+  lists:foreach(fun(X) ->
+    ?assertCmd("touch test/from/"++integer_to_list(X))
+    end,
+    lists:seq(1,Amount)),
+  lists:foreach(fun(X) ->
+    ?assertCmd("touch test/from/dup/"++integer_to_list(X))
+    end,
+    lists:seq(1,AmountDup)),
+  switch(),
+  utils:chain(attrfs).
+
+timer_cleanup() ->
+  fs_cleanup(foo).
+
+timertest() ->
+%  A=os:cmd("ls test/to/"),
+%  B=os:cmd("ls test/to/r"),
+  ?debugTime("ls all:",os:cmd("ls test/to/r/all")),
+  ?debugTime("ls dup:",os:cmd("ls test/to/r/dup")).
+%  ?debugVal(A),
+%  ?debugVal(B),
+%  ?debugVal(C).
+
+timea(N) ->
+  ?debugTime("init:", timer_prereq(N)),
+  ?debugTime("ls:", timertest()),
+  ?debugTime("cleanup:", timer_cleanup()).
+
+timer(N) ->
+  process_flag(trap_exit, true),
+  timea(N),
+  receive
+    N ->
+      ?debugMsg("cleaning up anyway"),
+      timer_cleanup()
+  after 1 ->
+    ok
+  end.
+
+timea(N,M) ->
+  ?debugTime("init:", timer_prereq(N,M)),
+  ?debugTime("ls:", timertest()),
+  ?debugTime("cleanup:", timer_cleanup()).
+
+timer(N,M) ->
+  process_flag(trap_exit, true),
+  timea(N,M),
+  receive
+    N ->
+      ?debugMsg("cleaning up anyway"),
+      timer_cleanup()
+  after 1 ->
+    ok
+  end.
+ 
