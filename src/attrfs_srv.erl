@@ -260,8 +260,27 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
   Reply=case inode:is_numbered(binary_to_list(Name),ino) of
     false -> 
-      ?DEB1(4,"No real file with that name, not supported."),
-      #fuse_reply_err{err=enotsup};
+      ?DEB1(4,"No real file with that name, checking parent."),
+      {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
+      case ParentEntry#inode_entry.type of
+        attribute_dir ->
+          ?DEB1(4,"Parent is an attribute dir. Creating internal file."),
+          {ok,Inode}=inode:number(Name,ino),
+          NewEntry=#inode_entry{
+            type=internal_file,
+            contents= <<>>,
+            name=Name,
+            stat=?FILE_STAT(755,Inode,0)},
+          tree_srv:insert(Inode,NewEntry,inodes),
+          attr_mkdir:insert_entry(ParentInode,NewEntry),
+            {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
+          #fuse_reply_create{
+            fuse_file_info=FileInfo,
+            fuse_entry_param=?ENTRY2PARAM(NewEntry,Inode)
+          };
+        _ ->
+          #fuse_reply_err{err=enotsup}
+      end;
     Inode -> 
       {value,Entry}=tree_srv:lookup(Inode,inodes),
       case Entry#inode_entry.type of
@@ -481,10 +500,17 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
       duplicate_file ->
         ?DEB1(4,"duplicate file"),
         MyFino=inode:get(fino),
-        attr_open:set(MyFino,Inode,#open_duplicate_file{ino=Inode}),
+        attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
+      internal_file ->
+        ?DEB1(4,"internal file"),
+        MyFino=inode:get(fino),
+        attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
+        #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
+
       _ ->
         #fuse_reply_err{err=enotsup}
+
     end,
   {Reply,State}.
 
@@ -540,15 +566,38 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
             ?DEB2(4,"other error, returning ~w",_E),
             #fuse_reply_err{err=eio}
         end;
-      #open_duplicate_file{ino=Ino} ->
-        {value,Entry}=tree_srv:lookup(Ino,inodes),
-        Contents=Entry#inode_entry.children,
-        Data=Contents,
+      #open_duplicate_file{contents=Contents} ->
+        Data=take(Contents,Offset,Size),
         #fuse_reply_buf{buf=Data,size=erlang:iolist_size(Data)};
+
+      #open_internal_file{contents=Contents} ->
+        Data=take(Contents,Offset,Size),
+        #fuse_reply_buf{buf=Data,size=size(Data)};
+
       _ ->
         #fuse_reply_err{err=eio}
     end,
     {Reply,State}.
+
+take(Contents,Offset,Size) when is_binary(Contents) ->
+  Len=size(Contents),
+  if
+    Offset<Len ->
+      if
+        Offset+Size>Len ->
+          Take=Len-Offset;
+        true ->
+          Take=Size
+      end,
+      <<_:Offset/binary,Data:Take/binary,_/binary>>=Contents;
+    true ->
+      Data= <<>>
+  end,
+  Data;
+
+take(Contents,Offset,Size) when is_list(Contents) ->
+  Binary=take(list_to_binary(Contents),Offset,Size),
+  binary_to_list(Binary).
 
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
@@ -704,7 +753,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
         Name=binary_to_list(BName),
         {ok,Ino}=inode:n2i([Name|PName],ino),
         {value,Entry}=tree_srv:lookup(Ino,inodes),
-        case Entry#inode_entry.children of
+        case Entry#inode_entry.contents of
           [] ->
             attr_remove:remove_child_from_parent(Name,PName),
             inode:release(Ino,ino),
@@ -911,7 +960,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
       case ParentType of
         attribute_dir ->
           Name=binary_to_list(BName),
-          ParentChildren=ParentEntry#inode_entry.children,
+          ParentChildren=ParentEntry#inode_entry.contents,
           case lists:keyfind(Name,1,ParentChildren) of
             false -> 
               ?DEBL(4,"~p not found in ~p",[Name,ParentChildren]),
@@ -950,7 +999,7 @@ write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
   ?DEB1(1,">write"),
   ?DEB2(2,"|  _Inode: ~b",_Inode),
   ?DEB2(2,"|  _Offset: ~b",_Offset),
-  ?DEB2(2,"|  _Data: ~s",Data),
+  ?DEB2(2,"|  _Data: ~p",Data),
   ?DEB2(2,"|  _FI: ~w",_Fuse_File_Info),
   {#fuse_reply_write{count=size(Data)},State}.
 
@@ -961,7 +1010,7 @@ write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_inode_entries() ->
-  lists:map(fun({Inode,#inode_entry{name=Name,children=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
+  lists:map(fun({Inode,#inode_entry{name=Name,contents=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------

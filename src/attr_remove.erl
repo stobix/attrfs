@@ -44,9 +44,9 @@
 remove_child_from_parent(ChildName,ParentName) ->
   {ok,Inode}=inode:n2i(ParentName,ino),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
-  Children=Entry#inode_entry.children,
+  Children=Entry#inode_entry.contents,
   NewChildren=lists:keydelete(ChildName,1,Children),
-  NewEntry=Entry#inode_entry{children=NewChildren},
+  NewEntry=Entry#inode_entry{contents=NewChildren},
   tree_srv:enter(Inode,NewEntry,inodes).
 %%--------------------------------------------------------------------------
 %% remove_old_attribute_value
@@ -115,10 +115,10 @@ remove_key_values(Path,Inode,AName) ->
 remove_empty_dir(ParentIno,DirName) ->
   ?DEB1(3,">remove_empty_dir"),
   {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
-  case lists:keytake(DirName,1,ParentEntry#inode_entry.children) of
+  case lists:keytake(DirName,1,ParentEntry#inode_entry.contents) of
     {value,{_DeletedChild,ChildIno,_ChildType},NewChildren} ->
       ?DEBL(5,"removing empty dir ~p from parent ~p",[DirName,ParentIno]),
-      NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
+      NewParentEntry=ParentEntry#inode_entry{contents=NewChildren},
       tree_srv:enter(ParentIno,NewParentEntry,inodes),
       tree_srv:delete_any(ChildIno,inodes),
       ok;

@@ -36,9 +36,9 @@
 -define(ATTR_DB_FILE, attrfs, attributes_db).
 
 -define(ROOT_FOLDR, root).
--define(REAL_FOLDR, (attr_tools:get_or_default(real_name,"real"))).
+-define(REAL_FOLDR, (attr_tools:get_or_default(real_name,"files"))).
 -define(ATTR_FOLDR, []).
--define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attribs"))).
+-define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attributess"))).
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
 -define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,"duplicates"))).
 -define(LOGIC_FOLDR,(attr_tools:get_or_default(logic_name,"logic"))).
@@ -159,8 +159,10 @@
         %  Name, for normal files
         %  [Name,Parent] for Attribute value dirs and logical dirs.
         name::inode_entry_name() 
-        % children are the children of the file/dir
-        ,children::name_list()
+        % A name list if a dir
+        % A binary if an internal file
+        % An iolist if a duplicate file
+        ,contents::name_list()|binary()|iolist()
         % file_type tells me what kind of file this is. This includes more types than #file_info.type
         ,type::file_type()
         % stat is the file info that the file has in my file system.
@@ -179,9 +181,14 @@
          path::string()
         }).
 
+-record(open_internal_file,
+        {
+        contents::binary()
+        }).
 
 -record(open_duplicate_file,
-        {ino::non_neg_integer()
+        {
+        contents::iolist()
         }).
 
 -type attribute_entries()::[name_tuple()|{inode,inode_number()}].

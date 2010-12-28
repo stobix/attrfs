@@ -54,7 +54,7 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
       {value,NPEntry} ->
         NPType=NPEntry#inode_entry.type,
         ?DEBL(5,"new parent type: ~p",[NPType]),
-        case lists:keyfind(OldName,1,PEntry#inode_entry.children) of
+        case lists:keyfind(OldName,1,PEntry#inode_entry.contents) of
           false -> 
             ?DEB1(5,"file nonexistent!"),
             enoent;
@@ -123,7 +123,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
       move_child(ChildType,ChildInode,ChildEntry,OldValueEntry,NewValueEntry)
 
     end,
-    OldValueEntry#inode_entry.children
+    OldValueEntry#inode_entry.contents
   ),
   %XXX: Yes, this is a little bit ugly. Maybe do a global change about 
   %     whether to use inodes or entries as arguments sometime?

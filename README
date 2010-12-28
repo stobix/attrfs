@@ -1,0 +1,75 @@
+INTRODUCTION
+attrfs is a file system designed for sorting files, either by setting extended attributes or moving/copying files into "attribute folders".
+
+INSTALL
+
+
+USAGE
+
+ATTRIBUTES
+
+Read the man page of attr, or your favorite extended attributes manager program, for a full list of attribute handling commands that are available.
+The attribute key can contain a separator (default: "/"), to signify a multi level attribute.
+The attribute value can contain a separator (default: ","), to signify setting multiple values at once.
+These separators can be changed in the app file. See CONFIGURATION
+
+Examples:
+
+% attr -s "etaoin/shrdlu" -V "yo" real/all/file
+Attribute "etaoin/shrdlu" set to a 2 byte value for real/all/file:
+yo
+% ls attributes/etaoin/shrdlu/yo/
+file
+
+$ attr -s "foo" -V "bar,baz" files/all/fil
+Attribute "foo" set to a 7 byte value for files/all/fil:
+bar,baz
+$ ls -R attributes/foo/*
+attributes/foo/bar:
+fil
+
+attributes/foo/baz:
+fil
+
+
+FILE HANDLING
+Copying/moving files:
+% mkdir -p attribute_part/foo/bar
+% mv real_part/file attribute_part/foo/bar
+% ls real_part/file
+   file
+% ls attribute_part/foo/bar
+   file
+% attr -g foo real_part/file
+   bar
+
+CONFIGURATION
+These are the values that can be set in the attrfs.app file:
+
+Paths:
+  to_dir (no default. You have to set this.)
+    Where to put the file system.
+  from_dir (no default. You have to set this.)
+    If we use files from only one dir. Overrides from_dirs.
+  from_dirs (no default. You have to set this.)
+    Contains a list of the dirs we want to use. 
+  attributes_db (no default. You have to set this.)
+    Contains the path (string) to the file you want to use as the attribute database.
+
+Directory names:
+  real_name (default: "real")
+    The name for the part of the file system containing "real" files.
+   all_name (default: "all")
+   dup_name (default: "duplicates")
+  attr_name (default: "attributes")
+    The name for the part of the file system containing "attribute" files and directories.
+  logic_name (default: "logic")
+    The name for the searchable part of the file system.
+   and_name (default: "AND")
+   or_name (default: "OR")
+   butnot_name (default: "BUTNOT")
+
+Fuserl specific:
+  linked_in (default: true)
+  mount_opts (default:  "allow_other,default_permissions")
+
