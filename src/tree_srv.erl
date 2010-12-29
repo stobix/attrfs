@@ -36,7 +36,14 @@
 
 -behaviour(gen_server).
 
--export([enter/3,store/2,new/1,lookup/2,to_list/1,clear/1,delete_any/2]).
+-export([enter/3,
+        store/2,
+        new/1,
+        lookup/2,
+        to_list/1,
+        clear/1,
+        delete_any/2,
+        insert/3]).
 
 -ifdef(test).
 -include_lib("eunit/include/eunit.hrl").
@@ -100,6 +107,9 @@ enter(Key,Entry,TreeID) ->
   gen_server:cast(?MODULE,{update,Key,Entry,TreeID}). 
 
 
+insert(Key,Entry,TreeID) ->
+  gen_server:cast(?MODULE,{insert,Key,Entry,TreeID}).
+
 %%----------------------------------------------
 %% @doc creates a new tree and associates it with TreeID.
 %% @spec (term(),term(),gb_trees())-> ok|{error,exists}
@@ -158,6 +168,13 @@ handle_cast({clear,TreeID},Trees) ->
     false -> {noreply,[{TreeID,gb_trees:empty()}|Trees]};
     true -> {noreply,lists:keymerge([{TreeID,gb_trees:empty()}],1,Trees)}
   end;
+
+handle_cast({insert,Key,Entry,TreeID},Trees) ->
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  NewTree=gb_trees:insert(Key,Entry,Tree),
+  NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
+  {noreply,NewTrees};
+    
 
 handle_cast({update,Key,Entry,TreeID},Trees) ->
   case lists:keyfind(TreeID,1,Trees) of

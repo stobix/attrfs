@@ -251,14 +251,15 @@ access(Ctx,Inode,Mask,Continuation,State) ->
 %%
 %% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying"files possible.
 %%--------------------------------------------------------------------------
-create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
+create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB1(1,">create"), 
   ?DEB2(2,"|  Ctx: ~w",Ctx),
   ?DEB2(2,"|  ParentIno: ~w",ParentInode),
-  ?DEB2(2,"|  Name: ~w",Name),
-  ?DEBL(2,"|  Mode: ~.8X",[_Mode,"O"]),
+  ?DEB2(2,"|  Name: ~w",BName),
+  ?DEBL(2,"|  Mode: ~.8X",[Mode,"O"]),
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
-  Reply=case inode:is_numbered(binary_to_list(Name),ino) of
+  Name=binary_to_list(BName),
+  Reply=case inode:is_numbered(Name,ino) of
     false -> 
       ?DEB1(4,"No real file with that name, checking parent."),
       {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
@@ -270,7 +271,10 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
             type=internal_file,
             contents= <<>>,
             name=Name,
-            stat=?FILE_STAT(755,Inode,0)},
+            stat=?FILE_STAT(Mode,Inode,0)#stat{st_gid=Gid,st_uid=Uid},
+            ext_info=[],
+            ext_io=attr_ext:ext_info_to_ext_io([])
+          },
           tree_srv:insert(Inode,NewEntry,inodes),
           attr_mkdir:insert_entry(ParentInode,NewEntry),
             {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
@@ -335,7 +339,7 @@ forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
   ?DEBL(1,"~s",["fsync!"]),
-  {#fuse_reply_err{err=enotsup},State}.
+  {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
 %% Ensure all directory changes are on permanent storage. If the IsDataSync is true, only the user data should be flushed, not the meta data. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type fsyncdir_async_reply ().
@@ -861,8 +865,8 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   ?DEB2(2,"|  Inode: ~w ",Inode),
   RawKey=binary_to_list(BKey),
   RawValue=binary_to_list(BValue),
-  ?DEB2(2,"|  Key: ~w ",RawKey),
-  ?DEB2(2,"|  Value: ~w ",RawValue),
+  ?DEB2(2,"|  Key: ~p ",RawKey),
+  ?DEB2(2,"|  Value: ~p ",RawValue),
   ?DEB2(2,"|  _Flags: ~w ",_Flags),
   ?DEB1(4,"getting inode entry"),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
@@ -951,7 +955,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
   ?DEB1(1,">unlink"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  PIno: ~w ",ParentInode),
-  ?DEB2(2,"|  BName: ~w",BName),
+  ?DEB2(2,"|  BName: ~p",BName),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
   ParentType=ParentEntry#inode_entry.type,
   ParentName=ParentEntry#inode_entry.name,
@@ -995,13 +999,69 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %% Maybe I'll also support writing to real files later on.
 %% For now, let's just ignore all data written to external files, and the problem will be temporarily mitigated.
 %%--------------------------------------------------------------------------
-write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
+write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(1,">write"),
-  ?DEB2(2,"|  _Inode: ~b",_Inode),
-  ?DEB2(2,"|  _Offset: ~b",_Offset),
-  ?DEB2(2,"|  _Data: ~p",Data),
-  ?DEB2(2,"|  _FI: ~w",_Fuse_File_Info),
-  {#fuse_reply_write{count=size(Data)},State}.
+  ?DEB2(2,"|  Inode: ~b",Inode),
+  ?DEB2(2,"|  Offset: ~b",Offset),
+  ?DEB2(2,"|  Data: ~p",Data),
+  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  case tree_srv:lookup(Inode,inodes) of
+    {value,Entry} ->
+      case Entry#inode_entry.type of
+        #external_file{} -> %For now, let's just pretend that we write something. Otherwise we'll have to know the parent of the node. (Could be sent via the file info, if needed.)
+          {#fuse_reply_write{count=size(Data)},State};
+        internal_file ->
+          Contents=Entry#inode_entry.contents,
+          Stat=Entry#inode_entry.stat,
+          Len=size(Contents),
+          DLen=size(Data),
+          try
+            NewContents=write(Offset,Contents,Data,Len,DLen),
+            ?DEB1(1,"Got new contents"),
+            NewStat=?ST_SIZE(Stat,size(NewContents)),
+            NewEntry=Entry#inode_entry{contents=NewContents,stat=NewStat},
+            tree_srv:enter(Inode,NewEntry,inodes),
+            {#fuse_reply_write{count=size(Data)},State}
+          catch
+            E -> {#fuse_reply_err{err=E},State}
+          end;
+        _ ->
+          {#fuse_reply_err{err=enotsup},State}
+      end;
+    none -> 
+      {#fuse_reply_err{err=enoent},State}
+  end.
+
+write(0,Contents,Data,CLen,DLen) when DLen >= CLen->
+  ?DEB1(1,"1"),
+  Data;
+
+write(0,Contents,Data,CLen,DLen) ->
+  ?DEB1(1,"2"),
+  Delete=size(Data),
+  <<_:Delete/binary,Rest/binary>>=Contents,
+  <<Data/binary,Rest/binary>>;
+
+write(Offset,Contents,Data,CLen,DLen) when Offset > CLen->
+  ?DEB1(1,"3"),
+  throw(eof);
+
+write(Offset,Contents,Data,CLen,DLen) when Offset == CLen ->
+  ?DEB1(1,"4"),
+  <<Contents/binary,Data/binary>>;
+
+write(Offset,Contents,Data,CLen,DLen) when Offset < CLen ->
+  ?DEB1(1,"5"),
+  if
+    Offset+DLen >= CLen -> 
+      <<Before:Offset/binary,_>>=Contents,
+      <<Before/binary,Data/binary>>;
+    Offset+DLen < CLen ->
+      <<Before:Offset/binary,After/binary>>=Contents,
+      <<Before/binary,Data/binary,After/binary>>
+  end.
+
+  
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS
