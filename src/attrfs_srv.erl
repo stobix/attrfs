@@ -251,6 +251,8 @@ access(Ctx,Inode,Mask,Continuation,State) ->
 %%--------------------------------------------------------------------------
 %% Where will I allow this? Creating new real files in the real branch? Creating imaginary files elsewhere?
 %% The possibility of making a .Trash in the root folder should be considered.
+%% What should happen if I try to create an already existing file? Error return? Open file return?
+%%  Let's go for open file for now.
 %%
 %% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying"files possible.
 %%--------------------------------------------------------------------------
@@ -263,7 +265,8 @@ create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
   Reply=case inode:is_numbered(binary_to_list(Name),ino) of
     false -> 
-      ?DEB1(4,"No real file with that name, not supported."),
+      ?DEB1(4,"No real file with that name, not supported, yet"),
+      % TODO: Insert code here to create internal files. 
       #fuse_reply_err{err=enotsup};
     Inode -> 
       {value,Entry}=tree_srv:lookup(Inode,inodes),
