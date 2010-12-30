@@ -194,7 +194,7 @@ dups_test_() ->
    ?_assertCmd("ls "++DupEtaoin),
    ?_assertCmd("ls "++AllEtaoin),
    ?_assertCmd("ls "++AllDupEtaoin),
-   ?_assertCmdOutput("\"detaoinu\" \"test/from/also/etaoin\"\n\"etaoin\" \"test/from/etaoin\"\n","cat "++DupEtaoin)
+   ?_assertCmdOutput("\"detaoinu\" \"test/from/also/etaoin\"\n","cat "++DupEtaoin++"|grep detaoinu" )
    
   ].
   
