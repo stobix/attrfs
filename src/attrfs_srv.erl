@@ -256,18 +256,40 @@ access(Ctx,Inode,Mask,Continuation,State) ->
 %%
 %% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying"files possible.
 %%--------------------------------------------------------------------------
-create(Ctx,ParentInode,Name,_Mode,Fuse_File_Info,_Continuation, State) ->
+create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Continuation, State) ->
   ?DEB1(1,">create"), 
   ?DEB2(2,"|  Ctx: ~w",Ctx),
   ?DEB2(2,"|  ParentIno: ~w",ParentInode),
-  ?DEB2(2,"|  Name: ~w",Name),
-  ?DEBL(2,"|  Mode: ~.8X",[_Mode,"O"]),
+  ?DEB2(2,"|  Name: ~s",BName),
+  ?DEBL(2,"|  Mode: ~.8X",[Mode,"O"]),
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
-  Reply=case inode:is_numbered(binary_to_list(Name),ino) of
+  Name=binary_to_list(BName),
+  Reply=case inode:is_numbered(Name,ino) of
     false -> 
-      ?DEB1(4,"No real file with that name, not supported, yet"),
-      % TODO: Insert code here to create internal files. 
-      #fuse_reply_err{err=enotsup};
+      ?DEB1(4,"No real file with that name, checking parent."),
+      {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
+      case ParentEntry#inode_entry.type of
+        attribute_dir ->
+          ?DEB1(4,"Parent is an attribute dir. Creating internal file."),
+          {ok,Inode}=inode:number(Name,ino),
+          NewEntry=#inode_entry{
+            type=internal_file,
+            contents= <<>>,
+            name=Name,
+            stat=?FILE_STAT(Mode,Inode,0)#stat{st_gid=Gid,st_uid=Uid},
+            ext_info=[],
+            ext_io=attr_ext:ext_info_to_ext_io([])
+          },
+          tree_srv:insert(Inode,NewEntry,inodes),
+          attr_mkdir:insert_entry(ParentInode,NewEntry),
+            {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
+          #fuse_reply_create{
+            fuse_file_info=FileInfo,
+            fuse_entry_param=?ENTRY2PARAM(NewEntry,Inode)
+          };
+        _ ->
+          #fuse_reply_err{err=enotsup}
+      end;
     Inode -> 
       {value,Entry}=tree_srv:lookup(Inode,inodes),
       case Entry#inode_entry.type of
@@ -322,7 +344,7 @@ forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
   ?DEBL(1,"~s",["fsync!"]),
-  {#fuse_reply_err{err=enotsup},State}.
+  {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
 %% Ensure all directory changes are on permanent storage. If the IsDataSync is true, only the user data should be flushed, not the meta data. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type fsyncdir_async_reply ().
@@ -495,10 +517,17 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
       duplicate_file ->
         ?DEB1(4,"duplicate file"),
         MyFino=inode:get(fino),
-        attr_open:set(MyFino,Inode,#open_duplicate_file{ino=Inode}),
+        attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
+      internal_file ->
+        ?DEB1(4,"internal file"),
+        MyFino=inode:get(fino),
+        attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
+        #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
+
       _ ->
         #fuse_reply_err{err=enotsup}
+
     end,
   {Reply,State}.
 
@@ -554,15 +583,38 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
             ?DEB2(4,"other error, returning ~w",_E),
             #fuse_reply_err{err=eio}
         end;
-      #open_duplicate_file{ino=Ino} ->
-        {value,Entry}=tree_srv:lookup(Ino,inodes),
-        Contents=Entry#inode_entry.children,
-        Data=Contents,
+      #open_duplicate_file{contents=Contents} ->
+        Data=take(Contents,Offset,Size),
         #fuse_reply_buf{buf=Data,size=erlang:iolist_size(Data)};
+
+      #open_internal_file{contents=Contents} ->
+        Data=take(Contents,Offset,Size),
+        #fuse_reply_buf{buf=Data,size=size(Data)};
+
       _ ->
         #fuse_reply_err{err=eio}
     end,
     {Reply,State}.
+
+take(Contents,Offset,Size) when is_binary(Contents) ->
+  Len=size(Contents),
+  if
+    Offset<Len ->
+      if
+        Offset+Size>Len ->
+          Take=Len-Offset;
+        true ->
+          Take=Size
+      end,
+      <<_:Offset/binary,Data:Take/binary,_/binary>>=Contents;
+    true ->
+      Data= <<>>
+  end,
+  Data;
+
+take(Contents,Offset,Size) when is_list(Contents) ->
+  Binary=take(list_to_binary(Contents),Offset,Size),
+  binary_to_list(Binary).
 
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
@@ -692,7 +744,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
-  ?DEBL(1,">rename; parent: ~w, name: ~w, new parent: ~w, new name: ~w",[ParentIno,Name,NewParentIno,NewName]),
+  ?DEBL(1,">rename; parent: ~w, name: ~s, new parent: ~w, new name: ~s",[ParentIno,Name,NewParentIno,NewName]),
   Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
 
@@ -718,7 +770,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
         Name=binary_to_list(BName),
         {ok,Ino}=inode:n2i([Name|PName],ino),
         {value,Entry}=tree_srv:lookup(Ino,inodes),
-        case Entry#inode_entry.children of
+        case Entry#inode_entry.contents of
           [] ->
             attr_remove:remove_child_from_parent(Name,PName),
             inode:release(Ino,ino),
@@ -826,8 +878,8 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   ?DEB2(2,"|  Inode: ~w ",Inode),
   RawKey=binary_to_list(BKey),
   RawValue=binary_to_list(BValue),
-  ?DEB2(2,"|  Key: ~w ",RawKey),
-  ?DEB2(2,"|  Value: ~w ",RawValue),
+  ?DEB2(2,"|  Key: ~p ",RawKey),
+  ?DEB2(2,"|  Value: ~p ",RawValue),
   ?DEB2(2,"|  _Flags: ~w ",_Flags),
   ?DEB1(4,"getting inode entry"),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
@@ -916,7 +968,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
   ?DEB1(1,">unlink"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  PIno: ~w ",ParentInode),
-  ?DEB2(2,"|  BName: ~w",BName),
+  ?DEB2(2,"|  BName: ~p",BName),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
   ParentType=ParentEntry#inode_entry.type,
   ParentName=ParentEntry#inode_entry.name,
@@ -925,7 +977,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
       case ParentType of
         attribute_dir ->
           Name=binary_to_list(BName),
-          ParentChildren=ParentEntry#inode_entry.children,
+          ParentChildren=ParentEntry#inode_entry.contents,
           case lists:keyfind(Name,1,ParentChildren) of
             false -> 
               ?DEBL(4,"~p not found in ~p",[Name,ParentChildren]),
@@ -938,11 +990,20 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
               %% is NOT the same as removing a whole attribute.
               %% Thus, I'm NOT calling removexattr here.
               ?DEBL(4,"child type ~s",[io_lib:write(Type)]),
+              PName=ParentEntry#inode_entry.name,
               case Type of 
                 #external_file{path=Path} ->
-                  ?DEBL(4,"Removing ~w from ~w", [ParentEntry#inode_entry.name,Name]),
+                  ?DEBL(4,"Removing ~s from ~s", [ParentEntry#inode_entry.name,Name]),
                   attr_remove:remove_attribute(Path,Inode,ParentName),
                   #fuse_reply_err{err=ok};
+
+                internal_file ->
+                  ?DEBL(4,"Removing external file ~s from ~s",[ParentEntry#inode_entry.name,Name]),
+                  attr_remove:remove_child_from_parent(Name,PName),
+                  tree_srv:delete_any(Inode,inodes),
+                  inode:release(Inode,ino),
+                  #fuse_reply_err{err=ok};
+
                 _ ->
                   #fuse_reply_err{err=enotsup}
               end
@@ -960,13 +1021,69 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %% Maybe I'll also support writing to real files later on.
 %% For now, let's just ignore all data written to external files, and the problem will be temporarily mitigated.
 %%--------------------------------------------------------------------------
-write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
+write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1(1,">write"),
-  ?DEB2(2,"|  _Inode: ~b",_Inode),
-  ?DEB2(2,"|  _Offset: ~b",_Offset),
-  ?DEB2(2,"|  _Data: ~s",Data),
-  ?DEB2(2,"|  _FI: ~w",_Fuse_File_Info),
-  {#fuse_reply_write{count=size(Data)},State}.
+  ?DEB2(2,"|  Inode: ~b",Inode),
+  ?DEB2(2,"|  Offset: ~b",Offset),
+  ?DEB2(2,"|  Data: ~p",Data),
+  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  case tree_srv:lookup(Inode,inodes) of
+    {value,Entry} ->
+      case Entry#inode_entry.type of
+        #external_file{} -> %For now, let's just pretend that we write something. Otherwise we'll have to know the parent of the node. (Could be sent via the file info, if needed.)
+          {#fuse_reply_write{count=size(Data)},State};
+        internal_file ->
+          Contents=Entry#inode_entry.contents,
+          Stat=Entry#inode_entry.stat,
+          Len=size(Contents),
+          DLen=size(Data),
+          try
+            NewContents=write(Offset,Contents,Data,Len,DLen),
+            ?DEB1(1,"Got new contents"),
+            NewStat=?ST_SIZE(Stat,size(NewContents)),
+            NewEntry=Entry#inode_entry{contents=NewContents,stat=NewStat},
+            tree_srv:enter(Inode,NewEntry,inodes),
+            {#fuse_reply_write{count=size(Data)},State}
+          catch
+            E -> {#fuse_reply_err{err=E},State}
+          end;
+        _ ->
+          {#fuse_reply_err{err=enotsup},State}
+      end;
+    none -> 
+      {#fuse_reply_err{err=enoent},State}
+  end.
+
+write(0,Contents,Data,CLen,DLen) when DLen >= CLen->
+  ?DEB1(1,"1"),
+  Data;
+
+write(0,Contents,Data,CLen,DLen) ->
+  ?DEB1(1,"2"),
+  Delete=size(Data),
+  <<_:Delete/binary,Rest/binary>>=Contents,
+  <<Data/binary,Rest/binary>>;
+
+write(Offset,Contents,Data,CLen,DLen) when Offset > CLen->
+  ?DEB1(1,"3"),
+  throw(eof);
+
+write(Offset,Contents,Data,CLen,DLen) when Offset == CLen ->
+  ?DEB1(1,"4"),
+  <<Contents/binary,Data/binary>>;
+
+write(Offset,Contents,Data,CLen,DLen) when Offset < CLen ->
+  ?DEB1(1,"5"),
+  if
+    Offset+DLen >= CLen -> 
+      <<Before:Offset/binary,_>>=Contents,
+      <<Before/binary,Data/binary>>;
+    Offset+DLen < CLen ->
+      <<Before:Offset/binary,After/binary>>=Contents,
+      <<Before/binary,Data/binary,After/binary>>
+  end.
+
+  
 
 %%%=========================================================================
 %%%                         DEBUG FUNCTIONS
@@ -975,7 +1092,7 @@ write(_Ctx,_Inode,Data,_Offset,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_inode_entries() ->
-  lists:map(fun({Inode,#inode_entry{name=Name,children=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
+  lists:map(fun({Inode,#inode_entry{name=Name,contents=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------

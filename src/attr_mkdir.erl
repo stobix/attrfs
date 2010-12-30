@@ -34,6 +34,7 @@
 -include("../include/debug.hrl").
 
 -export([make_dir/6]).
+-export([insert_entry/2]).
 
 make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
   make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
@@ -98,7 +99,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
         ext_info=[],
         ext_io=attr_ext:ext_info_to_ext_io([]),
         type=DirType,
-        children=[]
+        contents=[]
       },
       insert_entry(ParentInode,DirEntry),
       {ok,DirStat};
@@ -111,7 +112,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.
 %%--------------------------------------------------------------------------
 insert_entry(ParentInode,ChildEntry) ->
-  ?DEBL(6,"inserting new entry as child for ~p",[ParentInode]),
+  ?DEBL(2,"inserting new entry as child for ~p",[ParentInode]),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,
@@ -124,8 +125,8 @@ insert_entry(ParentInode,ChildEntry) ->
         Name;
       _ -> InoName
     end,
-  NewChildren=[{ChildName,ChildInode,ChildType}|ParentEntry#inode_entry.children],
-  tree_srv:enter(ParentInode,ParentEntry#inode_entry{children=NewChildren},inodes),
+  NewChildren=[{ChildName,ChildInode,ChildType}|ParentEntry#inode_entry.contents],
+  tree_srv:enter(ParentInode,ParentEntry#inode_entry{contents=NewChildren},inodes),
   tree_srv:enter(ChildInode,ChildEntry,inodes),
   ChildInode.
 

@@ -94,7 +94,7 @@ append(Parent,ChildInoName,ChildName,Stat) ->
         #inode_entry{
           type=attribute_dir,
           name=Parent,
-          children=[ChildTriplet],
+          contents=[ChildTriplet],
           stat=attr_tools:dir(Stat#stat{st_ino=ParentIno}),
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
@@ -105,7 +105,7 @@ append(Parent,ChildInoName,ChildName,Stat) ->
       ?DEBL(8,"checking parent of parent (~p)",[GrandParent]),
       append(GrandParent,Parent,PName,Stat);
     {value,PEntry} ->
-      ?DEBL(8,"merging ~w into ~w",[ChildTriplet,PEntry#inode_entry.children]),
+      ?DEBL(8,"merging ~w into ~w",[ChildTriplet,PEntry#inode_entry.contents]),
       attr_tools:append_child(ChildTriplet,PEntry)
   end.
 

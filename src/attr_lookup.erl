@@ -105,7 +105,7 @@ children(#inode_entry{}=Entry) ->
         generate_logic_dir_children(Name,?ATTR_FOLDR);
 
       attribute_dir ->
-        Entry#inode_entry.children;
+        Entry#inode_entry.contents;
 
       #dir_link{link=Ino} ->
       % For now, I assume that all dir links are children of logical dirs, 
@@ -116,7 +116,7 @@ children(#inode_entry{}=Entry) ->
 
       _DirType ->
         ?DEB2(5,"other dir: ~p",_DirType),
-        Entry#inode_entry.children
+        Entry#inode_entry.contents
 
     end,
   {value,Children};
@@ -162,7 +162,7 @@ generate_logic_link_children(Ino,Name) ->
                   MyEntry=
                     MyLinkEntry#inode_entry{
                       name=[MyName|Name],
-                      children=[],
+                      contents=[],
                       stat=MyStat,
                       type=MyType,
                       links=[]
@@ -178,7 +178,7 @@ generate_logic_link_children(Ino,Name) ->
       LogicDirs=generate_logic_dirs(Name),
       ConvertedChildren++LogicDirs;
     _ ->
-    #inode_entry.children
+    #inode_entry.contents
   end.
 
 
@@ -229,8 +229,9 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
   ?DEB1(8,"transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
-  lists:map(
-    fun({Name,Inode,Type}) ->
+  % Since I want to get rid of elements not belonging in a logic dir, I filter out everything that is not an attridute_bir or an #external_file{}.
+  lists:foldl(
+    fun({Name,Inode,Type},Acc) ->
       case Type of
         attribute_dir ->
           {value,Entry}=tree_srv:lookup(Inode,inodes),
@@ -248,12 +249,15 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
           ?DEB2(8,"getting or setting inode number of ~p",[Name|LogicName]),
           LinkIno=inode:get(LinkName,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
-          {Name,LinkIno,LinkType};
+          [{Name,LinkIno,LinkType}|Acc];
         #external_file{}=E ->
-          {Name,Inode,E}
+          [{Name,Inode,E}|Acc];
+        _ ->
+          Acc
       end
     end,
-    MEntry#inode_entry.children
+    [],
+    MEntry#inode_entry.contents
   ).
 
 -define(LD(X) , generate_logic_dir(Predecessor,X)).
@@ -287,7 +291,7 @@ generate_logic_dir(Parent,X) ->
   PStat=PEntry#inode_entry.stat,
   % Logical dirs will not be writeable. Therefore, I do not directly copy the mode of the parent
   Stat=?ST_MODE(PStat,?M_DIR(8#555)), 
-  Entry=PEntry#inode_entry{name=Name,type=logic_dir,children=[],stat=Stat},
+  Entry=PEntry#inode_entry{name=Name,type=logic_dir,contents=[],stat=Stat},
   ?DEB1(8,"saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),
   {X,Ino,logic_dir}.
