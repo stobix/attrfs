@@ -255,7 +255,7 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
   ?DEB1(1,">create"), 
   ?DEB2(2,"|  Ctx: ~w",Ctx),
   ?DEB2(2,"|  ParentIno: ~w",ParentInode),
-  ?DEB2(2,"|  Name: ~w",BName),
+  ?DEB2(2,"|  Name: ~s",BName),
   ?DEBL(2,"|  Mode: ~.8X",[Mode,"O"]),
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
   Name=binary_to_list(BName),
@@ -977,11 +977,20 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
               %% is NOT the same as removing a whole attribute.
               %% Thus, I'm NOT calling removexattr here.
               ?DEBL(4,"child type ~s",[io_lib:write(Type)]),
+              PName=ParentEntry#inode_entry.name,
               case Type of 
                 #external_file{path=Path} ->
-                  ?DEBL(4,"Removing ~w from ~w", [ParentEntry#inode_entry.name,Name]),
+                  ?DEBL(4,"Removing ~s from ~s", [ParentEntry#inode_entry.name,Name]),
                   attr_remove:remove_attribute(Path,Inode,ParentName),
                   #fuse_reply_err{err=ok};
+
+                internal_file ->
+                  ?DEBL(4,"Removing external file ~s from ~s",[ParentEntry#inode_entry.name,Name]),
+                  attr_remove:remove_child_from_parent(Name,PName),
+                  tree_srv:delete_any(Inode,inodes),
+                  inode:release(Inode,ino),
+                  #fuse_reply_err{err=ok};
+
                 _ ->
                   #fuse_reply_err{err=enotsup}
               end

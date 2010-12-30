@@ -112,7 +112,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.
 %%--------------------------------------------------------------------------
 insert_entry(ParentInode,ChildEntry) ->
-  ?DEBL(6,"inserting new entry as child for ~p",[ParentInode]),
+  ?DEBL(2,"inserting new entry as child for ~p",[ParentInode]),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,
