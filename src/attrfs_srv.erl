@@ -773,6 +773,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
         case Entry#inode_entry.contents of
           [] ->
             attr_remove:remove_child_from_parent(Name,PName),
+            tree_srv:delete(Ino,inodes),
             inode:release(Ino,ino),
             ok;
           _Children ->

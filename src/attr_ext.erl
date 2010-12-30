@@ -105,7 +105,7 @@ append(Parent,ChildInoName,ChildName,Stat) ->
       ?DEBL(8,"checking parent of parent (~p)",[GrandParent]),
       append(GrandParent,Parent,PName,Stat);
     {value,PEntry} ->
-      ?DEBL(8,"merging ~w into ~w",[ChildTriplet,PEntry#inode_entry.contents]),
+      ?DEBL(8,"merging ~p into ~p",[element(1,ChildTriplet),PEntry#inode_entry.name]),
       attr_tools:append_child(ChildTriplet,PEntry)
   end.
 

@@ -270,7 +270,7 @@ make_duplicate_children() ->
       Type= duplicate_file,
       IOList=lists:foldl(
         fun({DupName,Path},Acc) ->
-          [io_lib:format("~p:\t ~p\n",[DupName,Path])|Acc]
+          [io_lib:format("\"~s\" \"~s\"\n",[DupName,lists:flatten(Path)])|Acc]
         end
         ,[]
         ,List0),

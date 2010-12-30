@@ -49,7 +49,7 @@ remove_child_from_parent(ChildName,ParentName) ->
   NewEntry=Entry#inode_entry{contents=NewChildren},
   tree_srv:enter(Inode,NewEntry,inodes).
 %%--------------------------------------------------------------------------
-%% remove_old_attribute_value
+%% remove_attribute
 %% Path: The external path for the file in the db.
 %% Inode: The internal inode of the file.
 %% Attribute: The [Value|Key] attribute to remove from the dir.
@@ -73,7 +73,7 @@ remove_attribute(Path,Inode,Attribute) ->
   remove_child_from_parent(Name,Attribute).
 
 %%--------------------------------------------------------------------------
-%% remove_old_attribute_key
+%% 
 %% Path: The external path for the file in the db.
 %% Inode: The internal inode of the file.
 %% Key: The Key whose values are to be removed.

@@ -36,7 +36,7 @@ fs_prereq() ->
              {butnot_name,"&~"},
              {dup_prefix,"d"},
              {dup_suffix,"u"},
-             {dup_ext,"tsk"},
+             {dup_ext,".dup"},
              {mount_opts,"allow_other,default_permissions"}]}]},
   file:write_file("test/attrfs.app",io_lib:write(MyAttrApp)++"."),
   application:stop(attrfs),
@@ -163,42 +163,54 @@ all_test_() ->
 
 rmdir_test_() ->
   From="test/to/r/from/",
-  To="test/to/a/",
   Foo=From++"foo",
   Bar=From++"bar",
-  Key="b/c",
-  Val="d",
-  AFoo=To++Key++"/"++Val++"/foo",
-  ABar=To++Key++"/"++Val++"/bar",
-  [?_assertCmd("attr -s \""++Key++"\" -V "++Val++" "++Foo),
-   ?_assertCmd("attr -s \""++Key++"\" -V "++Val++" "++Bar),
-   ?_assertCmd("rm "++AFoo),
-   ?_assertCmd("attr -g \""++Key++"\" "++Bar),
-   ?_assertCmdStatus(2,"ls "++AFoo),
-   ?_assertCmd("rm -r "++To++Key++"/"++Val),
-   ?_assertCmdStatus(2,"ls "++ABar),
-   ?_assertCmdStatus(1,"attr -g \""++Key++"\" "++Bar)].
+  [      ?_assertCmd("attr -s \"b/c\" -V d "++Foo),
+         ?_assertCmd("attr -s \"b/c\" -V d "++Bar),
+         ?_assertCmd("rm test/to/a/b/c/d/foo"),
+         ?_assertCmd("attr -g \"b/c\" "++Bar),
+ ?_assertCmdStatus(2,"ls test/to/a/b/c/d/foo"),
+         ?_assertCmd("rm -r test/to/a/b/c/d"),
+ ?_assertCmdStatus(2,"ls test/to/a/b/c/d/bar"),
+ ?_assertCmdStatus(1,"attr -g \"b/c\" "++Bar),
+         ?_assertCmd("attr -s ho -V hm "++Foo), %This generated a bug before.
+         ?_assertCmd("attr -r ho "++Foo)
+   ].
 
 namespace_test_() ->
-  Foo="test/to/r/from/foo",
-  [?_assertCmd("attr -s foo -V foo "++Foo),
-   ?_assertCmdOutput("Attribute \"foo\" had a 3 byte value for test/to/r/from/foo:\nfoo\n","attr -g foo "++Foo),
+  Foo="test/to/r/all/foo",
+  [?_assertCmdOutput("Attribute \"foo\" set to a 3 byte value for test/to/r/all/foo:\nfoo\n","attr -s foo -V foo test/to/r/all/foo"),
+   ?_assertCmdOutput("Attribute \"foo\" had a 3 byte value for test/to/r/all/foo:\nfoo\n","attr -g foo "++Foo),
    ?_assertCmd("ls test/to/a/foo/foo/foo"),
    ?_assertCmd("attr -r foo "++ Foo),
    ?_assertCmd("mkdir test/to/a/from")].
   
 
 dups_test_() -> 
-  DupEtaoin="test/to/r/dup/detaoinu",
+  DupEtaoin="test/to/r/dup/etaoin.dup",
   AllEtaoin="test/to/r/all/etaoin",
   AllDupEtaoin="test/to/r/all/detaoinu",
-  [?_assertCmd("ls "++DupEtaoin),
+  [?_assertCmd("ls test/to/r/dup"),
+   ?_assertCmd("ls "++DupEtaoin),
    ?_assertCmd("ls "++AllEtaoin),
    ?_assertCmd("ls "++AllDupEtaoin),
-   ?_assertCmdOutput("\"detaoinu\":\t \"test/from/also/etaoin\"\n\"etaoin\":\t \"test/from/etaoin\"\n","cat "++DupEtaoin)
+   ?_assertCmdOutput("\"detaoinu\" \"test/from/also/etaoin\"\n\"etaoin\" \"test/from/etaoin\"\n","cat "++DupEtaoin)
    
   ].
   
+internal_files_test_() ->
+  [?_assertCmd("touch test/to/a/yo"),
+   ?_assertCmd("echo tjo > test/to/a/yo"),
+   ?_assertCmdOutput("tjo\n","cat test/to/a/yo"),
+   ?_assertCmd("rm test/to/a/yo"),
+   ?_assertCmd("touch test/to/a/yo"),
+   ?_assertCmd("echo tjo > test/to/a/yo"),
+   ?_assertCmdOutput("tjo\n","cat test/to/a/yo"),
+   ?_assertCmd("ls test/to/l/"),
+   ?_assertCmd("rm test/to/a/yo")].
+  
+
+
 timer_prereq(Amount) ->
   ?debugMsg("preparing timer"),
   ?assertCmd("mkdir -p test/from/"),
