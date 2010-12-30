@@ -24,10 +24,12 @@ filter(List1,LogicFoldr,List2) ->
     
 %----------------------------------------------------------------
 
-filter_or([{_,_,logic_dir}|List1],List2) ->
+-define(bad(Remove),(Remove =:= logic_dir) orelse (Remove =:= internal_file)).
+
+filter_or([{_,_,Remove}|List1],List2) when ?bad(Remove) ->
   filter_or(List1,List2);
 
-filter_or(List1,[{_,_,logic_dir}|List2]) ->
+filter_or(List1,[{_,_,Remove}|List2]) when ?bad(Remove) ->
   filter_or(List1,List2);
 
 filter_or([{_,_,attribute_dir}|List1],List2) ->
@@ -72,10 +74,10 @@ filter_and([{_,_,attribute_dir}|List1],List2) ->
 filter_and(List1,[{_,_,attribute_dir}=E2|List2]) ->
   [E2|filter_and(List1,List2)];
 
-filter_and([{_,_,logic_dir}|List1],List2) ->
+filter_and([{_,_,Remove}|List1],List2) when ?bad(Remove) ->
   filter_and(List1,List2);
 
-filter_and(List1,[{_,_,logic_dir}|List2]) ->
+filter_and(List1,[{_,_,Remove}|List2]) when ?bad(Remove) ->
   filter_and(List1,List2);
 
 filter_and([{K1,_,_}=E1|List1],[{K2,_,_}|List2]) when K1 == K2 ->
@@ -116,10 +118,10 @@ filter_butnot([{_,_,attribute_dir}|List1],List2) ->
 filter_butnot(List1,[{_,_,attribute_dir}=E2|List2]) ->
   [E2|filter_butnot(List1,List2)];
 
-filter_butnot([{_,_,logic_dir}|List1],List2) ->
+filter_butnot([{_,_,Remove}|List1],List2) when ?bad(Remove) ->
   filter_butnot(List1,List2);
 
-filter_butnot(List1,[{_,_,logic_dir}|List2]) ->
+filter_butnot(List1,[{_,_,Remove}|List2]) when ?bad(Remove) ->
   filter_butnot(List1,List2);
 
 filter_butnot(List1,List2) ->

@@ -63,28 +63,52 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
             FType=FEntry#inode_entry.type,
             rename_internal(
               PType,NPType,FType,
-              NewParentIno,NPEntry,FIno,FEntry,NewName)
+              ParentIno,NewParentIno,NPEntry,FIno,FEntry,NewName)
         end
     end.
 
 %% rename_internal(OldParentType,NewParentType,NewFileType,
 
-rename_internal(#external_dir{},attribute_dir,#external_file{},NewAttribIno,_,FileIno,FileEntry,_) ->
+rename_internal(#external_dir{},attribute_dir,#external_file{},_,NewAttribIno,_,FileIno,FileEntry,_) ->
   copy_file(NewAttribIno,FileIno,FileEntry);
 
-rename_internal(attribute_dir,attribute_dir,attribute_dir,_,NewAttribEntry,_,ValueEntry,NewValueName) ->
+rename_internal(attribute_dir,attribute_dir,attribute_dir,_,_,NewAttribEntry,_,ValueEntry,NewValueName) ->
   move_attribute_dir(NewAttribEntry,ValueEntry,NewValueName);
 
-rename_internal(attribute_dir,attribute_dir,#external_file{},NewAttribIno,_,FileIno,FileEntry,_) ->
+rename_internal(attribute_dir,attribute_dir,#external_file{},_,NewAttribIno,_,FileIno,FileEntry,_) ->
   copy_file(NewAttribIno,FileIno,FileEntry);
 
-rename_internal(_,_,_,_,_,_,_,_) ->
+rename_internal(attribute_dir,attribute_dir,internal_file,ParentIno,NewParentIno,NewParentEntry,FileIno,FileEntry,NewName) ->
+  move_internal_file(FileIno,FileEntry,ParentIno,NewName,NewParentIno,NewParentEntry);
+
+rename_internal(_,_,_,_,_,_,_,_,_) ->
   enotsup.
 
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 
+move_internal_file(FIno,FEntry,PIno,NewName,PIno,NPEntry) ->
+  Name=FEntry#inode_entry.name,
+  {value,{Name,FIno,Type},Children}=lists:keytake(Name,1,NPEntry#inode_entry.contents),
+  NewNPEntry=NPEntry#inode_entry{contents=[{NewName,FIno,Type}|Children]},
+  NewFEntry=FEntry#inode_entry{name=NewName},
+  tree_srv:enter(FIno,NewFEntry,inodes),
+  tree_srv:enter(PIno,NewNPEntry,inodes);
+
+move_internal_file(FIno,FEntry,PIno,NewName,NPIno,NPEntry) ->
+  Name=FEntry#inode_entry.name,
+  PEntry=tree_srv:get(PIno,inodes),
+  PName=PEntry#inode_entry.name,
+  Children=NPEntry#inode_entry.contents,
+  NewNPEntry=NPEntry#inode_entry{contents=[{NewName,FIno,FEntry#inode_entry.type}|Children]},
+  NewFEntry=FEntry#inode_entry{name=NewName},
+  tree_srv:enter(FIno,NewFEntry,inodes),
+  tree_srv:enter(NPIno,NewNPEntry,inodes),
+  attr_remove:remove_child_from_parent(Name,PName).
+
+%%--------------------------------------------------------------------------
+%%--------------------------------------------------------------------------
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 copy_file(NPIno,FIno,FEntry) ->
   Path=(FEntry#inode_entry.type)#external_file.path,

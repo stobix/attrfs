@@ -731,7 +731,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
-  ?DEBL(1,">rename; parent: ~w, name: ~w, new parent: ~w, new name: ~w",[ParentIno,Name,NewParentIno,NewName]),
+  ?DEBL(1,">rename; parent: ~w, name: ~s, new parent: ~w, new name: ~s",[ParentIno,Name,NewParentIno,NewName]),
   Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
 

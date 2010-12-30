@@ -229,8 +229,9 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
   ?DEB1(8,"transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
-  lists:map(
-    fun({Name,Inode,Type}) ->
+  % Since I want to get rid of elements not belonging in a logic dir, I filter out everything that is not an attridute_bir or an #external_file{}.
+  lists:foldl(
+    fun({Name,Inode,Type},Acc) ->
       case Type of
         attribute_dir ->
           {value,Entry}=tree_srv:lookup(Inode,inodes),
@@ -248,11 +249,14 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
           ?DEB2(8,"getting or setting inode number of ~p",[Name|LogicName]),
           LinkIno=inode:get(LinkName,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
-          {Name,LinkIno,LinkType};
+          [{Name,LinkIno,LinkType}|Acc];
         #external_file{}=E ->
-          {Name,Inode,E}
+          [{Name,Inode,E}|Acc];
+        _ ->
+          Acc
       end
     end,
+    [],
     MEntry#inode_entry.contents
   ).
 

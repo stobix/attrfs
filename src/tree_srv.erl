@@ -43,7 +43,9 @@
         to_list/1,
         clear/1,
         delete_any/2,
-        insert/3]).
+        insert/3,
+        get/2
+        ]).
 
 -ifdef(test).
 -include_lib("eunit/include/eunit.hrl").
@@ -124,7 +126,11 @@ new(TreeID) ->
 %% @end
 %%----------------------------------------------
 lookup(Key,TreeID) ->
+  gen_server:call(?MODULE,{lookup,Key,TreeID}).
+
+get(Key,TreeID) ->
   gen_server:call(?MODULE,{get,Key,TreeID}).
+
 
 to_list(TreeID) ->
   gen_server:call(?MODULE,{to_list,TreeID}).
@@ -143,10 +149,14 @@ handle_call({to_list,TreeID},_From,Trees) ->
   {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
   {reply,gb_trees:to_list(Tree),Trees};
 
-handle_call({get,Key,TreeID},_From,Trees) ->
+handle_call({lookup,Key,TreeID},_From,Trees) ->
   {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
   % TODO: In the parallel version, keep track of which keys are taken, and implement some kind of semaphoric thingie.
   {reply,gb_trees:lookup(Key,Tree),Trees};
+
+handle_call({get,Key,TreeID},_From,Trees) ->
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  {reply,gb_trees:get(Key,Tree),Trees};
 
 handle_call({store_tree,TreeID,Tree},_From,Trees) ->
   ?DEBL({tree,2},"storing a tree ~p into ~p",[TreeID,Trees]),
