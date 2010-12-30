@@ -143,7 +143,8 @@ initiate_servers(DB) ->
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
   inode:initiate(ino), % the inode table
-  inode:initiate(fino). % the open files "inode"table
+  inode:initiate(pino), % the spawned processes "inode" table
+  inode:initiate(fino). % the open files "inode" table
 
 type_and_children(Path,FileInfo) ->
         case FileInfo#file_info.type of
@@ -267,7 +268,7 @@ make_duplicate_children() ->
       ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
       Type= duplicate_file,
-      IOList=lists:foldr(
+      IOList=lists:foldl(
         fun({DupName,Path},Acc) ->
           [io_lib:format("~p:\t ~p\n",[DupName,Path])|Acc]
         end

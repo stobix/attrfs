@@ -41,7 +41,7 @@
          access/4
          ]).
 
-getattr(Inode,Continuation) ->
+getattr(Inode,Token) ->
   ?DEB2(3,">getattr_internal inode:~w",Inode),
   case tree_srv:lookup(Inode,inodes) of
     none ->
@@ -59,11 +59,11 @@ getattr(Inode,Continuation) ->
       Reply=#fuse_reply_err{err=enotsup}
   end,
   ?DEB1(5,"Sending reply"),
-  fuserlsrv:reply(Continuation,Reply).
+  attr_reply:reply(Token,Reply).
 
 
 
-getxattr(Inode,RawName,Size,Continuation) ->
+getxattr(Inode,RawName,Size,Token) ->
   Name=
     case string:str(RawName,"system")==1 of
       true -> "."++RawName;
@@ -91,9 +91,9 @@ getxattr(Inode,RawName,Size,Continuation) ->
       ?DEB1(4,"Argument nonexistent, returning error"),
       #fuse_reply_err{err=enodata}
   end,
-  fuserlsrv:reply(Continuation,Reply).
+  attr_reply:reply(Token,Reply).
 
-lookup(ParentInode,Child,Continuation) ->
+lookup(ParentInode,Child,Token) ->
   Reply=
     case attr_lookup:children(ParentInode) of
       {value,Children} ->
@@ -112,9 +112,10 @@ lookup(ParentInode,Child,Continuation) ->
         ?DEB1(4,"Parent nonexistent!"),
         #fuse_reply_err{err=enoent} %no parent
     end,
-  fuserlsrv:reply(Continuation,Reply).
+  attr_reply:reply(Token,Reply).
 
 
-access(Ctx,Inode,Mask,Continuation) ->
+access(Ctx,Inode,Mask,Token) ->
   Reply=attr_tools:test_access(Inode,Mask,Ctx),
-  fuserlsrv:reply(Continuation,#fuse_reply_err{err=Reply}).
+  attr_reply:reply(Token,#fuse_reply_err{err=Reply}).
+  %fuserlsrv:reply(Continuation,#fuse_reply_err{err=Reply}).

@@ -189,7 +189,7 @@ namespace_test_() ->
   
 
 dups_test_() -> 
-  DupEtaoin="test/to/r/dup/etaointsk",
+  DupEtaoin="test/to/r/dup/detaoinu",
   AllEtaoin="test/to/r/all/etaoin",
   AllDupEtaoin="test/to/r/all/detaoinu",
   [?_assertCmd("ls "++DupEtaoin),
