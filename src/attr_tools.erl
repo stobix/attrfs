@@ -369,11 +369,11 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry{}) ->
   PName=ParentEntry#inode_entry.name,
   ?DEBL(7,"»append_child: Child: ~p Parent: ~p",[element(1,NewChild),ParentEntry#inode_entry.name]),
-  Children=ParentEntry#inode_entry.children,
+  Children=ParentEntry#inode_entry.contents,
   ?DEB2(9,"children: ~p",Children),
   NewChildren=attr_tools:keymergeunique(NewChild,Children),
   ?DEB2(9,"merged children: ~p",NewChildren),
-  NewParentEntry=ParentEntry#inode_entry{children=NewChildren},
+  NewParentEntry=ParentEntry#inode_entry{contents=NewChildren},
   ?DEB1(9,"created new parent entry"),
   {ok,ParentIno}=inode:n2i(PName,ino),
   ?DEB2(9,"parent inode: ~p",ParentIno),

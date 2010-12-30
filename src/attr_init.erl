@@ -53,7 +53,7 @@ init({MirrorDirs,DB}) ->
   LogicEntry=
     #inode_entry{
       name=?LOGIC_FOLDR,
-      children=[],
+      contents=[],
       type=logic_dir,
       stat=?DIR_STAT(8#555,LogicIno),
       ext_info=[],
@@ -63,7 +63,7 @@ init({MirrorDirs,DB}) ->
   AttributeEntry=
     #inode_entry{
       name=?ATTR_FOLDR,
-      children=[],
+      contents=[],
       type=attribute_dir,
           % For now I'll set all access here, and limit access on a per-user-basis.
           % Maybe even make this folder "magic", so that different users think that they own it?
@@ -88,7 +88,7 @@ init({MirrorDirs,DB}) ->
   AllEntry=
     #inode_entry{
       name=?ALL_FOLDR,
-      children=AllChildren,
+      contents=AllChildren,
       type=internal_dir,
       stat=?DIR_STAT(8#555,AllIno),
       ext_info=[],
@@ -98,7 +98,7 @@ init({MirrorDirs,DB}) ->
   DupEntry=
     #inode_entry{
       name=?DUP_FOLDR,
-      children=make_duplicate_children(),
+      contents=make_duplicate_children(),
       type=internal_dir,
       stat=?DIR_STAT(8#555,DupIno),
       ext_info=[],
@@ -109,7 +109,7 @@ init({MirrorDirs,DB}) ->
   RealEntry=
     #inode_entry{
       name=?REAL_FOLDR,
-      children=[
+      contents=[
         {?ALL_FOLDR,AllIno,internal_dir},
         {?DUP_FOLDR,DupIno,internal_dir}|
           RealChildren],
@@ -122,7 +122,7 @@ init({MirrorDirs,DB}) ->
   RootEntry=
     #inode_entry{
       name=?ROOT_FOLDR,
-      children=[
+      contents=[
         {?REAL_FOLDR,RealIno,internal_dir},
         {?LOGIC_FOLDR,LogicIno,logic_dir},
         {?ATTR_FOLDR_FS_NAME,AttribIno,attribute_dir}],
@@ -143,7 +143,8 @@ initiate_servers(DB) ->
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
   inode:initiate(ino), % the inode table
-  inode:initiate(fino). % the open files "inode"table
+  inode:initiate(pino), % the spawned processes "inode" table
+  inode:initiate(fino). % the open files "inode" table
 
 type_and_children(Path,FileInfo) ->
         case FileInfo#file_info.type of
@@ -235,7 +236,7 @@ make_inode_list({Path,Name0}) ->
       InodeEntry=
         #inode_entry{ 
           name=Name,
-          children=Children,
+          contents=Children,
           type=Type,
           stat=MyStat,
           ext_info=ExtInfo,
@@ -267,7 +268,7 @@ make_duplicate_children() ->
       ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
       Type= duplicate_file,
-      IOList=lists:foldr(
+      IOList=lists:foldl(
         fun({DupName,Path},Acc) ->
           [io_lib:format("~p:\t ~p\n",[DupName,Path])|Acc]
         end
@@ -277,7 +278,7 @@ make_duplicate_children() ->
       Data=iolist_to_binary(List),
       Entry=#inode_entry{
         type=Type,
-        children=Data,
+        contents=Data,
         ext_info=[],
         ext_io=attr_ext:ext_info_to_ext_io([]),
         stat=?FILE_STAT(8#755,Ino,size(Data))

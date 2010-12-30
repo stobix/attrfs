@@ -1,3 +1,9 @@
+☐ Have more servers! An attribute server "linked" with an external file server,  an internal file server, with mostly the same API as the external file server (these might even be the same server, or have a common front end). This is to avoid, and handle, race conditions when going parallel.
+ The file server should have a receive for all add messages, propagating them to the proper file adding handler.
+ There should be several "data bases". Inode will still handle the numbering, but checking if a filename is bound should be handled by the file module that checks the {name,ino} data base.
+☑ Change #inode_entry.children to #inode_entry.contents
+☑ Put file contents in #inode_entry.contents as a binary
+
 ☐ Make it possible to copy files between folders. (Which will mostly be the same as changing attributes for files.)
 
 ☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.

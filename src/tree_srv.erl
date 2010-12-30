@@ -36,7 +36,16 @@
 
 -behaviour(gen_server).
 
--export([enter/3,store/2,new/1,lookup/2,to_list/1,clear/1,delete_any/2]).
+-export([enter/3,
+        store/2,
+        new/1,
+        lookup/2,
+        to_list/1,
+        clear/1,
+        delete_any/2,
+        insert/3,
+        get/2
+        ]).
 
 -ifdef(test).
 -include_lib("eunit/include/eunit.hrl").
@@ -100,6 +109,9 @@ enter(Key,Entry,TreeID) ->
   gen_server:cast(?MODULE,{update,Key,Entry,TreeID}). 
 
 
+insert(Key,Entry,TreeID) ->
+  gen_server:cast(?MODULE,{insert,Key,Entry,TreeID}).
+
 %%----------------------------------------------
 %% @doc creates a new tree and associates it with TreeID.
 %% @spec (term(),term(),gb_trees())-> ok|{error,exists}
@@ -114,7 +126,11 @@ new(TreeID) ->
 %% @end
 %%----------------------------------------------
 lookup(Key,TreeID) ->
+  gen_server:call(?MODULE,{lookup,Key,TreeID}).
+
+get(Key,TreeID) ->
   gen_server:call(?MODULE,{get,Key,TreeID}).
+
 
 to_list(TreeID) ->
   gen_server:call(?MODULE,{to_list,TreeID}).
@@ -133,10 +149,14 @@ handle_call({to_list,TreeID},_From,Trees) ->
   {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
   {reply,gb_trees:to_list(Tree),Trees};
 
-handle_call({get,Key,TreeID},_From,Trees) ->
+handle_call({lookup,Key,TreeID},_From,Trees) ->
   {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
   % TODO: In the parallel version, keep track of which keys are taken, and implement some kind of semaphoric thingie.
   {reply,gb_trees:lookup(Key,Tree),Trees};
+
+handle_call({get,Key,TreeID},_From,Trees) ->
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  {reply,gb_trees:get(Key,Tree),Trees};
 
 handle_call({store_tree,TreeID,Tree},_From,Trees) ->
   ?DEBL({tree,2},"storing a tree ~p into ~p",[TreeID,Trees]),
@@ -158,6 +178,13 @@ handle_cast({clear,TreeID},Trees) ->
     false -> {noreply,[{TreeID,gb_trees:empty()}|Trees]};
     true -> {noreply,lists:keymerge([{TreeID,gb_trees:empty()}],1,Trees)}
   end;
+
+handle_cast({insert,Key,Entry,TreeID},Trees) ->
+  {TreeID,Tree}=lists:keyfind(TreeID,1,Trees),
+  NewTree=gb_trees:insert(Key,Entry,Tree),
+  NewTrees=lists:keymerge(1,[{TreeID,NewTree}],Trees),
+  {noreply,NewTrees};
+    
 
 handle_cast({update,Key,Entry,TreeID},Trees) ->
   case lists:keyfind(TreeID,1,Trees) of
