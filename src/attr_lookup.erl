@@ -190,7 +190,7 @@ filter_children_entry(InoOrEntry,Name) ->
   filter_children(find_conn(Name),Children).
 
 %% The first argument is a list of parents, starting with a logical connective,unless the list is empty.
-%% LastChildrenUnfiltered is the children after the final logical connective in the list.
+%% Children is the children after the final logical connective in the list.
 %% XXX: This thing tails in the wrong way! This will consume much memory if we have very complicated connections.
 
 filter_children([Connective|Parents],Children) ->

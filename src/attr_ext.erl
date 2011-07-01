@@ -201,7 +201,7 @@ generate_ext_info_io(Path) ->
   {ExtInfo,ExtIo,ExtAmount}.
 
 %%--------------------------------------------------------------------------
-%% Ext info is a list, ext io is a string representation of a binary
+%% Ext info is a list of key-value-tuples, ext io is a string representation of a binary
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
   ?DEB1(6,"Creating ext_io"),

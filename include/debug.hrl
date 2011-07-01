@@ -17,6 +17,10 @@
 %%%  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 %%%
 %%%=========================================================================
+%%% 
+%%% This header handles whether to output debug messages or not, and how.
+%%%
+
 -ifndef(debug_hrl).
 
 
