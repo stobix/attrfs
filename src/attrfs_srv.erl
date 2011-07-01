@@ -1031,7 +1031,10 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
   case tree_srv:lookup(Inode,inodes) of
     {value,Entry} ->
       case Entry#inode_entry.type of
-        #external_file{} -> %For now, let's just pretend that we write something. Otherwise we'll have to know the parent of the node. (Could be sent via the file info, if needed.)
+        #external_file{} -> 
+			% For now, let's just pretend that we write something. 
+			% Otherwise we'll have to know the parent of the node.
+			% (Could be sent via the file info, if needed.)
           {#fuse_reply_write{count=size(Data)},State};
         internal_file ->
           Contents=Entry#inode_entry.contents,
@@ -1039,7 +1042,7 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
           Len=size(Contents),
           DLen=size(Data),
           try
-            NewContents=write(Offset,Contents,Data,Len,DLen),
+            NewContents=write_contents(Offset,Contents,Data,Len,DLen),
             ?DEB1(1,"Got new contents"),
             NewStat=?ST_SIZE(Stat,size(NewContents)),
             NewEntry=Entry#inode_entry{contents=NewContents,stat=NewStat},
@@ -1055,25 +1058,29 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
       {#fuse_reply_err{err=enoent},State}
   end.
 
-write(0,Contents,Data,CLen,DLen) when DLen >= CLen->
+% No offset, data to be written completely overwrites contents of file. 
+write_contents(0,_Contents,Data,CLen,DLen) when DLen >= CLen ->
   ?DEB1(1,"1"),
   Data;
 
-write(0,Contents,Data,CLen,DLen) ->
+% No offset, partial overwrite.
+write_contents(0,Contents,Data,CLen,DLen) ->
   ?DEB1(1,"2"),
-  Delete=size(Data),
-  <<_:Delete/binary,Rest/binary>>=Contents,
+  <<_:DLen/binary,Rest/binary>>=Contents,
   <<Data/binary,Rest/binary>>;
 
-write(Offset,Contents,Data,CLen,DLen) when Offset > CLen->
+% Offset after EOF, throw eof
+write_contents(Offset,_Contents,Data,CLen,DLen) when Offset > CLen ->
   ?DEB1(1,"3"),
   throw(eof);
 
-write(Offset,Contents,Data,CLen,DLen) when Offset == CLen ->
+% Offset at end of file, append data
+write_contents(Offset,Contents,Data,CLen,DLen) when Offset == CLen ->
   ?DEB1(1,"4"),
   <<Contents/binary,Data/binary>>;
 
-write(Offset,Contents,Data,CLen,DLen) when Offset < CLen ->
+% Offset inside the file, insert and overwrite
+write_contents(Offset,Contents,Data,CLen,DLen) when Offset < CLen ->
   ?DEB1(1,"5"),
   if
     Offset+DLen >= CLen -> 

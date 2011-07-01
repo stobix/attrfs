@@ -11,7 +11,7 @@
       {from_dirs,["/mnt/bildix/kamer2","/mnt/bildix/kamer3"]},
       {attributes_db,"/home/Volatile/attributes"},
       {linked_in,true},
-      {real_name,"real"},
+      {real_name,"files"},
       {attr_name,"attributes"},
       {and_name,"AND"},
       {or_name,"OR"},

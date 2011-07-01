@@ -41,6 +41,9 @@
 
 
 %%--------------------------------------------------------------------------
+%% Rereads and rebuilds the extended info for the Path provided,
+%%  storing the information in the stat entry of the Inode entry.
+%% Input: Inode, Path
 %%--------------------------------------------------------------------------
 rehash_ext_from_db(Inode,Path) ->
   {ExtInfo,ExtIo,ExtAmount}=generate_ext_info_io(Path),
@@ -51,8 +54,14 @@ rehash_ext_from_db(Inode,Path) ->
   tree_srv:enter(Inode,NewEntry,inodes).
 
 %%--------------------------------------------------------------------------
+%% Adds the extended attribute Attr (in list form) to file with path Path,
+%%  inode FIno and file entry FEntry
+%% Input: Path, FIno, FEntry, Attr
 %%--------------------------------------------------------------------------
 add_new_attribute(Path,FIno,FEntry,Attr) ->
+	%% Since most calls to this function comes from functions that have
+	%% already looked up the file entry for the inode, sending both the
+	%% FIno and FEntry here saves a lookup call.
   ?DEB1(3,">add_new_attribute"),
   % Add the new attribute, if non-existent.
   ?DEBL(5,"inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
@@ -69,25 +78,35 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 
 
 %%--------------------------------------------------------------------------
+%%  Adds the extended attribute Attr to the file with internal name FName and
+%%   file stat Stat, recursively creating attribute directory parents as needed.
+%% Input: Attr, FName, Stat
 %%--------------------------------------------------------------------------
 append_attribute(Attr,FName,Stat) ->
   ?DEBL(3,"appending ~p/~p",[Attr,FName]),
-  append(Attr,FName,FName,Stat).
+  append_attribute_dir(Attr,FName,FName,Stat).
 
 
 %% this function creates directory parents recursively if unexistent, updating
 %% the lists of children along the way.
 
-append(Parent,ChildInoName,ChildName,Stat) ->
+%%--------------------------------------------------------------------------
+%%  Adds the extended attribute Parent to the file with internal name FName and
+%%   file stat Stat, recursively creating directory parents as needed.
+%% Input: Parent, ChildInoName, ChildName,Stat
+%%--------------------------------------------------------------------------
+append_attribute_dir(Parent,ChildInoName,ChildName,Stat) ->
   ?DEBL(6,"append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
   {ok,ChildIno}=inode:n2i(ChildInoName,ino),
+  % get creates if non-existant.
   ParentIno=inode:get(Parent,ino),
   {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
   ?DEB1(8,"got child entry"),
   ChildType=ChildEntry#inode_entry.type,
   ChildTriplet={ChildName,ChildIno,ChildType},
+  % Append child to parent, creating parent entry recursively if neccessary.
   case tree_srv:lookup(ParentIno,inodes) of
-    % No entry found, creating new attribute entry.
+    % No entry found, creating new attribute entry before appending child.
     none ->
       ?DEBL(8,"adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
       PEntry=
@@ -101,33 +120,55 @@ append(Parent,ChildInoName,ChildName,Stat) ->
         },
       ?DEB1(8,"entering new entry into server"),
       tree_srv:enter(ParentIno,PEntry,inodes),
-      [PName|GrandParent]=Parent, %Since attribute folder names are defined recursively.
+	  % This works since attribute folder names are defined recursively.      
+	  [PName|GrandParent]=Parent, 
       ?DEBL(8,"checking parent of parent (~p)",[GrandParent]),
-      append(GrandParent,Parent,PName,Stat);
+      append_attribute_dir(GrandParent,Parent,PName,Stat);
+	% Parent already created, just appending child.
     {value,PEntry} ->
       ?DEBL(8,"merging ~p into ~p",[element(1,ChildTriplet),PEntry#inode_entry.name]),
       attr_tools:append_child(ChildTriplet,PEntry)
   end.
 
 %%--------------------------------------------------------------------------
+%% Input: Path
+%% Output: {Ext info for path from database,Number of ext info items}
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
   ?DEB2(3,"generating ext info for ~s",Path),
-  ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}), 
+  % Find the path in the data base
+  ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}),
+  % Count the number of items
   ExtAmount=lists:foldr(fun(_,N) -> N+1 end,0,ExtInfo0),
+  % Flatten the list
   ExtInfo1=convert(ExtInfo0),
-  {attr_tools:merge_duplicates(ExtInfo1),ExtAmount}. % Going from a list of lists of tuples to a list of tuples.
+  % Return flattened list and number of items
+  {attr_tools:merge_duplicates(ExtInfo1),ExtAmount}. 
 
+%%--------------------------------------------------------------------------
+%% ext list form -> ext tuple form
+%% Input: list of lists of rpn-ish list representations of key-value objects
+%% Output: list of key-value-tuples
+%% Example: [[["foo","bar","baz"]]] -> [{"baz/bar","foo"}]
+%%--------------------------------------------------------------------------
 convert(LList) ->
     convert1(attr_tools:flatten1(LList)).
 
-
+%%--------------------------------------------------------------------------
+%% Input: list of lists
+%% Output: list of key-value-tuples
+%%--------------------------------------------------------------------------
 convert1([]) -> [];
 convert1([A|As]) ->
     [keyvalue(A)|convert1(As)].
 
-% A key AND value less attribute will make this function crash, and it should.
 
+
+%%--------------------------------------------------------------------------
+%% Converts lists of form [H|T] to tuples of form {H,T}.
+%% T may be empty, and if so, an empty list is inserted on the T position
+%%--------------------------------------------------------------------------
+% A key AND value less attribute will make this function crash, and it should!
 % A valueless key will have an empty string as value
 keyvalue([A|[]]) ->
     {A,""};
@@ -149,6 +190,8 @@ keyvalue(A) ->
 
 
 %%--------------------------------------------------------------------------
+%% Generates extended info in both the internal info tuple format and the fuse io
+%%  string format for the specified file path
 %%--------------------------------------------------------------------------
 generate_ext_info_io(Path) ->
   ?DEB2(3,"generating ext info for ~p",Path),
@@ -158,12 +201,14 @@ generate_ext_info_io(Path) ->
   {ExtInfo,ExtIo,ExtAmount}.
 
 %%--------------------------------------------------------------------------
+%% Ext info is a list, ext io is a string representation of a binary
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
   ?DEB1(6,"Creating ext_io"),
   ext_info_to_ext_io(InternalExtInfoTupleList,[]).
 
 %%--------------------------------------------------------------------------
+%% All items processed, return {length of string, string}
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([],B) -> 
   B0=B++"\0",
@@ -173,6 +218,8 @@ ext_info_to_ext_io([],B) ->
   {B0len,B0};
 
 %%--------------------------------------------------------------------------
+%% Generating extended info string for the current attribute, and
+%%  adding it to the string to be sent to fuse.
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
   Name0=
