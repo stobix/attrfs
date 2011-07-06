@@ -51,6 +51,9 @@
 -define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,""))).
 -define(DUP_EXT,(attr_tools:get_or_default(dup_ext,".txt"))).
 
+% TODO: Convert to number
+-define(MAX_LOGIC_RECURS,(attr_tools:get_or_default(max_logic_recurs,20))).
+
 
 -include_lib("kernel/include/file.hrl"). %for record file_info,type io_string()
 -include_lib("fuserl/include/fuserl.hrl"). % for #stat{}

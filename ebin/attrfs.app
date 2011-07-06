@@ -7,7 +7,7 @@
    {mod,{attrfs,[]}},
    {env,
      [{to_dir,"/home/Volatile/attrfs"},
-      {from_dir,["/home/Volatile/mirrorfs"]},
+%      {from_dir,["/home/Volatile/mirrorfs"]},
       {from_dirs,["/mnt/bildix/kamer2","/mnt/bildix/kamer3"]},
       {attributes_db,"/home/Volatile/attributes"},
       {linked_in,true},

@@ -83,7 +83,7 @@ filter_and(List1,[{_,_,Remove}|List2]) when ?bad(Remove) ->
 filter_and([{K1,_,_}=E1|List1],[{K2,_,_}|List2]) when K1 == K2 ->
   [E1|filter_and(List1,List2)];
 
-% K1 ≠≠ K2. We now check if any element in List1 == K2
+% K1 =:= K2. We now check if any element in List1 == K2
 
 filter_and(List1,[E2|List2]) ->
   filter_and(List1,[E2],List2);

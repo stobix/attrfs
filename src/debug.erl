@@ -32,7 +32,7 @@ case ?modules of
     end
   end.
 -else.
-output(FormatString,Message,Token) ->
+output(_FormatString,_Message,_Token) ->
   no_modules.
 -endif.
 

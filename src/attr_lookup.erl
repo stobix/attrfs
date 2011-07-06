@@ -175,8 +175,15 @@ generate_logic_link_children(Ino,Name) ->
           end
         end,
         LinkChildren),
-      LogicDirs=generate_logic_dirs(Name),
-      ConvertedChildren++LogicDirs;
+      case length(Name)<?MAX_LOGIC_RECURS of
+        true ->
+          LogicDirs=generate_logic_dirs(Name),
+          ConvertedChildren++LogicDirs;
+        false ->
+          ?DEB1(5,"not generating logic dirs, due to depth"),
+          ConvertedChildren
+      end;
+          
     _ ->
     #inode_entry.contents
   end.
