@@ -1,12 +1,19 @@
-INTRODUCTION
-attrfs is a file system designed for sorting files, either by setting extended attributes or moving/copying files into "attribute folders".
+0 INTRODUCTION
+attrfs is a file system designed for organizing files into multiple categories, either by setting extended attributes or moving/copying files into "attribute folders".
 
-INSTALL
+1 INSTALL
 
+This app depends on the fuserl application. Make sure you have it installed before trying to run this.
 
-USAGE
+I haven't written any installer yet, but this is one way to do it:
+* Congigure the attrfs.app file to your taste.
+* start an erl shell with the attrfs dir in the ERL_LIBS path
+* compile with make:all(). if you want debug messages, use make:all({d,debug}). instead.
+* do application:start(fuserl). followed by application:start(attrfs).
 
-ATTRIBUTES
+2 USAGE
+
+2.1 ATTRIBUTES
 
 Read the man page of attr, or your favorite extended attributes manager program, for a full list of attribute handling commands that are available.
 The attribute key can contain a separator (default: "/"), to signify a multi level attribute.
@@ -32,7 +39,7 @@ attributes/foo/baz:
 fil
 
 
-FILE HANDLING
+2.2 FILE HANDLING
 Copying/moving files:
 % mkdir -p attribute_part/foo/bar
 % mv real_part/file attribute_part/foo/bar
@@ -43,7 +50,7 @@ Copying/moving files:
 % attr -g foo real_part/file
    bar
 
-CONFIGURATION
+2.3 CONFIGURATION
 These are the values that can be set in the attrfs.app file:
 
 Paths:
