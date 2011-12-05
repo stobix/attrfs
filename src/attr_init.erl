@@ -37,6 +37,7 @@
 
 init({MirrorDirs,DB}) ->
   ?DEB1(1,">init"),
+%  check_dirs(MirrorDirs), TODO: This is smarter than checking for legit dirs when parsing them. Fix later.
   initiate_servers(DB),
   % getting inodes for base folders
   {ok,RootIno}=inode:number(root,ino),
@@ -133,6 +134,10 @@ init({MirrorDirs,DB}) ->
     },
   ?DEB1({init,5},"updating root inode entry"),
   tree_srv:enter(RootIno,RootEntry,inodes).
+
+%check_dirs(Dirs) ->
+  
+  
 
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
@@ -252,11 +257,11 @@ make_inode_list({Path,Name0}) ->
           attr_ext:append_attribute(Attr,Name,?UEXEC(MyStat)) 
         end,
         ExtFolders),
-    {Name,Ino,Type,AllChildren};
+      {Name,Ino,Type,AllChildren};
     E ->
-      ?DEBL(1,"got ~w when trying to read ~p.",[E,Path]),
-      ?DEB1(1,"are you sure your app file is correctly configured?"),
-      ?DEB1(1,">>>exiting<<<"),
+      ?DEBL(err,"got ~w when trying to read ~p.",[E,Path]),
+      ?DEB1(err,"are you sure your app file is correctly configured?"),
+      ?DEB1(err,">>>exiting<<<"),
       exit(E)
   end.
 

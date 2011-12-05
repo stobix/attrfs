@@ -2,7 +2,9 @@
 
 -export([msg/4,msg/5,timestamp/4,timestamp/5]).
 
--define(sp(X),string:copies(" ",case X of {_,Y} -> Y; Y -> Y end)).
+%-define(sp(X),?sc(case X of {_,err} -> 0; err -> 0; A -> A end)).
+%-define(sc(X),string:copies(" ",case X of {_,Y} -> Y; Y -> Y end)).
+-define(sp(X)," ").
 
 msg(Level,Module,Line,Msg) ->
   debug_message("~-10s:~4..0b ~s~s~n",[Module,Line,?sp(Level),Msg],Level).
@@ -48,7 +50,13 @@ output(_FormatString,_Message,_Token) ->
 
 debug_message(FormatString,Message,Level) ->
   case Level of
+    % Show errors regardless of from which module they come.
+    {Info,err} -> io:format(standard_error,FormatString,Message);
+    % Errors without module info.
+    err -> io:format(standard_error,FormatString,Message);
+    % Filter normal messages by module.
     {Info,L} -> ?checkl(L,output(FormatString,Message,Info));
+    % Messages filtered only by debug level.
     L -> ?checkl(L,io:format(FormatString,Message))
   end.
       

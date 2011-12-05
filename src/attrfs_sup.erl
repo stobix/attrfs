@@ -27,18 +27,29 @@
 -include("../include/attrfs.hrl").
 
 start_link(From,To,DB,MountOpts,LinkedIn) ->
-  supervisor:start_link(?MODULE,{From,To,DB,MountOpts,LinkedIn}).
+  case supervisor:start_link(?MODULE,{From,To,DB,MountOpts,LinkedIn}) of
+    {ok,PID} ->
+        ?DEB1(1,"Starting inode_sup..."),
+        supervisor:start_child(PID,
+            {inode_sup,{inode_sup,start_link,[]}, 
+                temporary, infinity, supervisor ,[inode]}),
+        ?DEB1(1,"Starting tree_sup..."),
+        supervisor:start_child(PID,
+            {tree_sup,{tree_sup,start_link,[]}, 
+                temporary, infinity, supervisor, [tree_srv]}),
+        ?DEB1(1,"Starting attr_reply..."),
+        supervisor:start_child(PID,
+            {attr_reply,{attr_reply,start_link,[]},
+                temporary, 10, worker, [attr_reply]}),
+        ?DEB1(1,"Starting attrfs_srv..."),
+        supervisor:start_child(PID,
+            {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
+                temporary, 10, worker, [attrfs]}),
+        {ok,PID};
+    E -> E
+    end.
 
 init({From,To,DB,MountOpts,LinkedIn}) ->
-  ?DEB1(1,"Starting attrfs_srv..."),
-  {ok, {{one_for_all,3,10},
-     [
-       {inode_sup,{inode_sup,start_link,[]}, 
-           temporary, infinity, supervisor ,[inode]},
-       {tree_sup,{tree_sup,start_link,[]}, 
-           temporary, infinity, supervisor, [tree_srv]},
-       {attr_reply,{attr_reply,start_link,[]},temporary, 10, worker, [attr_reply]},
-       {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
-           temporary, 10, worker, [attrfs]}
-     ]}}.
+  ?DEB1(1,"Starting attrfs_sup..."),
+  {ok, {{one_for_all,3,10},[]}}.
 
