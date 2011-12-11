@@ -2,9 +2,9 @@
 
 -export([msg/4,msg/5,timestamp/4,timestamp/5]).
 
-%-define(sp(X),?sc(case X of {_,err} -> 0; err -> 0; A -> A end)).
-%-define(sc(X),string:copies(" ",case X of {_,Y} -> Y; Y -> Y end)).
--define(sp(X)," ").
+-define(sp(X),?sc(case X of {_,err} -> 0; err -> 0; A -> A end)).
+-define(sc(X),string:copies(" ",case X of {_,Y} -> Y; Y -> Y end)).
+%-define(sp(X)," ").
 
 msg(Level,Module,Line,Msg) ->
   debug_message("~-10s:~4..0b ~s~s~n",[Module,Line,?sp(Level),Msg],Level).

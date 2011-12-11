@@ -8,9 +8,15 @@
 
 ☐ Add support for moving real files in the real file system by moving files in the real part of the file system. Change names of database entries simultaneously.
 
-☐ Include support for creating files! Nautilus wants to have a .Trash and a .thumbnails directory...    
- ☐  files
- ☐  folders
+☐  Include support for creating files! Nautilus wants to have a .Trash and a .thumbnails directory...    
+ ☑  files (in attribute dirs)
+ ☑  folders (in attribute dirs)
+    folders (in root dir)
+    folders (in mirrored dir)
+    files (in created dirs in root dir)
+    files (in created dirs in mirrored dir)
+    
+
     
 ☐ Include support for writing to files
  ☐  mirrored
@@ -71,11 +77,13 @@
 
 ☐ Make a way to "reload" the directory we're mirroring from.
 ☐ Support mirroring from multiple directories.
+  Dynamic mirroring! attrfs:set_dirs(["foo","bar"]) or something similar, perhaps?
 
-☐ Detect duplicates in the folder(s) to mirror.
+☑  Detect duplicates in the folder(s) to mirror.
   * note as folders under /duplicates ?
     /duplicates/foo.file/paths.txt or something like it.
   * show duplicate files as a special type of folder?
 
 
 ☐ what is wrong with the logical subdirs? Do I point sequentially all the way down to the original, or do I point directly to the original from all? The processing is way too slow, anyhow.
+

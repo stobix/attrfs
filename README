@@ -1,15 +1,34 @@
-0 INTRODUCTION
-attrfs is a file system designed for organizing files into multiple categories, either by setting extended attributes or moving/copying files into "attribute folders".
+---------------------
+CONTENTS:
 
-1 INSTALL
+0 INTRODUCTION
+1 INSTALLATION
+2 USAGE
+  2.1 ATTRIBUTES
+  2.2 FILE HANDLING
+  2.3 CONFIGURATION
+3 STRUCTURE
+
+---------------------
+
+0 INTRODUCTION
+
+attrfs is a file system designed for organizing files into multiple categories, either by setting extended attributes or moving/copying files into "attribute folders".
+For examples, see 2 USAGE.
+
+---------------------
+
+1 INSTALLATION
 
 This app depends on the fuserl application. Make sure you have it installed before trying to run this.
 
 I haven't written any installer yet, but this is one way to do it:
-* Congigure the attrfs.app file to your taste.
+* Congigure the attrfs.app file to your taste. IMPORTANT: Unless you change what directories to mirror, you won't be able to start the app!
 * start an erl shell with the attrfs dir in the ERL_LIBS path
-* compile with make:all(). if you want debug messages, use make:all({d,debug}). instead.
-* do application:start(fuserl). followed by application:start(attrfs).
+* compile with make:all(). 
+* run by doing application:start(fuserl). followed by application:start(attrfs).
+
+---------------------
 
 2 USAGE
 
@@ -80,3 +99,8 @@ Fuserl specific:
   linked_in (default: true)
   mount_opts (default:  "allow_other,default_permissions")
 
+---------------------
+
+3 STRUCTURE
+
+For information on the structure of the files included in this app, see the STRUCTURE document.
