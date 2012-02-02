@@ -1,4 +1,4 @@
-{'src/attr*',[{outdir,'ebin'},{d,debug},{d,timestamp}]}.
-{'src/debug*',[{outidr,'ebin'},{d,level,5}]}.
-{'src/test*',[{outdir,'ebin'},{d,test}]}.
-{'src/*',[{outdir,'ebin'}]}.
+{'src/attr*',[{outdir,'ebin'},load,{d,debug},{d,timestamp}]}.
+{'src/debug*',[{outidr,'ebin'},load,{d,level,0}]}.
+{'src/test*',[{outdir,'ebin'},load,{d,test}]}.
+{'src/*',[{outdir,'ebin'},load]}.

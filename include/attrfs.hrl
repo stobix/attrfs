@@ -209,6 +209,6 @@
     #fuse_entry_param{ ino=Inode,
                        generation=0,
                        attr=Entry#inode_entry.stat,
-                       attr_timeout_ms=1000,
-                       entry_timeout_ms=1000}).
+                       attr_timeout_ms=10000,
+                       entry_timeout_ms=10000}).
 

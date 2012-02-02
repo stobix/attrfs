@@ -45,7 +45,11 @@ start_link(From,To,DB,MountOpts,LinkedIn) ->
         supervisor:start_child(PID,
             {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
                 temporary, 10, worker, [attrfs]}),
+        supervisor:start_child(PID,
+            {reporter,{reporter,start_link,[]},
+                temporary, 10, worker, [reporter]}),
         {ok,PID};
+
     E -> E
     end.
 
