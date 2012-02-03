@@ -54,7 +54,7 @@
         get_items/0,lookup/1,get_all/0
         ]).
 %%%=========================================================================
-%%% application functions. Will be used if I make this a standalone app.
+%%% application functions. 
 %%%=========================================================================
 
 start(_Type,_Args) ->
@@ -105,7 +105,6 @@ lookup(Item) ->
 
 get_all() ->
     gen_server:call(?MODULE,all).
-
 
 %%%=========================================================================
 %%% callbacks.
