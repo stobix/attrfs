@@ -41,6 +41,11 @@
          access/4
          ]).
 
+getattr(1,Token) ->
+    {value,Entry} = tree_srv:lookup(1,specials),
+    Reply=?ENTRY2REPLY_ATTR(Entry),
+    attr_reply:reply(Token,Reply);
+
 getattr(Inode,Token) ->
   ?DEB2(3,">getattr_internal inode:~w",Inode),
   case tree_srv:lookup(Inode,inodes) of
@@ -49,11 +54,7 @@ getattr(Inode,Token) ->
       Reply=#fuse_reply_err{err=enoent};
     {value,Entry} ->
       ?DEB1(5,"File exists, returning info"),
-      Reply=
-        #fuse_reply_attr{
-          attr=Entry#inode_entry.stat,
-          attr_timeout_ms=5
-        };
+      Reply=?ENTRY2REPLY_ATTR(Entry);
     _A -> 
       ?DEB2(5,"This should not be happening: ~p",_A),
       Reply=#fuse_reply_err{err=enotsup}

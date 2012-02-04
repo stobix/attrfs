@@ -2,7 +2,8 @@
 
 -export([msg/4,msg/5,timestamp/4,timestamp/5]).
 
--define(sp(X),?sc(case X of {_,err} -> 0; err -> 0; A -> A end)).
+% Macros to indent according to level, with errors always being level 0.
+-define(sp(X),case X of {_,err} -> "(Error) "; err -> "(Error) "; A -> ?sc(A) end).
 -define(sc(X),string:copies(" ",case X of {_,Y} -> Y; Y -> Y end)).
 %-define(sp(X)," ").
 
@@ -38,12 +39,12 @@ output(_FormatString,_Message,_Token) ->
   no_modules.
 -endif.
 
--ifndef(level).
--define(level,1).
+-ifndef(debug_level).
+-define(debug_level,1).
 -endif.
 
 -define(checkl(L,Y),
-  case L =< ?level of
+  case L =< ?debug_level of
     true -> Y;
     _ -> ok
   end).

@@ -61,6 +61,7 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(LogicIno,LogicEntry,inodes),
+  tree_srv:enter(LogicIno,LogicEntry,specials),
   AttributeEntry=
     #inode_entry{
       name=?ATTR_FOLDR,
@@ -74,6 +75,7 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AttribIno,AttributeEntry,inodes),
+  tree_srv:enter(AttribIno,AttributeEntry,specials),
   ?DEB1({init,1},"Traversing all mirror dirs"),
   % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
   {RealChildren,AllChildren}=lists:mapfoldl(
@@ -133,7 +135,8 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   ?DEB1({init,5},"updating root inode entry"),
-  tree_srv:enter(RootIno,RootEntry,inodes).
+  tree_srv:enter(RootIno,RootEntry,inodes),
+  tree_srv:enter(RootIno,RootEntry,specials).
 
 %check_dirs(Dirs) ->
   
@@ -145,6 +148,7 @@ initiate_servers(DB) ->
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   tree_srv:new(inodes), % contains inode entries
   tree_srv:new(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
+  tree_srv:new(specials), % to provide fast access to the root dir and other critical dirs
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
   inode:initiate(ino), % the inode table

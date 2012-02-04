@@ -1,6 +1,6 @@
 -module(utils).
 
--export([restart/1,chain/1,recompile/0,reload_files/1]).
+-export([restart/1,chain/1,recompile/0,reload_files/1,dispatch/1]).
 
 restart(Module) ->
  application:stop(Module),
@@ -37,4 +37,8 @@ reload_files(Files) ->
                   code:load_file(Name)
               end,
               Files).
+
+dispatch(Prog) ->
+    systools:make_script(Prog,[local]),
+    systools:make_tar(Prog,[{erts, "/usr/lib/erlang"}]).
 

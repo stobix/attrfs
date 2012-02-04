@@ -106,7 +106,8 @@
 -export([dump_entries/1,
          dump_inodes/0,
          dump_finodes/0,
-         dump_inode_entries/0]).
+         dump_inode_entries/0,
+         which_dirs/0]).
 
 %%%=========================================================================
 %%% temporary exports for testing functionality.
@@ -140,7 +141,7 @@
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 handle_info(_Msg,State) ->
-  reporter:put(handle_info),
+  ?REPORT(handle_info),
   ?DEBL(1,">handle_info(~w)",[_Msg]),
   {noreply,State}.
 
@@ -149,7 +150,7 @@ handle_info(_Msg,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 code_change(_,_,_) ->
-  reporter:put(code_change), 
+  ?REPORT(code_change), 
   %XXX: Maybe do something more intelligent with this?
   ?DEB1(1,">code_change: Doing nothing!"),
   ok.
@@ -159,7 +160,7 @@ code_change(_,_,_) ->
 %% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
 %%--------------------------------------------------------------------------
 start_link({MountDir,MirrorDir,DB}) ->
-  reporter:put(start_link),
+  ?REPORT(start_link),
   ?DEB1(1,">Starting attrfs server..."),
   start_link(MountDir,false,"",MirrorDir,DB).
 
@@ -168,7 +169,7 @@ start_link({MountDir,MirrorDir,DB}) ->
 %% In here, I mostly check for dirs needed to start fuserlsrv.
 %--------------------------------------------------------------------------
 start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
-  reporter:put(start_link),
+  ?REPORT(start_link),
 
   ?DEB1(1,">start_link"),
   ?DEB1(2,"checkning if dirs are ok..."),
@@ -180,8 +181,8 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
         true ->
           ?DEB2(2,"~p exists, and is a dir. Ok.",Dir);
         false->
-          ?DEB2(2,"~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
-          ?DEB1(1,"TERMINATING"),
+          ?DEB2(err,"~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
+          ?DEB1(err,"TERMINATING"),
           throw({error,dir_to_is_not_a_dir,Dir})
       end;
     E ->
@@ -196,8 +197,8 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
         true ->
           ?DEB2(2,"~p exists, and is a dir. Ok.",MirrorDir);
         false->
-          ?DEB2(2,"~p is not a directory!(Check your config)",MirrorDir),
-          ?DEB1(1,"TERMINATING"),
+          ?DEB2(err,"~p is not a directory!(Check your config)",MirrorDir),
+          ?DEB1(err,"TERMINATING"),
           throw({error,dir_from_is_not_a_dir,MirrorDir})
       end
   end,
@@ -211,7 +212,7 @@ start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 init({MirrorDir,DB}) ->
-  reporter:put(init),
+  ?REPORT(init),
   attr_init:init({MirrorDir,DB}),
   State=[],
   {ok,State}.
@@ -223,7 +224,7 @@ init({MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
-  reporter:put(terminate),
+  ?REPORT(terminate),
   ?DEB1(1,">terminate"),
   ?DEB1(1,"\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n"),
   ?DEB2(1,"|  _Reason: ~p",_Reason),
@@ -242,7 +243,7 @@ terminate(_Reason,_State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 access(Ctx,Inode,Mask,Continuation,State) ->
-  reporter:put(access),
+  ?REPORT(access),
   ?DEB1(1,">access"),
   ?DEB2(2,"|  Ctx: ~w ",Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
@@ -264,7 +265,7 @@ access(Ctx,Inode,Mask,Continuation,State) ->
 %% A file is allowed to be created in an attribs folder iff it already exists by that name somewhere else. This makes "copying"files possible.
 %%--------------------------------------------------------------------------
 create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Continuation, State) ->
-  reporter:put(create),
+  ?REPORT(create),
   ?DEB1(1,">create"), 
   ?DEB2(2,"|  Ctx: ~w",Ctx),
   ?DEB2(2,"|  ParentIno: ~w",ParentInode),
@@ -331,7 +332,7 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
-  reporter:put(flush),
+  ?REPORT(flush),
   ?DEB1(1,">flush"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  Inode: ~w ",_Inode),
@@ -343,7 +344,7 @@ flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
-  reporter:put(forget),
+  ?REPORT(forget),
   ?DEBL(1,">forget inode: ~w",[Inode]),
   attr_open:forget(Inode),
   {#fuse_reply_none{},State}.
@@ -353,7 +354,7 @@ forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
-  reporter:put(fsync),
+  ?REPORT(fsync),
   ?DEBL(1,"~s",["fsync!"]),
   {#fuse_reply_err{err=ok},State}.
 
@@ -362,7 +363,7 @@ fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
-  reporter:put(fsyncdir),
+  ?REPORT(fsyncdir),
   ?DEBL(1,"~s",["fsyncdir!"]),
   {#fuse_reply_err{err=enotsup},State}.
     
@@ -371,7 +372,7 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
-  reporter:put(getattr),
+  ?REPORT(getattr),
   ?DEBL(1,">getattr inode:~w",[Inode]),
   % I must do this by spawning, lest fuserl hangs erl and fuse!!!
   attr_reply:watch(
@@ -387,7 +388,7 @@ getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
-  reporter:put(getlk),
+  ?REPORT(getlk),
   ?DEBL(1,"~s",["getlk!\n"]),
   {#fuse_reply_err{err=enotsup},State}.
 
@@ -396,7 +397,7 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %% Get the value of an extended attribute. If Size is zero, the size of the value should be sent with #fuse_reply_xattr{}. If Size is non-zero, and the value fits in the buffer, the value should be sent with #fuse_reply_buf{}. If Size is too small for the value, the erange error should be sent. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type getxattr_async_reply ().
 %%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
-  reporter:put(getxattr),
+  ?REPORT(getxattr),
   RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEBL(1,">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
   attr_reply:watch(fun(Token) -> attr_async:getxattr(Inode,RawName,Size,Token) end,
@@ -411,7 +412,7 @@ getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
 %% On my system, the new name has to be the same as the old, and thus is ignored.
 %%--------------------------------------------------------------------------
 link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
-  reporter:put(link),
+  ?REPORT(link),
   ?DEBL(1,"~s",["link!"]),
   {#fuse_reply_err{err=enotsup},State}.
     
@@ -420,7 +421,7 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
-  reporter:put(listxattr),
+  ?REPORT(listxattr),
   ?DEB2(1,">listxattr inode:~w",Inode),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   ?DEB1(4,"got inode entry."),
@@ -446,8 +447,7 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
-  reporter:put(lookup),
-  reporter:put(lookup),
+  ?REPORT(lookup),
   Child=binary_to_list(BinaryChild),
   ?DEBL(1,">lookup Parent: ~p Name: ~s",[ParentInode,Child]),
     attr_reply:watch(
@@ -472,7 +472,7 @@ lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
 %%--------------------------------------------------------------------------
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
-  reporter:put(mkdir),
+  ?REPORT(mkdir),
   Name=binary_to_list(BName),
   ?DEB1(1,">mkdir"),
   ?DEB2(2,"|  Ctx:~w",Ctx),
@@ -500,7 +500,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
-  reporter:put(mknod),
+  ?REPORT(mknod),
   ?DEB1(1,">mknod"),
   ?DEB2(2,"|  Ctx: ~w",_Ctx),
   ?DEB2(2,"|  ParentIno: ~w",_ParentInode),
@@ -514,7 +514,7 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
-  reporter:put(open),
+  ?REPORT(open),
   ?DEB1(1,">open"),
   ?DEB2(2,"|  _Ctx: ~w",_Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
@@ -558,7 +558,7 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
-  reporter:put(opendir),
+  ?REPORT(opendir),
   ?DEB1(1,">opendir"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
@@ -571,7 +571,7 @@ opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
   ?DEB2(4,"Getting inode entries for ~w",Inode),
   ?DEB1(4,"Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
-  reporter:put(opendir),
+  ?REPORT(opendir),
   MyFIno=inode:get(fino),
   attr_open:set(MyFIno,Inode,attr_opendir:direntries(Inode)),
   {#fuse_reply_open{ fuse_file_info = FI#fuse_file_info{fh=MyFIno} }, State}.
@@ -583,7 +583,7 @@ opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
 %% To read other internal files, I need to output the Right Kind Of Data somehow. A project to do later.
 %%--------------------------------------------------------------------------
 read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
-  reporter:put(read),
+  ?REPORT(read),
   ?DEB1(1,">read"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  _Inode: ~w ",_Inode),
@@ -622,7 +622,7 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
     {Reply,State}.
 
 take(Contents,Offset,Size) when is_binary(Contents) ->
-  reporter:put(take),
+  ?REPORT(take),
   Len=size(Contents),
   if
     Offset<Len ->
@@ -639,7 +639,7 @@ take(Contents,Offset,Size) when is_binary(Contents) ->
   Data;
 
 take(Contents,Offset,Size) when is_list(Contents) ->
-  reporter:put(take),
+  ?REPORT(take),
   Binary=take(list_to_binary(Contents),Offset,Size),
   binary_to_list(Binary).
 
@@ -648,7 +648,7 @@ take(Contents,Offset,Size) when is_list(Contents) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
-  reporter:put(readdir),
+  ?REPORT(readdir),
   ?DEB1(1,">readdir"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  _Inode: ~w ",_Inode),
@@ -691,7 +691,7 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 readlink(_Ctx,_Inode,_Continuation,State) ->
-  reporter:put(readlink),
+  ?REPORT(readlink),
   ?DEBL(1,"~s",["readlink!"]),
   {#fuse_reply_err{err=enotsup},State}.
 
@@ -701,7 +701,7 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %% Seems like this function does not give me any context information. Maybe I can only use this function as a semafor like server, where I cannot drop a resource until every reference to it has been released?
 %%--------------------------------------------------------------------------
 release(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
-  reporter:put(release),
+  ?REPORT(release),
   ?DEB1(1,">release"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  _Inode: ~w ",_Inode),
@@ -716,7 +716,7 @@ release(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
 %% TODO: Release dir info from open files in here. Make sure no other process tries to get to the same info etc.
 %%--------------------------------------------------------------------------
 releasedir(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
-  reporter:put(releasedir),
+  ?REPORT(releasedir),
   ?DEB1(1,">releasedir"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  _Inode: ~w ",_Inode),
@@ -730,7 +730,7 @@ releasedir(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
-  reporter:put(removexattr),
+  ?REPORT(removexattr),
   Name=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEB1(1,">removexattr"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
@@ -774,7 +774,7 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 
 rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
-  reporter:put(rename),
+  ?REPORT(rename),
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
   ?DEBL(1,">rename; parent: ~w, name: ~s, new parent: ~w, new name: ~s",[ParentIno,Name,NewParentIno,NewName]),
@@ -788,7 +788,7 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %% For now, only removing of attribute (key and/or value) dirs are supported.
 %%--------------------------------------------------------------------------
 rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
-  reporter:put(rmdir),
+  ?REPORT(rmdir),
   ?DEB1(1,">rmdir"),
   ?DEB2(2,"|  Ctx:~w",_Ctx),
   ?DEB2(2,"|  PIno: ~p ",ParentInode),
@@ -824,7 +824,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
 %% XXX: Seems that this function is NOT called when chmod:ing or chgrp:ing in linux. Why, oh, why?
 %%--------------------------------------------------------------------------
 setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
-  reporter:put(setattr),
+  ?REPORT(setattr),
   ?DEB1(1,">setattr"),
   ?DEB2(2,"|  Inode: ~w ",Inode),
   ?DEB2(2,"|  To set: ~.8b ",ToSet),
@@ -890,7 +890,7 @@ setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
       end
   },
   tree_srv:enter(Inode,Entry#inode_entry{stat=NewStat},inodes),
-  {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=100000},State}.
+  {#fuse_reply_attr{attr=NewStat,attr_timeout_ms=?TIMEOUT_MS},State}.
 
 
 
@@ -900,7 +900,7 @@ setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
-  reporter:put(setlk),
+  ?REPORT(setlk),
   ?DEBL(1,"~s",["setlk!"]),
   {#fuse_reply_err{err=enotsup},State}.
 
@@ -910,7 +910,7 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
 %% TODO: if attribute key already has a value for the current file, remove the file from the old value dir!
 %%--------------------------------------------------------------------------
 setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
-  reporter:put(setxattr),
+  ?REPORT(setxattr),
   ?DEB1(1,">setxattr"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
@@ -963,7 +963,7 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 statfs(_Ctx,_Inode,_Continuation,State) ->
-  reporter:put(statfs),
+  ?REPORT(statfs),
   ?DEB1(1,">statfs"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  _Inode: ~w ",_Inode),
@@ -993,7 +993,7 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
-  reporter:put(symlink),
+  ?REPORT(symlink),
   ?DEB1(1,">symlink"),
   {#fuse_reply_err{err=enotsup},State}.
 
@@ -1005,7 +1005,7 @@ symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
 %% For now, let's only support unlinking files residing in attribute dirs.
 %%--------------------------------------------------------------------------
 unlink(_Ctx,ParentInode,BName,_Cont,State) ->
-  reporter:put(unlink),
+  ?REPORT(unlink),
   ?DEB1(1,">unlink"),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  PIno: ~w ",ParentInode),
@@ -1063,7 +1063,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %% For now, let's just ignore all data written to external files, and the problem will be temporarily mitigated.
 %%--------------------------------------------------------------------------
 write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
-  reporter:put(write),
+  ?REPORT(write),
   ?DEB1(1,">write"),
   ?DEB2(2,"|  Inode: ~b",Inode),
   ?DEB2(2,"|  Offset: ~b",Offset),
@@ -1106,7 +1106,7 @@ write_contents(0,_Contents,Data,CLen,DLen) when DLen >= CLen ->
 
 % No offset, partial overwrite.
 write_contents(0,Contents,Data,CLen,DLen) ->
-  reporter:put(write_contents),
+  ?REPORT(write_contents),
   ?DEB1(1,"2"),
   <<_:DLen/binary,Rest/binary>>=Contents,
   <<Data/binary,Rest/binary>>;
@@ -1142,23 +1142,26 @@ write_contents(Offset,Contents,Data,CLen,DLen) when Offset < CLen ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_inode_entries() ->
-  reporter:put(dump_inode_entries),
+  ?REPORT(dump_inode_entries),
   lists:map(fun({Inode,#inode_entry{name=Name,contents=Children}}) -> {Inode,Name,Children} end, tree_srv:to_list(inodes)).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_entries(Table) ->
-  reporter:put(dump_entries),
+  ?REPORT(dump_entries),
   tree_srv:to_list(Table).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_inodes() ->
-  reporter:put(dump_inodes),
+  ?REPORT(dump_inodes),
   inode:list_bound(ino).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_finodes() ->
-  reporter:put(dump_finodes),
+  ?REPORT(dump_finodes),
   inode:list_bound(fino).
+
+which_dirs() ->
+  lists:map(fun(A)->attr_tools:get_or_default(A,"")end,[from_dir,from_dirs,to_dir]).

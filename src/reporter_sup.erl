@@ -36,7 +36,7 @@
 start_link() ->
     supervisor:start_link(?MODULE,[]).
 
-init(_Args)->
+init(_)->
   ?DEB1(1,"Starting reporter..."),
   {ok, {{one_for_one,3,10},
        [{reporter,{reporter,start_link,[]},

@@ -209,6 +209,15 @@
     #fuse_entry_param{ ino=Inode,
                        generation=0,
                        attr=Entry#inode_entry.stat,
-                       attr_timeout_ms=10000,
-                       entry_timeout_ms=10000}).
+                       attr_timeout_ms=?TIMEOUT_MS,
+                       entry_timeout_ms=?TIMEOUT_MS}).
 
+-define (ENTRY2REPLY_ATTR (Entry),
+    #fuse_reply_attr{ attr=Entry#inode_entry.stat,
+                      attr_timeout_ms=?TIMEOUT_MS}).
+
+
+%XXX: Probably make this into a resource later
+-define (TIMEOUT_MS,10000).
+
+-define (REPORT(X), reporter:put(X,time())).

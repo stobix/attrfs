@@ -65,8 +65,8 @@ make_param(Stat) ->
     ino=Stat#stat.st_ino,
     generation=1,
     attr=Stat,
-    attr_timeout_ms=1000,
-    entry_timeout_ms=1000
+    attr_timeout_ms=?TIMEOUT_MS,
+    entry_timeout_ms=?TIMEOUT_MS
   }.
 
 %%--------------------------------------------------------------------------
