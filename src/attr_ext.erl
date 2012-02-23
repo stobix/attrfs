@@ -209,8 +209,10 @@ ext_info_to_ext_io(InternalExtInfoTupleList) ->
 
 %%--------------------------------------------------------------------------
 %% All items processed, return {length of string, string}
+%% TODO: can I change the string to an io_string() ?
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([],B) -> 
+  ?REPORT(ext_info_to_ext_io),
   B0=B++"\0",
   B0len=length(B0),
   ?DEB1(8,"Done creating ext_io"),
@@ -220,6 +222,7 @@ ext_info_to_ext_io([],B) ->
 %%--------------------------------------------------------------------------
 %% Generating extended info string for the current attribute, and
 %%  adding it to the string to be sent to fuse.
+%% TODO: can I change the string to an io_string() ?
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
   Name0=

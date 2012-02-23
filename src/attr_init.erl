@@ -165,6 +165,7 @@ type_and_children(Path,FileInfo) ->
               lists:mapfoldl(
                 fun(ChildName,OtherChildren) -> 
                   % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
+                  % TODO: NO, I DON'T. This breaks everything if the file contains a subdir that has the same name as the parent.
                   {InternalChildName,Ino,Type,AllChildren}=make_inode_list({Path++"/"++ChildName,ChildName}),
                   Me={InternalChildName,Ino,Type},
                   case Type of
@@ -197,13 +198,21 @@ get_unique(Name0) ->
           {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
           ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
           {Name,[{Name0,Path0}|PossiblePaths],Ino};
+        #external_dir{path=Path0} ->
+          ?DEB2({init,9},"~s is a dir!",Name0),
+          {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
+          ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
+          {Name,[{Name0,Path0}|PossiblePaths],Ino};
         _ ->
           %We don't care if external dirs have duplicate names
           get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX))
       end;
     {ok,Ino} ->
       ?DEB2({init,7},"~p is not a duplicate!",Name0),
-      {Name0,[],Ino}
+      {Name0,[],Ino};
+    Other ->
+      ?DEB2({init,err},"Got ~p when expecting an ino or error.",Other),
+      throw("Got"++Other)
   end.
 
 make_inode_list({Path,Name0}) ->
