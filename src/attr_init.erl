@@ -155,6 +155,8 @@ initiate_servers(DB) ->
   inode:initiate(pino), % the spawned processes "inode" table
   inode:initiate(fino). % the open files "inode" table
 
+
+% XXX: Do NOT call this on children with a parent without an inode entry ready!  
 type_and_children(Path,FileInfo) ->
         case FileInfo#file_info.type of
           directory ->
@@ -165,7 +167,6 @@ type_and_children(Path,FileInfo) ->
               lists:mapfoldl(
                 fun(ChildName,OtherChildren) -> 
                   % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
-                  % TODO: NO, I DON'T. This breaks everything if the file contains a subdir that has the same name as the parent.
                   {InternalChildName,Ino,Type,AllChildren}=make_inode_list({Path++"/"++ChildName,ChildName}),
                   Me={InternalChildName,Ino,Type},
                   case Type of
@@ -187,26 +188,36 @@ type_and_children(Path,FileInfo) ->
         end.
 
 
+
+-define(dupname(X),string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)).
+
+%TODO: Extrahera paths ifrån koden, om möjligt. 
+%       Ny server en lösning?
 get_unique(Name0) ->
   case inode:number(Name0,ino) of
     {error,{is_numbered,{Name0,Ino0}}} ->
       ?DEB2({init,7},"~s is a duplicate!",Name0),
-      {value,Entry0}=tree_srv:lookup(Ino0,inodes),
-      case Entry0#inode_entry.type of
-        #external_file{path=Path0} ->
-          ?DEB2({init,9},"~s is a file!",Name0),
-          {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
-          ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
-          {Name,[{Name0,Path0}|PossiblePaths],Ino};
-        #external_dir{path=Path0} ->
-          ?DEB2({init,9},"~s is a dir!",Name0),
-          {Name,PossiblePaths,Ino}=get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)),
-          ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
-          {Name,[{Name0,Path0}|PossiblePaths],Ino};
+      case tree_srv:lookup(Ino0,inodes) of
+          {value,Entry0} ->
+              case Entry0#inode_entry.type of
+                #external_file{path=Path0} ->
+                  ?DEB2({init,9},"~s is a file!",Name0),
+                  {Name,PossiblePaths,Ino}=get_unique(?dupname(Name0)),
+                  ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
+                  {Name,[{Name0,Path0}|PossiblePaths],Ino};
+        %        #external_dir{path=Path0} ->
+        %          ?DEB2({init,9},"~s is a dir!",Name0),
+        %          {Name,PossiblePaths,Ino}=get_unique(?dupname(Name0)),
+        %          ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
+        %          {Name,[{Name0,Path0}|PossiblePaths],Ino};
+                _ ->
+                  %We don't care if external dirs have duplicate names
+                  get_unique(?dupname(Name0))
+              end;
         _ ->
-          %We don't care if external dirs have duplicate names
-          get_unique(string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX))
-      end;
+            %We don't care if external dirs have duplicate names
+            get_unique(?dupname(Name0))
+    end;
     {ok,Ino} ->
       ?DEB2({init,7},"~p is not a duplicate!",Name0),
       {Name0,[],Ino};
@@ -219,7 +230,12 @@ make_inode_list({Path,Name0}) ->
   ?DEBL({init,6},"reading file info for ~s into ~s",[Path,Name0]),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
+       
+      
+      % TODO Kolla filtyp här, så jag kan generera entry för kataloger innan jag rekurserar ner i filträdet.
+
       ?DEB1({init,8},"got file info"),
+      % Skall helst inte rekursera!
       {Name,OlderEntries,Ino} =get_unique(Name0),
       ?DEB2(8,"got unique name ~p",Name),
       if
