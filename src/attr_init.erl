@@ -45,6 +45,7 @@ init({MirrorDirs,DB}) ->
   {ok,RealIno}=inode:number(?REAL_FOLDR,ino),
   {ok,AllIno}=inode:number(?ALL_FOLDR,ino),
   {ok,DupIno}=inode:number(?DUP_FOLDR,ino),
+  {ok,UniIno}=inode:number(?UNI_FOLDR,ino),
   {ok,LogicIno}=inode:number(?LOGIC_FOLDR,ino),
 
   ?DEBL({init,5},"inodes;\troot:~w, real:~w, attribs:~w",[RootIno,RealIno,AttribIno]),
@@ -98,10 +99,11 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(AllIno,AllEntry,inodes),
+  {UniChildren,DupChildren}=make_duplicate_children(),
   DupEntry=
     #inode_entry{
       name=?DUP_FOLDR,
-      contents=make_duplicate_children(),
+      contents=DupChildren,
       type=internal_dir,
       stat=?DIR_STAT(8#555,DupIno),
       ext_info=[],
@@ -109,12 +111,24 @@ init({MirrorDirs,DB}) ->
     },
   tree_srv:enter(DupIno,DupEntry,inodes),
   ?DEB1({init,1},"duplicate folder done"),
+  UniEntry=
+    #inode_entry{
+        name=?UNI_FOLDR,
+        contents=UniChildren,
+        type=internal_dir,
+        stat=?DIR_STAT(8#555,UniIno),
+        ext_info=[],
+        ext_io=attr_ext:ext_info_to_ext_io([])
+    },
+  tree_srv:enter(UniIno,UniEntry,inodes),
+  ?DEB1({init,1},"unique folder done"),
   RealEntry=
     #inode_entry{
       name=?REAL_FOLDR,
       contents=[
         {?ALL_FOLDR,AllIno,internal_dir},
-        {?DUP_FOLDR,DupIno,internal_dir}|
+        {?DUP_FOLDR,DupIno,internal_dir},
+        {?UNI_FOLDR,UniIno,internal_dir}|
           RealChildren],
       type=internal_dir,
       stat=?DIR_STAT(8#555,RealIno),
@@ -138,9 +152,6 @@ init({MirrorDirs,DB}) ->
   tree_srv:enter(RootIno,RootEntry,inodes),
   tree_srv:enter(RootIno,RootEntry,specials).
 
-%check_dirs(Dirs) ->
-  
-  
 
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
@@ -272,11 +283,12 @@ make_inode_list({Path,Name0}) ->
 
 make_duplicate_children() ->
   ?DEB1({init,3},"Generating duplicates dir"),
-  lists:map(
-    fun({Name,List0}) ->
+  lists:foldl(
+    fun({Name,List0},{Unis,Dups}) ->
       ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
       Type= duplicate_file,
+      % XXX: Can I change this to iolists instead of folding?
       IOList=lists:foldl(
         fun({DupName,Path},Acc) ->
           [io_lib:format("\"~s\" \"~s\"\n",[DupName,lists:flatten(Path)])|Acc]
@@ -295,8 +307,14 @@ make_duplicate_children() ->
       ?DEB1({init,8},"entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),
       ?DEB1({init,8},"done"),
-      {Name++?DUP_EXT,Ino,#duplicate_file{}}
+      DupEntry={Name++?DUP_EXT,Ino,#duplicate_file{}},
+      ?DEBL({init,9},"(Node entry is ~p-fold",[length(List0)]),
+      case length(List0) of
+        1 -> {[DupEntry|Unis],Dups};
+        _ -> {Unis,[DupEntry|Dups]}
+      end
     end,
+    {[],[]},
     tree_srv:to_list(duplicates)
       ).
 
