@@ -36,6 +36,8 @@ assert(X) ->
             E -> E
         end.
 
+%% Fold assert over a list of messages.
+%% If we get an error code, stop folding and return it; otherwise, continue folding, returning SuccessMsg if we reach the end of the list.
 asserts([],SuccessMsg) -> SuccessMsg;
 
 asserts([M|Msgs],SuccessMsg) ->
@@ -66,7 +68,7 @@ start_link(From,To,DB,MountOpts,LinkedIn) ->
             {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
                 temporary, 10, worker, [attrfs]}),
         % XXX: Checking for success after all children has been started is kinda inefficient if the first one failed.
-        %       All but the last one are lightweight, thouh, so it shouldn't be a problem.
+        %       All but the last one are lightweight, though, so it shouldn't be a problem.
         asserts([Msg1,Msg2,Msg3,Msg4],{ok,PID});
     E -> E
   end.
