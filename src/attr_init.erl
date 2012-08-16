@@ -224,13 +224,8 @@ make_inode_list({Path,Name0}) ->
       ?DEB1({init,8},"got file info"),
       {Name,OlderEntries,Ino} =get_unique(Name0),
       ?DEB2(8,"got unique name ~p",Name),
-      if
-        Name==Name0 ->
-          ok;
-        true ->
-          ?DEB1({init,8},"updating duplicate list"),
-          tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates)
-      end,
+      ?DEB1({init,8},"updating duplicate list"),
+      tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates),
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
       ?DEB2({init,6},"Generating ext info for ~p",Path),
       {ExtInfo,ExtIo,ExtAmount}=attr_ext:generate_ext_info_io(Path), 
@@ -288,15 +283,17 @@ make_duplicate_children() ->
       ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
       {ok,Ino}=inode:number({duplicate,Name},ino),
       Type= duplicate_file,
-      % XXX: Can I change this to iolists instead of folding?
-      IOList=lists:foldl(
-        fun({DupName,Path},Acc) ->
-          [io_lib:format("\"~s\" \"~s\"\n",[DupName,lists:flatten(Path)])|Acc]
-        end
-        ,[]
-        ,List0),
-      List=lists:flatten(IOList),
-      Data=iolist_to_binary(List),
+      IOList = 
+        case length(List0) of
+          1 -> element(2,lists:nth(1,List0)); % skip the local name if we only have one entry to show
+          _ -> lists:foldl(
+                fun({DupName,Path},Acc) ->
+                  [io_lib:format("~s :\n~s\n",[DupName,Path])|Acc]
+                end
+                ,[]
+                ,List0)
+        end,
+      Data=iolist_to_binary(IOList),
       Entry=#inode_entry{
         type=Type,
         contents=Data,
@@ -308,7 +305,6 @@ make_duplicate_children() ->
       tree_srv:enter(Ino,Entry,inodes),
       ?DEB1({init,8},"done"),
       DupEntry={Name++?DUP_EXT,Ino,#duplicate_file{}},
-      ?DEBL({init,9},"(Node entry is ~p-fold",[length(List0)]),
       case length(List0) of
         1 -> {[DupEntry|Unis],Dups};
         _ -> {Unis,[DupEntry|Dups]}
