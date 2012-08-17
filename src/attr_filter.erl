@@ -8,14 +8,17 @@
 filter(List1,LogicFoldr,List2) ->
   case LogicFoldr==?BUTNOT_FOLDR of
     true ->
+      ?REPORT(fbutnot),
       filter_butnot(List1,List2);
     false ->
       case LogicFoldr==?AND_FOLDR of
         true -> 
+          ?REPORT(fand),
           filter_and(List1,List2);
         false ->
           case LogicFoldr==?OR_FOLDR of
             true -> 
+              ?REPORT(for),
               filter_or(List1,List2)
           end
       end
