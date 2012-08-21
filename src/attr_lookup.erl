@@ -94,23 +94,15 @@ find_conn([A|As]=Conn) ->
 
 
 %% For sake of efficiency, I let this function be called with either an inode or directly with an #inode_entry
-children(#inode_entry{generated=Generated,contents=Contents}=Entry) ->
+children(#inode_entry{}=Entry) ->
   ?DEB1(3,">children"),
   Name=Entry#inode_entry.name,
   ?DEBL(5,"got an entry: ~p",[Name]),
   Children=
     case Entry#inode_entry.type of
-        logic_dir ->
+      logic_dir ->
         % logical dirs needs to be treated separately; they have no children of their own, but steal the children of the dirs they're associated with.
-        case Generated of
-            true ->
-                Contents;
-            _ ->
-              NewContents=generate_logic_dir_children(Name,?ATTR_FOLDR),
-              NewEntry=Entry#inode_entry{contents=NewContents,generated=true},
-              tree_srv:enter(inode:get(Name,ino),NewEntry,inodes),
-              NewContents
-        end;
+        generate_logic_dir_children(Name,?ATTR_FOLDR);
 
       attribute_dir ->
         Entry#inode_entry.contents;
@@ -118,15 +110,7 @@ children(#inode_entry{generated=Generated,contents=Contents}=Entry) ->
       #dir_link{link=Ino} ->
       % For now, I assume that all dir links are children of logical dirs, 
         ?DEB1(5,"logical dir link"),
-        MyChildren=case Generated of
-          true ->
-            Contents;
-          _ ->
-            NewContents=generate_logic_link_children(Ino,Name),
-            NewEntry=Entry#inode_entry{contents=NewContents,generated=true},
-            tree_srv:enter(inode:get(Name,ino),NewEntry,inodes),
-            NewContents
-        end,
+        MyChildren=generate_logic_link_children(Ino,Name),
         ?DEB2(5,"generated children: ~p",MyChildren),
         MyChildren;
 
@@ -145,15 +129,16 @@ children(Inode) ->
    none -> none
  end.
 
-%TODO: Generate ONLY ONCE!
+
 generate_logic_link_children(Ino,Name) ->
-  ?REPORT(generate_logic_link_children),
   ?DEB1(3,">generate_logic_link_children"),
   {value,Entry}=tree_srv:lookup(Ino,inodes),
   EntryType=Entry#inode_entry.type,
   case EntryType of
     attribute_dir ->
       LinkChildren=filter_children_entry(Entry,Name),
+      ?DEB1(5,"Filtering out bogus logical connectives"),
+%     TODO: Replace the filter call with a built in feature of filter to always filter away logical dirs.
       ?DEB2(5,"converting children: ~p",LinkChildren),
       ConvertedChildren=lists:map(
         fun({_MyName,_Inode,logic_dir}=E) ->
@@ -180,8 +165,7 @@ generate_logic_link_children(Ino,Name) ->
                       contents=[],
                       stat=MyStat,
                       type=MyType,
-                      links=[],
-                      generated=false
+                      links=[]
                     },
                   tree_srv:enter(MyInode,MyEntry,inodes),
                   {MyName,MyInode,MyType};
@@ -194,7 +178,7 @@ generate_logic_link_children(Ino,Name) ->
       case length(Name)<?MAX_LOGIC_RECURS of
         true ->
           LogicDirs=generate_logic_dirs(Name),
-          ConvertedChildren++LogicDirs; %FIXME: Can this be an IOList instead?
+          ConvertedChildren++LogicDirs;
         false ->
           ?DEB1(5,"not generating logic dirs, due to depth"),
           ConvertedChildren
@@ -252,7 +236,7 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
   ?DEB1(8,"transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
-  % Since I want to get rid of elements not belonging in a logic dir, I filter out everything that is not an attridute_dir or an #external_file{}.
+  % Since I want to get rid of elements not belonging in a logic dir, I filter out everything that is not an attridute_bir or an #external_file{}.
   lists:foldl(
     fun({Name,Inode,Type},Acc) ->
       case Type of
@@ -314,7 +298,7 @@ generate_logic_dir(Parent,X) ->
   PStat=PEntry#inode_entry.stat,
   % Logical dirs will not be writeable. Therefore, I do not directly copy the mode of the parent
   Stat=?ST_MODE(PStat,?M_DIR(8#555)), 
-  Entry=PEntry#inode_entry{name=Name,type=logic_dir,contents=[],stat=Stat,generated=false},
+  Entry=PEntry#inode_entry{name=Name,type=logic_dir,contents=[],stat=Stat},
   ?DEB1(8,"saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),
   {X,Ino,logic_dir}.
