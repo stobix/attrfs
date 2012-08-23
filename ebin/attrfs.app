@@ -28,10 +28,7 @@ tree_sup
    {registered,[attrfs]},
    {mod,{attrfs,[]}},
    {env,
-     [{to_dir,"/home/Volatile/attrfs"},
-%      {from_dirs,[
-%        "/home/Volatile/random images/",
-%        "/home/Volatile/more random images/"]},
+     [
       {linked_in,true},
       {mount_opts, "allow_other,default_permissions"}
      ]

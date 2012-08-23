@@ -178,11 +178,13 @@ start_link() ->
   ?DEB1(1,">start_link"),
   ?DEB1(2,"getting config options..."),
 
-  MirrorDirs=case options:get(?MODULE,from_dir) of
-    {ok,MD} -> [MD];
+  MirrorDirs=case options:mget(?MODULE,from_dir) of
+    {string,MD} -> [MD]; % One from dir defined in config file
+    {ok,MD} -> [MD]; % from_dir defined in attrfs.app
+    {list,MD} -> MD; % Several from dir defined in config file
     undefined -> 
         case options:get(from_dirs) of
-            {ok,MD} -> MD;
+            {ok,MD} -> MD; % from_dirs defined in attrfs.app
             undefined -> 
                 ?DEB1(err,"You must define at least one from dir in your config file to run attrfs!"),
                 {error,dir_not_specified}
