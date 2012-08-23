@@ -29,24 +29,9 @@ tree_sup
    {mod,{attrfs,[]}},
    {env,
      [{to_dir,"/home/Volatile/attrfs"},
-%      {from_dir,"/home/Volatile/mirrorfs"},
-%      {from_dirs,["/mnt/bildix/kamer2","/mnt/bildix/kamer3"]},
 %      {from_dirs,[
-%          "/mnt/musix/musik/kristet/Bengt Johansson/",
-%          "/mnt/musix/musik/kristet/Bengt Johansson2/",
-%          "/mnt/musix/musik/kristet/Bengt Johansson - Återkoppling/",
-%          "/mnt/musix/musik/kristet/Bengt Johansson 1996 - Fästpunkt/"]},
-      {from_dirs,[
-        "/home/Volatile/random images/",
-        "/home/Volatile/more random images/"]},
-      {attributes_db,"/home/Volatile/attributes"},
-      {real_name,"files"},
-      {attr_name,"attributes"},
-      {and_name,"AND"},
-      {or_name,"OR"},
-      {butnot_name,"BUTNOT"},
-      {all_name,"all"},
-      {dup_name,"duplicates"},
+%        "/home/Volatile/random images/",
+%        "/home/Volatile/more random images/"]},
       {linked_in,true},
       {mount_opts, "allow_other,default_permissions"}
      ]

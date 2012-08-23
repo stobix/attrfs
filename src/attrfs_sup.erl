@@ -22,14 +22,14 @@
 
 -behaviour(supervisor).
 
--export([start_link/5,init/1]).
+-export([start_link/0,init/1]).
 -include("../include/debug.hrl").
 -include("../include/attrfs.hrl").
 
 
 assert(X) ->
         case X of
-            {ok,PID} ->
+            {ok,_PID} ->
                 true;
             ok ->
                 true;
@@ -48,8 +48,8 @@ asserts([M|Msgs],SuccessMsg) ->
             E
     end.
 
-start_link(From,To,DB,MountOpts,LinkedIn) ->
-  case supervisor:start_link(?MODULE,{From,To,DB,MountOpts,LinkedIn}) of
+start_link() ->
+  case supervisor:start_link(?MODULE,[]) of
     {ok,PID} ->
         ?DEB1(1,"Starting inode_sup..."),
         Msg1=supervisor:start_child(PID,
@@ -69,7 +69,7 @@ start_link(From,To,DB,MountOpts,LinkedIn) ->
                 temporary, 10, worker, [options]}),
         ?DEB1(1,"Starting attrfs_srv..."),
         Msg5=supervisor:start_child(PID,
-            {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
+            {attrfs,{attrfs_srv,start_link,[]}, 
                 temporary, 10, worker, [attrfs]}),
         % XXX: Checking for success after all children has been started is kinda inefficient if the first one failed.
         %       All but the last one are lightweight, though, so it shouldn't be a problem.
@@ -77,7 +77,7 @@ start_link(From,To,DB,MountOpts,LinkedIn) ->
     E -> E
   end.
 
-init({From,To,DB,MountOpts,LinkedIn}) ->
+init(_) ->
   ?DEB1(1,"Starting attrfs_sup..."),
   {ok, {{one_for_all,3,10},[]}}.
 
