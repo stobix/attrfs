@@ -63,13 +63,17 @@ start_link(From,To,DB,MountOpts,LinkedIn) ->
         Msg3=supervisor:start_child(PID,
             {attr_reply,{attr_reply,start_link,[]},
                 temporary, 10, worker, [attr_reply]}),
-        ?DEB1(1,"Starting attrfs_srv..."),
+        ?DEB1(1,"Starting options server"),
         Msg4=supervisor:start_child(PID,
+            {options,{options,start_link,["~/.attrfsrc"]},
+                temporary, 10, worker, [options]}),
+        ?DEB1(1,"Starting attrfs_srv..."),
+        Msg5=supervisor:start_child(PID,
             {attrfs,{attrfs_srv,start_link,[To,LinkedIn,MountOpts,From,DB]}, 
                 temporary, 10, worker, [attrfs]}),
         % XXX: Checking for success after all children has been started is kinda inefficient if the first one failed.
         %       All but the last one are lightweight, though, so it shouldn't be a problem.
-        asserts([Msg1,Msg2,Msg3,Msg4],{ok,PID});
+        asserts([Msg1,Msg2,Msg3,Msg4,Msg5],{ok,PID});
     E -> E
   end.
 
