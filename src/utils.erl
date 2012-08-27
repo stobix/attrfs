@@ -32,7 +32,8 @@ valid_files(Files) ->
                 Files).
 
 reload_files(Files) ->
-    lists:map(fun(X) ->                                                                                                                                                            Name=list_to_atom(string:substr(X,1,string:len(X)-4)),
+    lists:map(fun(X) ->                                                                                                                                                            
+                  Name=list_to_atom(string:substr(X,1,string:len(X)-4)),
                   code:purge(Name),
                   code:load_file(Name)
               end,

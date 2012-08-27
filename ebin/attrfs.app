@@ -28,22 +28,8 @@ tree_sup
    {registered,[attrfs]},
    {mod,{attrfs,[]}},
    {env,
-     [{to_dir,"/home/Volatile/attrfs"},
-%      {from_dir,"/home/Volatile/mirrorfs"},
-%      {from_dirs,["/mnt/bildix/kamer2","/mnt/bildix/kamer3"]},
-%      {from_dir,"/home/Volatile/extended_mirror"},
-%      {from_dir,"/home/Volatile/showfs"},
-%      {from_dir,"/home/Volatile/stressfs"},
-      {from_dir,"/home/Volatile/testfs"},
-      {attributes_db,"/home/Volatile/attributes"},
+     [
       {linked_in,true},
-      {real_name,"files"},
-      {attr_name,"attributes"},
-      {and_name,"AND"},
-      {or_name,"OR"},
-      {butnot_name,"BUTNOT"},
-      {all_name,"all"},
-      {dup_name,"duplicates"},
       {mount_opts, "allow_other,default_permissions"}
      ]
    } 

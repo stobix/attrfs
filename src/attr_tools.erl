@@ -397,7 +397,7 @@ append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
 %% Returns the value associated with Attribute, if found, and Default if not.
 %%--------------------------------------------------------------------------
 get_or_default(Attribute,Default) ->
-  case application:get_env(attrfs,Attribute) of
+  case options:get(attrfs,Attribute) of
     {ok,Value} ->
       ?DEBL(9,"~p: ~p",[Attribute,Value]),
       Value;

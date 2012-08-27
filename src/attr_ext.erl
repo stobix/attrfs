@@ -27,6 +27,8 @@
 %%%
 %%% @copyright Copylefted using some GNU license or other.
 %%%
+%%% @doc This module deals with extended attribute data base handling.
+%%%
 %%% @version 1.0
 
 -export([add_new_attribute/4,

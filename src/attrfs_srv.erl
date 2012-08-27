@@ -52,6 +52,8 @@
 %%%                                 EXPORTS
 %%%=========================================================================
 
+% No exports, this is the main server file.
+
 %%%=========================================================================
 %%% server function exports
 %%%=========================================================================
@@ -59,7 +61,7 @@
 % TODO: Do something intelligent with this one. 
 % Returns "ok"now, totally ignoring its indata.
 -export([code_change/3]). 
--export([start_link/1,start_link/5]).
+-export([start_link/0]).
 
 %%%=========================================================================
 %%% fuserl function exports
@@ -155,23 +157,44 @@ code_change(_,_,_) ->
   ?DEB1(1,">code_change: Doing nothing!"),
   ok.
 
-%%--------------------------------------------------------------------------
-%%--------------------------------------------------------------------------
-%% Mirrors MirrorDir into MountDir/real, building the attribute file system in attribs from the attributes for the files in MountDir
-%%--------------------------------------------------------------------------
-start_link({MountDir,MirrorDir,DB}) ->
-  ?REPORT(start_link),
-  ?DEB1(1,">Starting attrfs server..."),
-  start_link(MountDir,false,"",MirrorDir,DB).
+%%---------------------
+%% Just a small utility function used by start link to filter out good initial values or crash
+  vget(Attribute) ->
+  case options:get(attrfs,Attribute) of
+    {ok,Value} -> 
+      ?DEBL(2,"~p: ~p",[Attribute,Value]),
+      Value;
+    undefined -> 
+      ?DEB2(1,"~p not defined! check your config file!",Attribute),
+    exit("not found")
+  end.
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 %% In here, I mostly check for dirs needed to start fuserlsrv.
 %--------------------------------------------------------------------------
-start_link(Dir,LinkedIn,MountOpts,MirrorDirs,DB) ->
+start_link() ->
   ?REPORT(start_link),
-
   ?DEB1(1,">start_link"),
+  ?DEB1(2,"getting config options..."),
+
+  MirrorDirs=case options:mget(?MODULE,from_dir) of
+    {string,MD} -> [MD]; % One from dir defined in config file
+    {ok,MD} -> [MD]; % from_dir defined in attrfs.app
+    {list,MD} -> MD; % Several from dir defined in config file
+    undefined -> 
+        case options:get(from_dirs) of
+            {ok,MD} -> MD; % from_dirs defined in attrfs.app
+            undefined -> 
+                ?DEB1(err,"You must define at least one from dir in your config file to run attrfs!"),
+                {error,dir_not_specified}
+        end
+  end,
+  Dir=vget(to_dir),
+  DB=vget(attributes_db),
+  LinkedIn=vget(linked_in),
+  MountOpts=vget(mount_opts),
+
   ?DEB1(2,"checkning if dirs are ok..."),
   ?DEB2(2,"~p...",Dir),
   case filelib:ensure_dir(Dir) of
@@ -1105,19 +1128,19 @@ write_contents(0,_Contents,Data,CLen,DLen) when DLen >= CLen ->
   Data;
 
 % No offset, partial overwrite.
-write_contents(0,Contents,Data,CLen,DLen) ->
+write_contents(0,Contents,Data,_CLen,DLen) ->
   ?REPORT(write_contents),
   ?DEB1(1,"2"),
   <<_:DLen/binary,Rest/binary>>=Contents,
   <<Data/binary,Rest/binary>>;
 
 % Offset after EOF, throw eof
-write_contents(Offset,_Contents,Data,CLen,DLen) when Offset > CLen ->
+write_contents(Offset,_Contents,_Data,CLen,_DLen) when Offset > CLen ->
   ?DEB1(1,"3"),
   throw(eof);
 
 % Offset at end of file, append data
-write_contents(Offset,Contents,Data,CLen,DLen) when Offset == CLen ->
+write_contents(Offset,Contents,Data,CLen,_DLen) when Offset == CLen ->
   ?DEB1(1,"4"),
   <<Contents/binary,Data/binary>>;
 
