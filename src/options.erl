@@ -69,7 +69,9 @@ rehash_(ConfigName) ->
             % Read options from config file
             Options=readfile(ConfigFile),
             file:close(ConfigFile),
+            ?DEBL({options,9},"Options: ~n ~p",[Options]),
             ParsedOpts=lists:map(fun(X)->parse_line(X) end,Options),
+            ?DEBL({options,9},"Parsed: ~n ~p",[ParsedOpts]),
             ParsedTree=make_tree(ParsedOpts),
             ParsedTree;
 
@@ -82,6 +84,7 @@ rehash_(ConfigName) ->
 make_tree(A) -> make_tree(A,gb_trees:empty()).
 
 make_tree([],Acc) -> Acc;
+make_tree([[]|As],Acc) -> make_tree(As,Acc); % Comment or empty line.
 make_tree([{AKey,AVal}|As],Acc) ->
     case gb_trees:lookup(AKey,Acc) of
         {value,{string,AVal0}} -> make_tree(As,gb_trees:enter(AKey,{list,[AVal,AVal0]},Acc));
@@ -94,7 +97,9 @@ parse_line([$%|_]) -> [];
 parse_line(Line) ->
     ?DEBL({options,1},"Parsing ~p",[Line]),
     [Head|Tail]=string:tokens(Line,":\n"),
-    {list_to_atom(replace(Head,$ ,$_)),fix_home(string:strip(string:join(Tail,":")))}.
+    A={list_to_atom(replace(Head,$ ,$_)),fix_home(string:strip(string:join(Tail,":")))},
+    ?DEBL({options,3},"Returning ~p",[A]),
+    A.
 
 replace([],B,C) -> [];
 replace([A|Str],B,C) when A == B ->

@@ -36,7 +36,7 @@ start(_dont,_care) ->
     ?DEB2(1,"Ok, returning ~p",_Pid), 
     {ok,_Pid};
    E -> 
-    ?DEB2(err,"Got an error while starting! Exiting! (~p)",E),
+    ?DEB1(err,"Got an error while starting! Exiting!"),
     E
   end.
 

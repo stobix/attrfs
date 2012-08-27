@@ -29,7 +29,7 @@ tree_sup
    {mod,{attrfs,[]}},
    {env,
      [
-      {linked_in,true},
+      {linked_in,false},
       {mount_opts, "allow_other,default_permissions"}
      ]
    } 
