@@ -238,7 +238,7 @@ get_unique(Name0) ->
   end.
 
 make_inode_list({Path,Name0}) ->
-  ?DEBL({init,6},"reading file info for ~s into ~s",[Path,Name0]),
+  ?DEBL({init,6},"reading file info for ~s into ~s",[lists:flatten(Path),Name0]),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
        
@@ -294,7 +294,7 @@ make_inode_list({Path,Name0}) ->
         ExtFolders),
       {Name,Ino,Type,AllChildren};
     E ->
-      ?DEBL(err,"got ~w when trying to read ~p.",[E,Path]),
+      ?DEBL(err,"got ~w when trying to read ~p.",[E,lists:flatten(Path)]),
       ?DEB1(err,"are you sure your app file is correctly configured?"),
       ?DEB1(err,">>>exiting<<<"),
       exit(E)

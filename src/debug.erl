@@ -44,9 +44,8 @@ output(_FormatString,_Message,_Token) ->
 -endif.
 
 -define(checkl(L,Y),
-  case L =< ?debug_level of
-    true -> Y;
-    _ -> ok
+  if L =< ?debug_level -> Y;
+    true -> ok
   end).
 
 debug_message(FormatString,Message,Level) ->
