@@ -23,7 +23,7 @@ For examples, see 2 USAGE.
 This app depends on the fuserl application. Make sure you have it installed before trying to run this.
 
 I haven't written any installer yet, but this is one way to do it:
-* Congigure the attrfs.app file to your taste. IMPORTANT: Unless you change what directories to mirror, you won't be able to start the app!
+* Congigure the attrfs.app or the ~/.attrfsrc file to your taste. IMPORTANT: Unless you change what directories to mirror, you won't be able to start the app!
 * start an erl shell with the attrfs dir in the ERL_LIBS path
 * compile with make:all(). 
 * run by doing application:start(fuserl). followed by application:start(attrfs).
