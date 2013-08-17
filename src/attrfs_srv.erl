@@ -33,10 +33,10 @@
 %%% Attrfs is a file system that is used to sort files into several virtual
 %%% directories according to what xattr attributes one assigns to the files.
 %%% 
-%%% start_link({Dir,Fluff}) recursively takes the files in the directory 
-%%% Fluff and sorts them into subfolders in the directory Dir/attribs. 
+%%% start_link() recursively takes the files in the directories defined in 
+%%% the config files and sorts them into subfolders in the directory /attribs. 
 %%% One can add or modify attributes by means of changing xattribs on the 
-%%% files, or using move operations (once I implement it, that is.)
+%%% files, or using move operations.
 %%% Since most of what this module does is implement the functions 
 %%% documented in fuserl, not many functions in this module are documented.
 %%% @end
@@ -183,7 +183,7 @@ start_link() ->
     {ok,MD} -> [MD]; % from_dir defined in attrfs.app
     {list,MD} -> MD; % Several from dir defined in config file
     undefined -> 
-        case options:get(from_dirs) of
+        case options:get(?MODULE,from_dirs) of
             {ok,MD} -> MD; % from_dirs defined in attrfs.app
             undefined -> 
                 ?DEB1(err,"You must define at least one from dir in your config file to run attrfs!"),

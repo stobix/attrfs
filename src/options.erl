@@ -120,12 +120,20 @@ readfile(File,Acc) ->
         Error -> Error
     end.
 
+
 get_all() ->
     gen_server:call(?MODULE,get).
 
+% Returns 
+%   * the first value of option X in application Y, if multiple such values exist
+%   * the value of option X in application Y, if it exists
+%   * undefined otherwise
+%  The values are fetched primarily from the config file specified when starting the options server
+%  using the app file of Y as a fallback.
 get(Y,X) ->
     gen_server:call(?MODULE,{get,Y,X}).
 
+% Like mget, but without any filtering of return types.
 mget(Y,X) ->
     gen_server:call(?MODULE,{mget,Y,X}).
 
