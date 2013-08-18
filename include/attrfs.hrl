@@ -40,6 +40,7 @@
 -define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attributes"))).
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
+-define(ERR_FOLDR,(attr_tools:get_or_default(err_name,"erroneous"))).
 -define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,"duplicates"))).
 -define(UNI_FOLDR,(attr_tools:get_or_default(uni_name,"unique"))).
 -define(LOGIC_FOLDR,(attr_tools:get_or_default(logic_name,"logic"))).
@@ -51,6 +52,7 @@
 -define(DUP_PREFIX,(attr_tools:get_or_default(dup_prefix,"duplicate-"))).
 -define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,""))).
 -define(DUP_EXT,(attr_tools:get_or_default(dup_ext,".txt"))).
+-define(ERR_EXT,(attr_tols:get_or_default(err_ext,".txt"))).
 
 % TODO: Convert to number
 -define(MAX_LOGIC_RECURS,(attr_tools:get_or_default(max_logic_recurs,20))).
@@ -85,6 +87,15 @@
 -define(ST_MODE(Stat,Mode),(Stat#stat{st_mode=Mode})).
 -define(ST_NLINK(Stat,NLink),(Stat#stat{st_nlink=NLink})).
 
+-define(ERR_STAT(Ino), (#stat{ st_ino=Ino
+                        , st_nlink=1
+                        , st_mode=0
+                        , st_mtime=0
+                        , st_atime=0
+                        , st_ctime=0
+                        , st_uid=0
+                        , st_gid=0
+                        ,st_dev={0,0})).
 % "Standard directory mode". Thought to be used as a user settable
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 
@@ -108,6 +119,9 @@
         % external_file_info mirrors the file info for the real file in some real file system, if applicable.
         ,external_file_info::#file_info{} % file:#file_info{}
        }).
+
+-record(err_file,
+        {e_contents:[string]}).
 
 -record(external_dir,
         % the path is what path leads to the file in some external file system.
@@ -140,7 +154,7 @@
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
--type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|duplicate_file.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|#duplicate_file{}|erroneous_file.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 
