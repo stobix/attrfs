@@ -7,6 +7,7 @@ CONTENTS:
   2.1 ATTRIBUTES
   2.2 FILE HANDLING
   2.3 CONFIGURATION
+  2.3.1 EXAMPLE CONFIGURATION
 3 STRUCTURE
 
 ---------------------
@@ -23,7 +24,7 @@ For examples, see 2 USAGE.
 This app depends on the fuserl application. Make sure you have it installed before trying to run this.
 
 I haven't written any installer yet, but this is one way to do it:
-* Congigure the attrfs.app file to your taste. IMPORTANT: Unless you change what directories to mirror, you won't be able to start the app!
+* Congigure the attrfs.app or the ~/.attrfsrc file to your taste. IMPORTANT: Unless you change what directories to mirror, you won't be able to start the app!
 * start an erl shell with the attrfs dir in the ERL_LIBS path
 * compile with make:all(). 
 * run by doing application:start(fuserl). followed by application:start(attrfs).
@@ -34,7 +35,7 @@ I haven't written any installer yet, but this is one way to do it:
 
 2.1 ATTRIBUTES
 
-Read the man page of attr, or your favorite extended attributes manager program, for a full list of attribute handling commands that are available.
+Read the man page of attr/xattr, or your favorite extended attributes manager program, for a full list of attribute handling commands that are available.
 The attribute key can contain a separator (default: "/"), to signify a multi level attribute.
 The attribute value can contain a separator (default: ","), to signify setting multiple values at once.
 These separators can be changed in the app file. See CONFIGURATION
@@ -70,34 +71,59 @@ Copying/moving files:
    bar
 
 2.3 CONFIGURATION
-These are the values that can be set in the attrfs.app file:
+Configuration is done either by editing ~/.attrfsrc. 
+Options and values are separated by the first colon present on a line
+And any line that begins with a % is taken as a comment and is not parsed.
 
-Paths:
-  to_dir (no default. You have to set this.)
+These are the different options currently configurable
+
+Paths: (IMPORTANT: YOU HAVE TO SET ALL OF THESE IN ORDER TO RUN attrfs!)
+  to dir 
     Where to put the file system.
-  from_dir (no default. You have to set this.)
-    If we use files from only one dir. Overrides from_dirs.
-  from_dirs (no default. You have to set this.)
-    Contains a list of the dirs we want to use. 
-  attributes_db (no default. You have to set this.)
+  from dir 
+    accumulative. Use one "from dir:" directive for each dir to be included.
+  attributes db 
     Contains the path (string) to the file you want to use as the attribute database.
 
 Directory names:
-  real_name (default: "real")
-    The name for the part of the file system containing "real" files.
-   all_name (default: "all")
-   dup_name (default: "duplicates")
-  attr_name (default: "attributes")
-    The name for the part of the file system containing "attribute" files and directories.
-  logic_name (default: "logic")
-    The name for the searchable part of the file system.
-   and_name (default: "AND")
-   or_name (default: "OR")
-   butnot_name (default: "BUTNOT")
+  The "real" part of the file system:
+      real name (default: "real")
+        The name for the part of the file system containing "real" files.
 
-Fuserl specific:
-  linked_in (default: true)
-  mount_opts (default:  "allow_other,default_permissions")
+      all name (default: "all")
+        The name for the directory under real that contains all files included for categorizing.
+      dup name (default: "duplicates")
+        The name of the directory with files that tell which files have duplicate representation in the dirs specified by "from dir"
+  The "attributes" part of the file system:
+    attr name (default: "attributes")
+        The name for the part of the file system containing "attribute" files and directories.
+    logic name (default: "logic")
+        The name for the filtering part of the file system.
+    and name (default: "AND")
+        The name for directories such as logic/Foo/AND/Bar, for ∩ filtering
+    or name (default: "OR")
+        The name for directories such as logic/Foo/OR/Bar, for ∪ filtering
+    butnot name (default: "BUTNOT")
+        The name for directories such as logic/Foo/BUTNOT/Bar, for \ filtering
+
+Fuserl specific
+  linked in (default: true)
+        Port related. Touch this only if you want to break everything.
+  mount opts (default:  "allow_other,default_permissions")
+        Port related. Touch this only if you want to break everything.
+
+2.3.1 EXAMPLE CONFIGURATION
+
+% example ~/.attrfs
+from dir: first/dir/to/mirror
+from dir: /second/dir/to/mirror
+to dir: ~/my/attribute/fs
+attributes db: ~/.attribs_db
+real name: categorize_me
+logic name: search_me
+attr name: categorize_here
+
+
 
 ---------------------
 

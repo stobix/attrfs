@@ -21,8 +21,7 @@
 %%%-------------------------------------------------------
 %%% @author Joel Ericson <kasettbok@gmail.com>
 %%%
-%%% @version Almost working, yo...
-%%% @doc Header file for the attrfs modul.
+%%% @doc Header file for the attrfs module.
 %%% 
 %%% @end
 %%%-------------------------------------------------------
@@ -143,11 +142,8 @@
 -type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|duplicate_file.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
-
 -type name_tuple()::{string(),inode_number(),file_type()}.
 -type name_list()::[name_tuple()].
-
-
 
 %% The name slot in the inode_entry record is normally a string, but is a {parentname,childname} for value dirs, and a {grandparentname,parentname,childname} for logical dirs.
 -type inode_entry_name()::string()|[string()]|atom().
@@ -163,6 +159,9 @@
         {
         % The unique name the file uses internally. 
         %  Name, for normal files
+        % TODO: Make this something else.
+        %  Or, rather, have Parent be something like [inode()] rather than [string()] so renaming will be 
+        %  less costly. Iff efficient, that is.
         %  [Name,Parent] for Attribute value dirs and logical dirs.
         name::inode_entry_name() 
         % A name list if a dir
