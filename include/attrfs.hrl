@@ -87,7 +87,8 @@
 -define(ST_MODE(Stat,Mode),(Stat#stat{st_mode=Mode})).
 -define(ST_NLINK(Stat,NLink),(Stat#stat{st_nlink=NLink})).
 
--define(ERR_STAT(Ino), (#stat{ st_ino=Ino
+-define(ERR_STAT(Ino), #stat{ 
+                        st_ino=Ino
                         , st_nlink=1
                         , st_mode=0
                         , st_mtime=0
@@ -95,7 +96,8 @@
                         , st_ctime=0
                         , st_uid=0
                         , st_gid=0
-                        ,st_dev={0,0})).
+                        ,st_dev={0,0}).
+
 % "Standard directory mode". Thought to be used as a user settable
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 
@@ -120,9 +122,10 @@
         ,external_file_info::#file_info{} % file:#file_info{}
        }).
 
--record(err_file,
-        {e_contents:[string]}).
-
+%-record(err_file,
+%        {path::string()
+%        ,e_contents::[string()]}).
+%
 -record(external_dir,
         % the path is what path leads to the file in some external file system.
        {path::string()

@@ -116,7 +116,7 @@ init({MirrorDirs,DB}) ->
     #inode_entry{
       name=?ERR_FOLDR,
       contents=ErrorChildren,
-      type=logic_dir,
+      type=internal_dir,
       stat=?DIR_STAT(8#555,ErrIno),
       ext_info=[],
       ext_io=attr_ext:ext_info_to_ext_io([])
@@ -314,17 +314,20 @@ make_inode_list({Path,Name0}) ->
       ?DEBL(err,"got ~w when trying to read ~p.",[E,lists:flatten(Path)]),
       ?DEB1(err,"are you sure your app file is correctly configured?"),
       ?DEB1(err,"adding file to "++?ALL_FOLDR++"/"++?ERR_FOLDR),
-      Type=#external_file{path=Path,erroneous=true,stat=?ERR_STAT(Ino)}
-      InodeEntry=
-        #inode_entry{ 
-          name=Name,
-          contents=[],
-          type=Type,
-          stat=MyStat,
-          ext_info=ExtInfo,
-          ext_io=ExtIo
-        },
-      tree_srv:enter(Ino,InodeEntry,inodes),
+      %Type=#external_file{path=Path,erroneous=true,stat=?ERR_STAT(Ino)},
+      Type=err_file,
+
+      %Type=blah,
+      %InodeEntry=
+      %  #inode_entry{ 
+      %    name=Name,
+      %    contents=[],
+      %    type=Type,
+      %    stat=MyStat,
+      %    ext_info=ExtInfo,
+      %    ext_io=ExtIo
+      %  },
+      %tree_srv:enter(Ino,InodeEntry,inodes),
       {Name,Ino,Type,[]}
   end.
 
