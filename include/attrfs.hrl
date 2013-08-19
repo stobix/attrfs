@@ -52,7 +52,7 @@
 -define(DUP_PREFIX,(attr_tools:get_or_default(dup_prefix,"duplicate-"))).
 -define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,""))).
 -define(DUP_EXT,(attr_tools:get_or_default(dup_ext,".txt"))).
--define(ERR_EXT,(attr_tols:get_or_default(err_ext,".txt"))).
+-define(ERR_EXT,(attr_tools:get_or_default(err_ext,".txt"))).
 
 % TODO: Convert to number
 -define(MAX_LOGIC_RECURS,(attr_tools:get_or_default(max_logic_recurs,20))).
@@ -106,6 +106,18 @@
 
 -type inode_number()::pos_integer().
 -type attrib_list()::[{string(), string()}].
+
+-type error()::{atom(),atom()}.
+
+% The err_file record contains file data for files that could not be read for some reason.
+
+-record(err_file,
+        % the path is what path leads to the file in some external file system.
+        {path::string()
+        % the error file:read returned when trying to read the file
+        ,error::error()
+        }).
+
 
 %The dupliacte_file record contains the file data for files containing duplicate info for the file whose name they bear.
 

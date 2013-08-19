@@ -311,11 +311,11 @@ make_inode_list({Path,Name0}) ->
       % Each erroneous file is unique, and each error text file will only contain the entry for one file.
       % I thus list them by their internal names rather than their external names, since not all files with the same name need to be erroneous.
       tree_srv:enter(Name,Path,erroneous),
-      ?DEBL(err,"got ~w when trying to read ~p.",[E,lists:flatten(Path)]),
+      ?DEBL(err,"got ~w when trying to read ~p.",[E,unicode:characters_to_list(Path,utf8)]),
       ?DEB1(err,"are you sure your app file is correctly configured?"),
       ?DEB1(err,"adding file to "++?ALL_FOLDR++"/"++?ERR_FOLDR),
       %Type=#external_file{path=Path,erroneous=true,stat=?ERR_STAT(Ino)},
-      Type=err_file,
+      Type=#err_file{path=Path,error=E},
 
       %Type=blah,
       %InodeEntry=
