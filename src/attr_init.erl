@@ -259,6 +259,8 @@ make_inode_list({Path,Name0}) ->
   ?DEB2(8,"got unique name ~p",Name),
   ?DEB1({init,8},"updating duplicate list"),
   tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates),
+  % Pokemon programming. ("Gotta catch 'em all.")
+  % No error file:read_file_info/1 gives me would be a reason to exit the program.
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
       
@@ -310,56 +312,56 @@ make_inode_list({Path,Name0}) ->
     E ->
       % Each erroneous file is unique, and each error text file will only contain the entry for one file.
       % I thus list them by their internal names rather than their external names, since not all files with the same name need to be erroneous.
-      tree_srv:enter(Name,Path,erroneous),
+      tree_srv:enter(Name,{Path,E},erroneous),
       ?DEBL(err,"got ~w when trying to read ~p.",[E,unicode:characters_to_list(Path,utf8)]),
       ?DEB1(err,"are you sure your app file is correctly configured?"),
       ?DEB1(err,"adding file to "++?ALL_FOLDR++"/"++?ERR_FOLDR),
       %Type=#external_file{path=Path,erroneous=true,stat=?ERR_STAT(Ino)},
-      Type=#err_file{path=Path,error=E},
+      Type=erroneous_file,
 
       %Type=blah,
       %InodeEntry=
       %  #inode_entry{ 
-      %    name=Name,
-      %    contents=[],
-      %    type=Type,
-      %    stat=MyStat,
-      %    ext_info=ExtInfo,
-      %    ext_io=ExtIo
-      %  },
-      %tree_srv:enter(Ino,InodeEntry,inodes),
-      {Name,Ino,Type,[]}
-  end.
+          %    name=Name,
+          %    contents=[],
+          %    type=Type,
+          %    stat=MyStat,
+          %    ext_info=ExtInfo,
+          %    ext_io=ExtIo
+          %  },
+          %tree_srv:enter(Ino,InodeEntry,inodes),
+{Name,Ino,Type,[]}
+end.
 
 
 make_duplicate_children() ->
-  ?DEB1({init,3},"Generating duplicates dir"),
-  lists:foldl(
+?DEB1({init,3},"Generating duplicates dir"),
+lists:foldl(
     fun({Name,List0},{Unis,Dups}) ->
-      ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
-      {ok,Ino}=inode:number({duplicate,Name},ino),
-      Type= duplicate_file,
-      IOList = 
-        case length(List0) of
-          1 -> element(2,lists:nth(1,List0)); % skip the local name if we only have one entry to show
-          _ -> lists:foldl(
-                fun({DupName,Path},Acc) ->
-                  [io_lib:format("~s :\n~s\n",[DupName,Path])|Acc]
-                end
-                ,[]
-                ,List0)
-        end,
-      Data=iolist_to_binary(IOList),
-      Entry=#inode_entry{
+    ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
+    {ok,Ino}=inode:number({duplicate,Name},ino),
+    Type= duplicate_file,
+    IOList = 
+    case length(List0) of
+    1 -> element(2,lists:nth(1,List0)); % skip the local name if we only have one entry to show
+    _ -> lists:foldl(
+        fun({DupName,Path},Acc) ->
+        [io_lib:format("~s :\n~s\n",[DupName,Path])|Acc]
+        end
+        ,[]
+        ,List0)
+    end,
+    Data=iolist_to_binary(IOList),
+    Entry=#inode_entry{
         type=Type,
-        contents=Data,
-        ext_info=[],
-        ext_io=attr_ext:ext_info_to_ext_io([]),
-        stat=?FILE_STAT(8#755,Ino,size(Data))
-        },
-      ?DEB1({init,8},"entering dup entry into inode list"),
-      tree_srv:enter(Ino,Entry,inodes),
-      ?DEB1({init,8},"done"),
+contents=Data,
+ext_info=[],
+ext_io=attr_ext:ext_info_to_ext_io([]),
+stat=?FILE_STAT(8#755,Ino,size(Data))
+    },
+    ?DEB1({init,8},"entering dup entry into inode list"),
+    tree_srv:enter(Ino,Entry,inodes),
+    ?DEB1({init,8},"done"),
       DupEntry={Name++?DUP_EXT,Ino,#duplicate_file{}},
       case length(List0) of
         1 -> {[DupEntry|Unis],Dups};
@@ -373,11 +375,11 @@ make_duplicate_children() ->
 make_error_children() ->
   ?DEB1({init,3},"Generating errors dir"),
   lists:foldl(
-    fun({Name,Path},Errors) ->
+    fun({Name,{Path,Error}},Errors) ->
       ?DEBL({init,8},"Making inode number for {error, ~p}",[Name]),
       {ok,Ino}=inode:number({error,Name},ino),
       Type=erroneous_file,
-      IOList = [io_lib:format("~s\n",[Path])],
+      IOList = [io_lib:format("~p\n~s\n",[Error,Path])],
       Data = iolist_to_binary(IOList),
       Entry=#inode_entry{
         type=Type,
