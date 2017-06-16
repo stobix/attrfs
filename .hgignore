@@ -3,6 +3,6 @@ syntax:glob
 #.hgignore
 *beam
 *swp
-
-#syntax:regexp
-src/t
+deps
+log
+ebin
