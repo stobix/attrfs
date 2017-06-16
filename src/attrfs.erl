@@ -52,6 +52,6 @@ vget(Attribute) ->
       ?DEBL(2,"~p: ~p",[Attribute,Value]),
       Value;
     undefined -> 
-      ?DEB2(1,"~p not defined! check your config file!",Attribute),
+      ?DEB2(err,"~p not defined! check your config file!",Attribute),
     exit("not found")
   end.
