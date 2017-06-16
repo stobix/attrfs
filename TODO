@@ -33,6 +33,7 @@
 ☐ Include support for search directories:
     ☐ Special directories 
         ☑ AND, OR, BUTNOT, 
+        ☐ XOR
         ☐ NOT which negates the next folder choise
         ☐ AND<key folder> , BUTNOT <key folder> etc for every value folder.
          ☐ parentheses, to be able to do a/b OR (c/d AND e/f) and such
@@ -83,6 +84,8 @@
   * note as folders under /duplicates ?
     /duplicates/foo.file/paths.txt or something like it.
   * show duplicate files as a special type of folder?
+
+☐ åäö is (probably) broken. UTF-8 support broken? Am I using strings instead of binaries or something?
 
 
 ☐ what is wrong with the logical subdirs? Do I point sequentially all the way down to the original, or do I point directly to the original from all? The processing is way too slow, anyhow.
