@@ -23,7 +23,9 @@ tests_meta,
 tree_srv,
 tree_sup
            ]},
-   {applications,[kernel,stdlib,fuserl,reporter]}, 
+   {applications,[kernel,stdlib,fuserl,reporter,newdebug
+                   %,options
+                   ]}, 
    {registered,[attrfs]},
    {mod,{attrfs,[]}},
    {env,
