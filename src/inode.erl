@@ -59,7 +59,7 @@
 
 -vsn("0.2.1").
 
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 %%%=========================================================================
 %%% Type specifications

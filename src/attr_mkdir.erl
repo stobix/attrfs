@@ -31,7 +31,7 @@
 
 
 -include("../include/attrfs.hrl").
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 -export([make_dir/6]).
 -export([insert_entry/2]).

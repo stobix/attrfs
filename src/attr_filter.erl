@@ -3,7 +3,7 @@
 
 
 -include("../include/attrfs.hrl").
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 filter(List1,LogicFoldr,List2) ->
   case LogicFoldr==?BUTNOT_FOLDR of

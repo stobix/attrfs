@@ -32,7 +32,7 @@
 
 -behaviour(gen_server).
 
--include_lib("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 -export([init/1,start_link/1,terminate/2]).
 % Debugging
 -export([get_all/0

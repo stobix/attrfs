@@ -57,7 +57,7 @@
 -export([terminate/2]).
 -export([handle_info/2,code_change/3]).
 
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 %%%=========================================================================
 %%% Type specifications

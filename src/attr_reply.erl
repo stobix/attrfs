@@ -32,7 +32,7 @@
 
 
 -include("../include/attrfs.hrl").
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 -behaviour(gen_server).
 

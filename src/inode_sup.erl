@@ -25,7 +25,7 @@
 
 -export([init/1]).
 
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 start_link() ->
   ?DEB1(1,"Starting inode supervisor"),

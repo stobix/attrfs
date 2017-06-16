@@ -33,7 +33,7 @@
 -export([init/1]).
 
 -include("../include/attrfs.hrl").
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 init({MirrorDirs,DB}) ->
   ?DEB1(1,">init"),

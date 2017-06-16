@@ -1,7 +1,7 @@
 -module(tests_meta).
 
 -include("../include/attrfs.hrl").
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([test/0,fs_prereq/0,switch/0,timer/1,timer/2]).

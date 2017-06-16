@@ -30,7 +30,7 @@
 %%% @version 1.0
 
 -include("../include/attrfs.hrl").
--include("../include/debug.hrl").
+-include_lib("newdebug/include/debug.hrl").
 
 -export([direntries/1,
         children/1]).

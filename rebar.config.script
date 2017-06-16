@@ -1,0 +1,43 @@
+case os:cmd("hg branch") of 
+    "default\n" -> 
+[
+{sub_dirs,[ ]},
+
+{erl_opts, [debug_info,fail_on_warning,{d,debug},{d,timestamp},{d,newdebug},{parse_transform,lager_transform}]},
+
+{require_otp_vsn, ""},
+
+        {deps,
+            [
+            {lager,".*",{git,"https://github.com/basho/lager.git","master"}},
+            {newdebug,".*",{hg,"https://volatile@bitbucket.org/volatile/newdebug","tip"}},
+            {vol_tools,".*",{hg,"https://volatile@bitbucket.org/volatile/vol_tools","tip"}},
+            {erlando,".*",{hg,"https://volatile@bitbucket.org/volatile/erlando_sans_transforms","tip"}},
+            {pid_numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/pid_numberer","tip"}},
+            %{emysql,".*",{hg,"https://volatile@bitbucket.org/volatile/emysql","tip"}},
+            %{emysql_wrapper,".*",{hg,"https://volatile@bitbucket.org/volatile/emysql_wrapper","tip"}},
+            {fuserl,".*",{git,"https://github.com/tonyrog/fuserl","master"}}
+        ] }
+
+];
+    _ -> 
+[
+{sub_dirs,[ ]},
+
+{deps_dir,exp_deps},
+
+{erl_opts, [debug_info,fail_on_warning,{d,debug},{d,timestamp},{d,newdebug},{parse_transform,lager_transform}]},
+
+{require_otp_vsn, ""},
+
+        {deps,
+            [
+            {newdebug,".*",{hg,"https://volatile@bitbucket.org/volatile/newdebug","tip"}},
+            {lager,".*",{git,"https://github.com/basho/lager.git","master"}},
+            {vol_tools,".*",{hg,"https://volatile@bitbucket.org/volatile/vol_tools","tip"}},
+            {erlando,".*",{hg,"https://volatile@bitbucket.org/volatile/erlando_sans_transforms","tip"}},
+            {pid_numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/pid_numberer","tip"}},
+            {fuserl,".*",{git,"https://github.com/tonyrog/fuserl","master"}}
+        ] }
+]
+end.
