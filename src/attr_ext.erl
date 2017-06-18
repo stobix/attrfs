@@ -1,5 +1,3 @@
--module(attr_ext).
-
 %%%=========================================================================
 %%%                                 LICENSE
 %%%=========================================================================
@@ -30,6 +28,8 @@
 %%% @doc This module deals with extended attribute data base handling.
 %%%
 %%% @version 1.0
+
+-module(attr_ext).
 
 -export([add_new_attribute/4,
          rehash_ext_from_db/2,

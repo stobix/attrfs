@@ -1,4 +1,3 @@
--module(attr_lookup).
 
 %%%=========================================================================
 %%%                                 LICENSE
@@ -28,6 +27,8 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
+-module(attr_lookup).
 
 -include("../include/attrfs.hrl").
 -include_lib("newdebug/include/debug.hrl").

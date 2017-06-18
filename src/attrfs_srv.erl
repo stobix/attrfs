@@ -1,4 +1,3 @@
--module(attrfs_srv).
 
 %%%=========================================================================
 %%%                                 LICENSE
@@ -47,6 +46,7 @@
 %%%=========================================================================
 %%%=========================================================================
 
+-module(attrfs_srv).
 
 %%%=========================================================================
 %%%                                 EXPORTS
@@ -472,7 +472,7 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
   ?REPORT(lookup),
   Child=binary_to_list(BinaryChild),
-  ?DEBL(1,">lookup Parent: ~p Name: ~s",[ParentInode,Child]),
+  ?DEBL(1,">lookup Parent: ~p Name: ~s",[ParentInode,BinaryChild]),
     attr_reply:watch(
       fun(Token) -> attr_async:lookup(ParentInode,Child,Token) end,
       Continuation,
@@ -754,8 +754,9 @@ releasedir(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   ?REPORT(removexattr),
-  Name=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEB1(1,">removexattr"),
+  ?DEB2(2,"|  BName: ~w",BName),
+  Name=attr_tools:remove_from_start(binary_to_list(BName),"user."),
   ?DEB2(2,"|  _Ctx:~w",_Ctx),
   ?DEB2(2,"|  Inode: ~w ",Inode),
   ?DEB2(2,"|  Name: ~w",Name),

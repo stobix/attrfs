@@ -1,5 +1,3 @@
--module(attr_async).
-
 %%%=========================================================================
 %%%                                 LICENSE
 %%%=========================================================================
@@ -31,6 +29,8 @@
 %%%      making async calls from attrfs_srv.
 %%%
 %%% @end
+
+-module(attr_async).
 
 -include("../include/attrfs.hrl").
 -include_lib("newdebug/include/debug.hrl").

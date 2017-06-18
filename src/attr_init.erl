@@ -1,4 +1,3 @@
--module(attr_init).
 
 
 %%%=========================================================================
@@ -29,6 +28,8 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+
+-module(attr_init).
 
 -export([init/1]).
 

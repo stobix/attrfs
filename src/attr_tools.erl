@@ -1,4 +1,3 @@
--module(attr_tools).
 
 %%%=========================================================================
 %%%                                 LICENSE
@@ -28,11 +27,14 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 
+-module(attr_tools).
+
 -include("../include/attrfs.hrl").
 -include_lib("newdebug/include/debug.hrl").
 
 -export([keymergeunique/2,
          remove_from_start/2,
+         bremove_from_start/2,
          take_while/3,
          test_access/3,
          merge_duplicates/1,
@@ -128,8 +130,14 @@ remove_from_start_test_() ->
   ]).
 -endif.
 
+bremove_from_start(Bin1,<<>>) -> Bin1;
+bremove_from_start(<<>>,_ ) -> <<>>;
+bremove_from_start(Bin1,Bin2) ->
+    Matching=binary:longest_common_prefix([Bin1,Bin2]),
+    binary:part(Bin1,{Matching,byte_size(Bin1)-Matching}).
+
 %%--------------------------------------------------------------------------
-%% @spec (boolean(),A,B) -> A|B.
+%% @spec (boolean(),A,B) -> A|B
 %% @doc Takes a boolean and redefines the meanings of true and false.
 %% Example: transmogrify(is_foo(X),good,{error,no_foo}) will return either 
 %% good or {error, no_foo}, depending on whether is_foo(X) returns true or 

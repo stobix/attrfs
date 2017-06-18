@@ -1,4 +1,3 @@
--module(attr_mkdir).
 
 %%%=========================================================================
 %%%                                 LICENSE
@@ -29,6 +28,7 @@
 %%%
 %%% @version 1.0
 
+-module(attr_mkdir).
 
 -include("../include/attrfs.hrl").
 -include_lib("newdebug/include/debug.hrl").
