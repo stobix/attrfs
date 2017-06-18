@@ -145,7 +145,7 @@ generate_logic_link_children(Ino,Name) ->
         fun({_MyName,_Inode,logic_dir}=E) ->
           E;
            ({MyName,Inode,Type}) ->
-          MyInode=inode:get([MyName|Name],ino),
+          MyInode=numberer:get([MyName|Name],ino),
           case tree_srv:lookup(MyInode,inodes) of
             {value,_MyEntry} ->
               % For now, I return the children of the linked to entry, if already generated.
@@ -205,7 +205,7 @@ filter_children([Connective|Parents],Children) ->
   ?DEB1(6,">filter_children"),
   case ?CONNS(Connective) of
     true ->
-      case inode:is_numbered(Parents,ino) of
+      case numberer:is_numbered(Parents,ino) of
         false -> false;
         Ino ->
           % Since directories are filtered when created, I need not filter the children of the parent anew.
@@ -231,7 +231,7 @@ filter_children([],LastChildrenUnfiltered) ->
 generate_logic_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
   ?DEB1(6,">generate_logic_dir_children"),
-  {ok,MIno}=inode:n2i(MirrorDir,ino),
+  {ok,MIno}=numberer:n2i(MirrorDir,ino),
   ?DEB2(8,"attributes ino: ~p",MIno),
   ?DEB1(8,"getting attributes entry "),
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
@@ -255,7 +255,7 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
             generated=false,
             type=LinkType},
           ?DEB2(8,"getting or setting inode number of ~p",[Name|LogicName]),
-          LinkIno=inode:get(LinkName,ino),
+          LinkIno=numberer:get(LinkName,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
           [{Name,LinkIno,LinkType}|Acc];
         #external_file{}=E ->
@@ -291,11 +291,11 @@ generate_logic_dirs(Predecessor) ->
 generate_logic_dir(Parent,X) ->
   ?DEB2(6,"generate_lodic_dir \"~p\"",X),
   ?DEB1(8,"getting entry"),
-  {ok,PIno}=inode:n2i(Parent,ino),
+  {ok,PIno}=numberer:n2i(Parent,ino),
   {value,PEntry}=tree_srv:lookup(PIno,inodes),
   ?DEB1(8,"generating new entry"),
   Name=[X|Parent],
-  Ino=inode:get(Name,ino),
+  Ino=numberer:get(Name,ino),
   PStat=PEntry#inode_entry.stat,
   % Logical dirs will not be writeable. Therefore, I do not directly copy the mode of the parent
   Stat=?ST_MODE(PStat,?M_DIR(8#555)), 

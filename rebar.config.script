@@ -11,7 +11,7 @@ case os:cmd("hg branch") of
             [
             {lager,".*",{git,"https://github.com/basho/lager.git","master"}},
             {newdebug,".*",{hg,"https://volatile@bitbucket.org/volatile/newdebug","tip"}},
-            {inode,".*",{hg,"https://volatile@bitbucket.org/volatile/inode","tip"}},
+            {numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/numberer","tip"}},
             {tree_app,".*",{hg,"https://volatile@bitbucket.org/volatile/tree_app","tip"}},
             {reporter,".*",{hg,"https://volatile@bitbucket.org/volatile/reporter","tip"}},
             {options,".*",{hg,"https://volatile@bitbucket.org/volatile/options","tip"}},
@@ -39,6 +39,7 @@ case os:cmd("hg branch") of
             {newdebug,".*",{hg,"https://volatile@bitbucket.org/volatile/newdebug","tip"}},
             {reporter,".*",{hg,"https://volatile@bitbucket.org/volatile/reporter","tip"}},
             {options,".*",{hg,"https://volatile@bitbucket.org/volatile/options","tip"}},
+            {numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/numberer","tip"}},
             {lager,".*",{git,"https://github.com/basho/lager.git","master"}},
             {vol_tools,".*",{hg,"https://volatile@bitbucket.org/volatile/vol_tools","tip"}},
             {erlando,".*",{hg,"https://volatile@bitbucket.org/volatile/erlando_sans_transforms","tip"}},

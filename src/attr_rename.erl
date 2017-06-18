@@ -113,7 +113,7 @@ move_internal_file(FIno,FEntry,PIno,NewName,NPIno,NPEntry) ->
 %% Since the attribute folder already exists, things needn't get overly coplicated here...
 copy_file(NPIno,FIno,FEntry) ->
   Path=(FEntry#inode_entry.type)#external_file.path,
-  {ok,Attribute}=inode:i2n(NPIno,ino),
+  {ok,Attribute}=numberer:i2n(NPIno,ino),
   ?DEBL(6,"copying file ~p into ~p",[FEntry#inode_entry.name,Attribute]),
   attr_ext:add_new_attribute(Path,FIno,FEntry,Attribute).
 
@@ -154,8 +154,8 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   %     whether to use inodes or entries as arguments sometime?
   ?DEBL(8,"removing ~p from the ~p directory", [OldValueName,OldKeyName]),
   ?DEBL(9,"getting inodes...",[]),
-  {ok,KeyIno}=inode:n2i(OldKeyName,ino),
-  {ok,ValueIno}=inode:n2i(OldAttribName,ino),
+  {ok,KeyIno}=numberer:n2i(OldKeyName,ino),
+  {ok,ValueIno}=numberer:n2i(OldAttribName,ino),
   ?DEBL(9,"removing...",[]),
   attr_remove:remove_empty_dir(KeyIno,OldValueName),
   ?DEBL(9,"adding ~p to ~p directory", [NewValueName,NewParentName]),
@@ -163,7 +163,7 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ?DEB2(9,"adding ~p to inode list",NewAttribName),
   attr_tools:append_child({NewValueName,ValueIno,attribute_dir},KeyIno),
   ?DEB1(9,"moving inode number"),
-  inode:rename(OldAttribName,NewAttribName,ino),
+  numberer:rename(OldAttribName,NewAttribName,ino),
   ok.
 
 

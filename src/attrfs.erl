@@ -44,15 +44,3 @@ start(_dont,_care) ->
 stop(_State) -> ok.
 
 
-%%--------------------------------------------------------------------------
-%% Returns the value associated with Attribute in the .app file. Exits the app if not found.
-%%--------------------------------------------------------------------------
-vget(Attribute) ->
-  case options:get(?MODULE,Attribute) of
-    {ok,Value} -> 
-      ?DEBL(2,"~p: ~p",[Attribute,Value]),
-      Value;
-    undefined -> 
-      ?DEB2(err,"~p not defined! check your config file!",Attribute),
-    exit("not found")
-  end.

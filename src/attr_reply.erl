@@ -75,7 +75,7 @@ terminate(A,B) ->
   ok.
 
 handle_cast({add,Fun,Continuation,DefaultAnswer},State) ->
-  Token=inode:get(pino),
+  Token=numberer:get(pino),
   PID=spawn_link(fun() -> Fun(Token) end),
   ?DEBL(3,"Started a fun with pid ~p and token ~p",[PID,Token]),
   {noreply,[{PID,Token,Continuation,DefaultAnswer}|State]};

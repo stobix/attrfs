@@ -41,13 +41,13 @@ init({MirrorDirs,DB}) ->
 %  check_dirs(MirrorDirs), TODO: This is smarter than checking for legit dirs when parsing them. Fix later.
   initiate_servers(DB),
   % getting inodes for base folders
-  {ok,RootIno}=inode:number(root,ino),
-  {ok,AttribIno}=inode:number(?ATTR_FOLDR,ino),
-  {ok,RealIno}=inode:number(?REAL_FOLDR,ino),
-  {ok,AllIno}=inode:number(?ALL_FOLDR,ino),
-  {ok,DupIno}=inode:number(?DUP_FOLDR,ino),
-  {ok,UniIno}=inode:number(?UNI_FOLDR,ino),
-  {ok,LogicIno}=inode:number(?LOGIC_FOLDR,ino),
+  {ok,RootIno}=numberer:number(root,ino),
+  {ok,AttribIno}=numberer:number(?ATTR_FOLDR,ino),
+  {ok,RealIno}=numberer:number(?REAL_FOLDR,ino),
+  {ok,AllIno}=numberer:number(?ALL_FOLDR,ino),
+  {ok,DupIno}=numberer:number(?DUP_FOLDR,ino),
+  {ok,UniIno}=numberer:number(?UNI_FOLDR,ino),
+  {ok,LogicIno}=numberer:number(?LOGIC_FOLDR,ino),
 
   ?DEBL({init,5},"inodes;\troot:~w, real:~w, attribs:~w",[RootIno,RealIno,AttribIno]),
   ?DEB1({init,1},"creating root entry"),
@@ -163,9 +163,9 @@ initiate_servers(DB) ->
   tree_srv:new(specials), % to provide fast access to the root dir and other critical dirs
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
-  inode:initiate(ino), % the inode table
-  inode:initiate(pino), % the spawned processes "inode" table
-  inode:initiate(fino). % the open files "inode" table
+  numberer:initiate(ino), % the inode table
+  numberer:initiate(pino), % the spawned processes "inode" table
+  numberer:initiate(fino). % the open files "inode" table
 
 
 % XXX: Do NOT call this on children with a parent without an inode entry ready!  
@@ -206,7 +206,7 @@ type_and_children(Path,FileInfo) ->
 %TODO: Extrahera paths ifrån koden, om möjligt. 
 %       Ny server en lösning?
 get_unique(Name0) ->
-  case inode:number(Name0,ino) of
+  case numberer:number(Name0,ino) of
     {error,{is_numbered,{Name0,Ino0}}} ->
       ?DEB2({init,7},"~s is a duplicate!",Name0),
       case tree_srv:lookup(Ino0,inodes) of
@@ -307,7 +307,7 @@ make_duplicate_children() ->
   lists:foldl(
     fun({Name,List0},{Unis,Dups}) ->
       ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
-      {ok,Ino}=inode:number({duplicate,Name},ino),
+      {ok,Ino}=numberer:number({duplicate,Name},ino),
       Type= duplicate_file,
       IOList = 
         case length(List0) of

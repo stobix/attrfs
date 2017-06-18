@@ -383,7 +383,7 @@ append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry
   ?DEB2(9,"merged children: ~p",NewChildren),
   NewParentEntry=ParentEntry#inode_entry{contents=NewChildren},
   ?DEB1(9,"created new parent entry"),
-  {ok,ParentIno}=inode:n2i(PName,ino),
+  {ok,ParentIno}=numberer:n2i(PName,ino),
   ?DEB2(9,"parent inode: ~p",ParentIno),
   tree_srv:enter(ParentIno,NewParentEntry,inodes),
   ?DEB1(9,"new parent inserted"),

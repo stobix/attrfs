@@ -17,14 +17,17 @@ attr_remove,
 attr_rename,
 attr_reply,
 attr_tools,
-inode,
-inode_sup,
-tests_meta,
-tree_srv,
-tree_sup
+%inode,
+%inode_sup,
+tests_meta
+%tree_srv,
+%tree_sup
            ]},
-   {applications,[kernel,stdlib,fuserl,reporter,newdebug
-                   %,options
+   {applications,[
+   kernel,stdlib,fuserl,reporter,newdebug
+   ,numberer
+   ,tree_app
+   ,options
                    ]}, 
    {registered,[attrfs]},
    {mod,{attrfs,[]}},

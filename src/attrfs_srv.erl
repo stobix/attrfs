@@ -159,7 +159,7 @@ code_change(_,_,_) ->
 
 %%---------------------
 %% Just a small utility function used by start link to filter out good initial values or crash
-  vget(Attribute) ->
+vget(Attribute) ->
   case options:get(attrfs,Attribute) of
     {ok,Value} -> 
       ?DEBL(2,"~p: ~p",[Attribute,Value]),
@@ -174,16 +174,20 @@ code_change(_,_,_) ->
 %% In here, I mostly check for dirs needed to start fuserlsrv.
 %--------------------------------------------------------------------------
 start_link() ->
+    
   ?REPORT(start_link),
   ?DEB1(1,">start_link"),
+  MyConfig=options:get(attrfs,config_file,"~/.attrfsrc"),
+  ?DEB2(2,"Loading config file ~s...",MyConfig),
+  options:append_config(MyConfig),
   ?DEB1(2,"getting config options..."),
 
-  MirrorDirs=case options:mget(?MODULE,from_dir) of
-    {string,MD} -> [MD]; % One from dir defined in config file
-    {ok,MD} -> [MD]; % from_dir defined in attrfs.app
-    {list,MD} -> MD; % Several from dir defined in config file
+  MirrorDirs=case options:mget(attrfs,from_dir) of
+    {ok,{string,MD}} -> [MD]; % One from dir defined in config file
+    {ok,{list,MD}} -> MD; % Several from dir defined in config file
+    {ok,{env,MD}} -> [MD]; % from_dir defined in attrfs.app
     undefined -> 
-        case options:get(?MODULE,from_dirs) of
+        case options:get(attrfs,from_dirs) of
             {ok,MD} -> MD; % from_dirs defined in attrfs.app
             undefined -> 
                 ?DEB1(err,"You must define at least one from dir in your config file to run attrfs!"),
@@ -296,14 +300,14 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
   ?DEBL(2,"|  Mode: ~.8X",[Mode,"O"]),
   ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
   Name=binary_to_list(BName),
-  Reply=case inode:is_numbered(Name,ino) of
+  Reply=case numberer:is_numbered(Name,ino) of
     false -> 
       ?DEB1(4,"No real file with that name, checking parent."),
       {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
       case ParentEntry#inode_entry.type of
         attribute_dir ->
           ?DEB1(4,"Parent is an attribute dir. Creating internal file."),
-          {ok,Inode}=inode:number(Name,ino),
+          {ok,Inode}=numberer:number(Name,ino),
           NewEntry=#inode_entry{
             type=internal_file,
             contents= <<>>,
@@ -552,7 +556,7 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
             case file:open(Path,[read,binary]) of
 %            case file:open(Path,[read,raw]) of
                 {ok,IoDevice} ->
-                    MyFino=inode:get(fino),
+                    MyFino=numberer:get(fino),
                     attr_open:set(MyFino,Inode,#open_external_file{io_device=IoDevice,path=Path}),
                     #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
                 {error,Error} ->
@@ -561,12 +565,12 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %        #fuse_reply_open{fuse_file_info=Fuse_File_Info};
       duplicate_file ->
         ?DEB1(4,"duplicate file"),
-        MyFino=inode:get(fino),
+        MyFino=numberer:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
       internal_file ->
         ?DEB1(4,"internal file"),
-        MyFino=inode:get(fino),
+        MyFino=numberer:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
 
@@ -595,7 +599,7 @@ opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
   ?DEB1(4,"Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
   ?REPORT(opendir),
-  MyFIno=inode:get(fino),
+  MyFIno=numberer:get(fino),
   attr_open:set(MyFIno,Inode,attr_lookup:direntries(Inode)),
   {#fuse_reply_open{ fuse_file_info = FI#fuse_file_info{fh=MyFIno} }, State}.
 
@@ -826,13 +830,13 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
     case PType of
       attribute_dir ->
         Name=binary_to_list(BName),
-        {ok,Ino}=inode:n2i([Name|PName],ino),
+        {ok,Ino}=numberer:n2i([Name|PName],ino),
         {value,Entry}=tree_srv:lookup(Ino,inodes),
         case Entry#inode_entry.contents of
           [] ->
             attr_remove:remove_child_from_parent(Name,PName),
             tree_srv:delete(Ino,inodes),
-            inode:release(Ino,ino),
+            numberer:release(Ino,ino),
             ok;
           _Children ->
             enotempty
@@ -1000,8 +1004,8 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
         f_bfree=314159265,
         f_bavail=271828182,
         f_files=1000000000000000, % at least!
-        f_ffree=1000000000000000-inode:count_occupied(ino), % at least!
-        f_favail=1000000000000000-inode:count_occupied(ino), % at least!
+        f_ffree=1000000000000000-numberer:count_occupied(ino), % at least!
+        f_favail=1000000000000000-numberer:count_occupied(ino), % at least!
 %            f_fsid=0, % how to get this right?
 %            f_flag=0, % Hm...
         f_namemax=10000 % Or some other arbitary high value.
@@ -1066,7 +1070,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
                   ?DEBL(4,"Removing external file ~s from ~s",[ParentEntry#inode_entry.name,Name]),
                   attr_remove:remove_child_from_parent(Name,PName),
                   tree_srv:delete_any(Inode,inodes),
-                  inode:release(Inode,ino),
+                  numberer:release(Inode,ino),
                   #fuse_reply_err{err=ok};
 
                 _ ->
@@ -1179,13 +1183,13 @@ dump_entries(Table) ->
 %%--------------------------------------------------------------------------
 dump_inodes() ->
   ?REPORT(dump_inodes),
-  inode:list_bound(ino).
+  numberer:list_bound(ino).
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 dump_finodes() ->
   ?REPORT(dump_finodes),
-  inode:list_bound(fino).
+  numberer:list_bound(fino).
 
 which_dirs() ->
   lists:map(fun(A)->attr_tools:get_or_default(A,"")end,[from_dir,from_dirs,to_dir]).

@@ -74,9 +74,9 @@ make_param(Stat) ->
 %%--------------------------------------------------------------------------
 make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
   ?DEB1(6,"make_general_dir"),
-  case inode:is_numbered(Name,ino) of
+  case numberer:is_numbered(Name,ino) of
     false ->
-      {ok,MyInode}=inode:number(Name,ino),
+      {ok,MyInode}=numberer:number(Name,ino),
       ?DEBL(8,"creating new directory entry called ~p",[Name]),
       {MegaNow,NormalNow,_}=now(),
       Now=MegaNow*1000000+NormalNow,
@@ -116,7 +116,7 @@ insert_entry(ParentInode,ChildEntry) ->
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,
-  {ok,ChildInode}=inode:n2i(InoName,ino),
+  {ok,ChildInode}=numberer:n2i(InoName,ino),
   ChildType=ChildEntry#inode_entry.type, 
   ChildName=
     case ChildType of

@@ -99,9 +99,9 @@ append_attribute(Attr,FName,Stat) ->
 %%--------------------------------------------------------------------------
 append_attribute_dir(Parent,ChildInoName,ChildName,Stat) ->
   ?DEBL(6,"append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
-  {ok,ChildIno}=inode:n2i(ChildInoName,ino),
+  {ok,ChildIno}=numberer:n2i(ChildInoName,ino),
   % get creates if non-existant.
-  ParentIno=inode:get(Parent,ino),
+  ParentIno=numberer:get(Parent,ino),
   {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
   ?DEB1(8,"got child entry"),
   ChildType=ChildEntry#inode_entry.type,

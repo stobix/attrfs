@@ -42,7 +42,7 @@
 %%  children in the inode entry of the parent.
 %%--------------------------------------------------------------------------
 remove_child_from_parent(ChildName,ParentName) ->
-  {ok,Inode}=inode:n2i(ParentName,ino),
+  {ok,Inode}=numberer:n2i(ParentName,ino),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   Children=Entry#inode_entry.contents,
   NewChildren=lists:keydelete(ChildName,1,Children),
@@ -69,7 +69,7 @@ remove_attribute(Path,Inode,Attribute) ->
   % File attribute handling
   attr_ext:rehash_ext_from_db(Inode,Path),
   % Attribute dir handling
-  {ok,Name}=inode:i2n(Inode,ino),
+  {ok,Name}=numberer:i2n(Inode,ino),
   remove_child_from_parent(Name,Attribute).
 
 %%--------------------------------------------------------------------------
@@ -102,7 +102,7 @@ remove_key_values(Path,Inode,AName) ->
   % Updating ext io using the filtered ext info
   attr_ext:rehash_ext_from_db(Inode,Path),
   % removing file child from attribute folder entry
-  {ok,FName}=inode:i2n(Inode,ino),
+  {ok,FName}=numberer:i2n(Inode,ino),
   lists:foreach(
     fun([AValue]) -> 
       remove_child_from_parent(FName,[AValue|AName])
