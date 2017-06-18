@@ -46,7 +46,7 @@
 direntries(Inode) ->
   ?DEB1(5,">direntries"),
   ?DEB1(7,"Getting child entries"),
-  {value,Children}=attr_tools:children(Inode),
+  {value,Children}=children(Inode),
   ?DEBL(7,"Converting children ~p for ~p",[Children,Inode]),
   direntrify(Children).
 

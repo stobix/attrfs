@@ -596,7 +596,7 @@ opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
   ?REPORT(opendir),
   MyFIno=inode:get(fino),
-  attr_open:set(MyFIno,Inode,attr_opendir:direntries(Inode)),
+  attr_open:set(MyFIno,Inode,attr_lookup:direntries(Inode)),
   {#fuse_reply_open{ fuse_file_info = FI#fuse_file_info{fh=MyFIno} }, State}.
 
 %%--------------------------------------------------------------------------
