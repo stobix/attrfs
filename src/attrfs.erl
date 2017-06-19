@@ -27,6 +27,7 @@
 -include("../include/attrfs.hrl").
 
 start(_dont,_care) ->
+    newdebug:tty(true),
   ?DEB2(1,"Starting ~p",?MODULE),
 
   case attrfs_sup:start_link() of
