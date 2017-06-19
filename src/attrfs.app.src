@@ -1,34 +1,9 @@
 {application, attrfs,
   [{description,"A file system used to sort files by attributes."},
    {vsn,"1.0"},
-   {modules,[
-attr_async,
-attr_ext,
-attr_filter,
-attrfs,
-attrfs_srv,
-attrfs_sup,
-attr_init,
-attr_lookup,
-attr_mkdir,
-attr_opendir,
-attr_open,
-attr_remove,
-attr_rename,
-attr_reply,
-attr_tools,
-%inode,
-%inode_sup,
-tests_meta
-%tree_srv,
-%tree_sup
-           ]},
+   {modules,[ ]},
    {applications,[
-   kernel,stdlib,fuserl,reporter,newdebug
-   ,numberer
-   ,tree_app
-   ,options
-                   ]}, 
+   kernel,stdlib,fuserl,reporter,newdebug ,numberer ,tree_app ,options ]}, 
    {registered,[attrfs]},
    {mod,{attrfs,[]}},
    {env,
