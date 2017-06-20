@@ -64,16 +64,16 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 	%% Since most calls to this function comes from functions that have
 	%% already looked up the file entry for the inode, sending both the
 	%% FIno and FEntry here saves a lookup call.
-  ?DEB1(3,">add_new_attribute"),
+  ?DEB1({ext,3},">add_new_attribute"),
   % Add the new attribute, if non-existent.
-  ?DEBL(5,"inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
+  ?DEBL({ext,5},"inserting (~p) ~p into database, if nonexistent",[Path,Attr]),
   length(dets:match(?ATTR_DB,{Path,Attr}))==0 andalso
     (ok=dets:insert(?ATTR_DB,{Path,Attr})),
-  ?DEBL(5,"database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
+  ?DEBL({ext,5},"database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
   #inode_entry{stat=Stat,name=FName}=FEntry,
-  ?DEBL(5,"appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+  ?DEBL({ext,5},"appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
   append_attribute(Attr,FName,?UEXEC(Stat)),
-  ?DEB1(5,"creating new ext info"),
+  ?DEB1({ext,5},"creating new ext info"),
   rehash_ext_from_db(FIno,Path).
 
 
@@ -85,7 +85,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
 %% Input: Attr, FName, Stat
 %%--------------------------------------------------------------------------
 append_attribute(Attr,FName,Stat) ->
-  ?DEBL(3,"appending ~p/~p",[Attr,FName]),
+  ?DEBL({ext,3},"appending ~p/~p",[Attr,FName]),
   append_attribute_dir(Attr,FName,FName,Stat).
 
 
@@ -98,19 +98,19 @@ append_attribute(Attr,FName,Stat) ->
 %% Input: Parent, ChildInoName, ChildName,Stat
 %%--------------------------------------------------------------------------
 append_attribute_dir(Parent,ChildInoName,ChildName,Stat) ->
-  ?DEBL(6,"append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
+  ?DEBL({ext,6},"append ~p ~p ~p",[Parent,ChildInoName,ChildName]),
   {ok,ChildIno}=numberer:n2i(ChildInoName,ino),
   % get creates if non-existant.
   ParentIno=numberer:get(Parent,ino),
   {value,ChildEntry}=tree_srv:lookup(ChildIno,inodes),
-  ?DEB1(8,"got child entry"),
+  ?DEB1({ext,8},"got child entry"),
   ChildType=ChildEntry#inode_entry.type,
   ChildTriplet={ChildName,ChildIno,ChildType},
   % Append child to parent, creating parent entry recursively if neccessary.
   case tree_srv:lookup(ParentIno,inodes) of
     % No entry found, creating new attribute entry before appending child.
     none ->
-      ?DEBL(8,"adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
+      ?DEBL({ext,8},"adding new attribute folder ~p with the child ~p",[Parent,ChildName]),
       PEntry=
         #inode_entry{
           type=attribute_dir,
@@ -120,15 +120,15 @@ append_attribute_dir(Parent,ChildInoName,ChildName,Stat) ->
           ext_info=[],
           ext_io=ext_info_to_ext_io([])
         },
-      ?DEB1(8,"entering new entry into server"),
+      ?DEB1({ext,8},"entering new entry into server"),
       tree_srv:enter(ParentIno,PEntry,inodes),
 	  % This works since attribute folder names are defined recursively.      
 	  [PName|GrandParent]=Parent, 
-      ?DEBL(8,"checking parent of parent (~p)",[GrandParent]),
+      ?DEBL({ext,8},"checking parent of parent (~p)",[GrandParent]),
       append_attribute_dir(GrandParent,Parent,PName,Stat);
 	% Parent already created, just appending child.
     {value,PEntry} ->
-      ?DEBL(8,"merging ~p into ~p",[element(1,ChildTriplet),PEntry#inode_entry.name]),
+      ?DEBL({ext,8},"merging ~p into ~p",[element(1,ChildTriplet),PEntry#inode_entry.name]),
       attr_tools:append_child(ChildTriplet,PEntry)
   end.
 
@@ -137,7 +137,7 @@ append_attribute_dir(Parent,ChildInoName,ChildName,Stat) ->
 %% Output: {Ext info for path from database,Number of ext info items}
 %%--------------------------------------------------------------------------
 generate_ext_info(Path) ->
-  ?DEB2(3,"generating ext info for ~s",Path),
+  ?DEB2({ext,3},"generating ext info for ~s",Path),
   % Find the path in the data base
   ExtInfo0=dets:match(?ATTR_DB,{Path,'$1'}),
   % Count the number of items
@@ -179,12 +179,12 @@ keyvalue([A|[]]) ->
 keyvalue(A) ->
     lists:foldl(
         fun(X,{[],[]}) ->
-            ?DEB2(5,"init: ~p",X),
+            ?DEB2({ext,5},"init: ~p",X),
             {[],X};
            (X,{[],Z}) ->
             {X,Z};
            (X,{Y,Z}) ->
-            ?DEBL(5,"recurs: ~p,~p,~p",[X,Y,Z]),
+            ?DEBL({ext,5},"recurs: ~p,~p,~p",[X,Y,Z]),
             {X++"/"++Y,Z}
         end,
         {[],[]},
@@ -196,9 +196,9 @@ keyvalue(A) ->
 %%  string format for the specified file path
 %%--------------------------------------------------------------------------
 generate_ext_info_io(Path) ->
-  ?DEB2(3,"generating ext info for ~p",Path),
+  ?DEB2({ext,3},"generating ext info for ~ts",Path),
   {ExtInfo,ExtAmount}=generate_ext_info(Path),
-  ?DEB2(5,"generating ext io for ~p",ExtInfo),
+  ?DEB2({ext,5},"generating ext io for ~p",ExtInfo),
   ExtIo=ext_info_to_ext_io(ExtInfo),
   {ExtInfo,ExtIo,ExtAmount}.
 
@@ -206,7 +206,7 @@ generate_ext_info_io(Path) ->
 %% Ext info is a list of key-value-tuples, ext io is a string representation of a binary
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
-  ?DEB1(6,"Creating ext_io"),
+  ?DEB1({ext,6},"Creating ext_io"),
   ext_info_to_ext_io(InternalExtInfoTupleList,[]).
 
 %%--------------------------------------------------------------------------
@@ -217,8 +217,8 @@ ext_info_to_ext_io([],B) ->
   ?REPORT(ext_info_to_ext_io),
   B0=B++"\0",
   B0len=length(B0),
-  ?DEB1(8,"Done creating ext_io"),
-  ?DEBL(8,"Final string: \"~p\", size: ~p",[B0,B0len]),
+  ?DEB1({ext,8},"Done creating ext_io"),
+  ?DEBL({ext,8},"Final string: \"~p\", size: ~p",[B0,B0len]),
   {B0len,B0};
 
 %%--------------------------------------------------------------------------
@@ -230,15 +230,15 @@ ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
   Name0=
     case string:str(Name,"system")==1 of
       false ->
-        ?DEB2(8,"Adding zero to end of name ~p, and \"user.\" to the start",Name),
+        ?DEB2({ext,8},"Adding zero to end of name ~p, and \"user.\" to the start",Name),
         "user."++Name++"\0";
       true -> 
-        ?DEB2(8,"Adding zero to end of name ~p",Name),
+        ?DEB2({ext,8},"Adding zero to end of name ~p",Name),
         Name++"\0"
     end,
-  ?DEB1(8,"Appending name to namelist"),
+  ?DEB1({ext,8},"Appending name to namelist"),
   NewString=String++Name0,
-  ?DEB1(8,"Recursion"),
+  ?DEB1({ext,8},"Recursion"),
   ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 
 

@@ -35,21 +35,21 @@
 -define(ATTR_DB_FILE, attrfs, attributes_db).
 
 -define(ROOT_FOLDR, root).
--define(REAL_FOLDR, (attr_tools:get_or_default(real_name,"files"))).
--define(ATTR_FOLDR, []).
--define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,"attributes"))).
--define(ALL_FOLDR,(attr_tools:get_or_default(all_name,"all_files"))).
--define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,"duplicates"))).
--define(UNI_FOLDR,(attr_tools:get_or_default(uni_name,"unique"))).
--define(LOGIC_FOLDR,(attr_tools:get_or_default(logic_name,"logic"))).
--define(AND_FOLDR,(attr_tools:get_or_default(and_name,"AND"))).
--define(OR_FOLDR,(attr_tools:get_or_default(or_name,"OR"))).
--define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,"BUTNOT"))).
--define(KEY_SEP,(attr_tools:get_or_default(key_sep,"/"))).
--define(VAL_SEP,(attr_tools:get_or_default(val_sep,","))).
--define(DUP_PREFIX,(attr_tools:get_or_default(dup_prefix,"duplicate-"))).
--define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,""))).
--define(DUP_EXT,(attr_tools:get_or_default(dup_ext,".txt"))).
+-define(REAL_FOLDR, (attr_tools:get_or_default(real_name,<<"files">>))).
+-define(ATTR_FOLDR, <<>>).
+-define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,<<"attributes">>))).
+-define(ALL_FOLDR,(attr_tools:get_or_default(all_name,<<"all_files">>))).
+-define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,<<"duplicates">>))).
+-define(UNI_FOLDR,(attr_tools:get_or_default(uni_name,<<"unique">>))).
+-define(LOGIC_FOLDR,(attr_tools:get_or_default(logic_name,<<"logic">>))).
+-define(AND_FOLDR,(attr_tools:get_or_default(and_name,<<"AND">>))).
+-define(OR_FOLDR,(attr_tools:get_or_default(or_name,<<"OR">>))).
+-define(BUTNOT_FOLDR,(attr_tools:get_or_default(butnot_name,<<"BUTNOT">>))).
+-define(KEY_SEP,(attr_tools:get_or_default(key_sep,<<"/">>))).
+-define(VAL_SEP,(attr_tools:get_or_default(val_sep,<<",">>))).
+-define(DUP_PREFIX,(attr_tools:get_or_default(dup_prefix,<<"duplicate-">>))).
+-define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,<<"">>))).
+-define(DUP_EXT,(attr_tools:get_or_default(dup_ext,<<".txt">>))).
 
 % TODO: Convert to number
 -define(MAX_LOGIC_RECURS,(attr_tools:get_or_default(max_logic_recurs,20))).

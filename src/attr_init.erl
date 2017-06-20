@@ -37,7 +37,7 @@
 -include_lib("newdebug/include/debug.hrl").
 
 init({MirrorDirs,DB}) ->
-  ?DEB1(1,">init"),
+  ?DEB1({init,1},">init"),
 %  check_dirs(MirrorDirs), TODO: This is smarter than checking for legit dirs when parsing them. Fix later.
   initiate_servers(DB),
   % getting inodes for base folders
@@ -82,10 +82,10 @@ init({MirrorDirs,DB}) ->
   % This mirrors all files and folders, recursively, from each of the the external folders MirrorDirN to the internal folder ?REAL_FOLDR/MirrorDirN, adding attribute folders with appropriate files when a match between external file and internal database entry is found.
   {RealChildren,AllChildren}=lists:mapfoldl(
     fun(MirrorDir,Children) ->
-      ?DEB2({init,1},"mirroring dir ~s",MirrorDir),
-      {ChildName,ChildIno,ChildType,ChildChildren}=make_inode_list({MirrorDir,filename:basename(MirrorDir)}),
+      ?DEB2({init,1},"mirroring dir ~p",MirrorDir),
+      {ChildName,ChildIno,ChildType,ChildChildren}=make_inode_list(MirrorDir,filename:basename(MirrorDir)),
       Child={ChildName,ChildIno,ChildType},
-      ?DEB2({init,1},"got ~s",ChildName),
+      ?DEB2({init,1},"got ~p",ChildName),
       {Child,ChildChildren++Children}
     end,
     [],
@@ -156,7 +156,7 @@ init({MirrorDirs,DB}) ->
 
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
-  ?DEBL({init,6},"opening attribute database file ~s as ~s", [DB, ?ATTR_DB]),
+  ?DEBL({init,6},"opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
   tree_srv:new(inodes), % contains inode entries
   tree_srv:new(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
@@ -169,29 +169,31 @@ initiate_servers(DB) ->
 
 
 % XXX: Do NOT call this on children with a parent without an inode entry ready!  
-type_and_children(Path,FileInfo) ->
+type_and_children(Path0,FileInfo) ->
+  Path=unicode:characters_to_binary(Path0),
         case FileInfo#file_info.type of
           directory ->
             ?DEB1({init,7},"directory"),
-            {ok,ChildNames}=file:list_dir(Path),
-            ?DEB2({init,7},"directory entries:~s",ChildNames),
-            {NameInodePairs,MultitudeOfChildren}=
+            {ok,ChildNames}=file:list_dir_all(Path),
+            ?DEB2({init,7},"directory entries:~p",ChildNames),
+            {NameInodePairs,AllRecursiveChildren}=
               lists:mapfoldl(
-                fun(ChildName,OtherChildren) -> 
+                fun(ChildName,ChildAcc) -> 
                   % I make the recursion here, so I easily will be able to both check for duplicates and return a correct file type to the child.
-                  {InternalChildName,Ino,Type,AllChildren}=make_inode_list({Path++"/"++ChildName,ChildName}),
+                  SubPath= << <<P/binary>> || P <- [Path,<<"/">>,unicode:characters_to_binary(ChildName)] >>,
+                  {InternalChildName,Ino,Type,ChildChildren}=make_inode_list(SubPath,ChildName),
                   Me={InternalChildName,Ino,Type},
                   case Type of
                     #external_file{} ->
-                      {Me,[Me|OtherChildren++AllChildren]};
+                      {Me,[Me|ChildAcc++ChildChildren]};
                     _ ->
-                      {Me,OtherChildren++AllChildren}
+                      {Me,ChildAcc++ChildChildren}
                   end
                 end, 
                 [],
                 ChildNames
               ),
-            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},MultitudeOfChildren};
+            {ok,NameInodePairs,#external_dir{external_file_info=FileInfo,path=Path},AllRecursiveChildren};
           regular ->
             ?DEB1({init,7},"regular"),
             {ok,[],#external_file{external_file_info=FileInfo,path=Path},[]};
@@ -201,10 +203,12 @@ type_and_children(Path,FileInfo) ->
 
 
 
--define(dupname(X),string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)).
+%-define(dupname(X),string:concat(string:concat(?DUP_PREFIX,Name0),?DUP_SUFFIX)).
+-define(dupname(X), << <<Y/binary>> || Y <- [
+        unicode:characters_to_binary(?DUP_PREFIX),
+        X,
+        unicode:characters_to_binary(?DUP_SUFFIX)] >>).
 
-%TODO: Extrahera paths ifrån koden, om möjligt. 
-%       Ny server en lösning?
 get_unique(Name0) ->
   case numberer:number(Name0,ino) of
     {error,{is_numbered,{Name0,Ino0}}} ->
@@ -218,7 +222,7 @@ get_unique(Name0) ->
                   ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
                   {Name,[{Name0,Path0}|PossiblePaths],Ino};
         %        #external_dir{path=Path0} ->
-        %          ?DEB2({init,9},"~s is a dir!",Name0),
+        %          ?DEB2({init,9},"~p is a dir!",Name0),
         %          {Name,PossiblePaths,Ino}=get_unique(?dupname(Name0)),
         %          ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
         %          {Name,[{Name0,Path0}|PossiblePaths],Ino};
@@ -235,11 +239,17 @@ get_unique(Name0) ->
       {Name0,[],Ino};
     Other ->
       ?DEB2({init,err},"Got ~p when expecting an ino or error.",Other),
-      throw("Got"++Other)
+      throw({"Got",Other})
   end.
 
-make_inode_list({Path,Name0}) ->
-  ?DEBL({init,6},"reading file info for ~s into ~s",[lists:flatten(Path),Name0]),
+make_inode_list(Path,Name) when is_list(Path) ->
+  make_inode_list(unicode:characters_to_binary(Path),Name);
+
+make_inode_list(Path,Name) when is_list(Name)->
+  make_inode_list(Path,unicode:characters_to_binary(Name));
+
+make_inode_list(Path,Name0) when is_binary(Path), is_binary(Name0)->
+  ?DEBL({init,6},"reading file info for ~ts into ~ts",[Path,Name0]),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
        
@@ -249,7 +259,7 @@ make_inode_list({Path,Name0}) ->
       ?DEB1({init,8},"got file info"),
       % Skall helst inte rekursera!
       {Name,OlderEntries,Ino} =get_unique(Name0),
-      ?DEB2(8,"got unique name ~p",Name),
+      ?DEB2({init,8},"got unique name ~p",Name),
       ?DEB1({init,8},"updating duplicate list"),
       tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates),
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
@@ -302,8 +312,15 @@ make_inode_list({Path,Name0}) ->
   end.
 
 
+merge_binary(A,B) when is_list(B) ->
+  merge_binary(A,unicode:characters_to_binary(B));
+
+merge_binary(A,B) ->
+  << <<X/binary>> || X <-[A,B] >>.
+
 make_duplicate_children() ->
   ?DEB1({init,3},"Generating duplicates dir"),
+  DupExt=?DUP_EXT, % One options lookup is enough.
   lists:foldl(
     fun({Name,List0},{Unis,Dups}) ->
       ?DEBL({init,8},"Making inode number for {duplicate,~p}",[Name]),
@@ -319,7 +336,7 @@ make_duplicate_children() ->
                 ,[]
                 ,List0)
         end,
-      Data=iolist_to_binary(IOList),
+      Data=unicode:characters_to_binary(IOList),
       Entry=#inode_entry{
         type=Type,
         contents=Data,
@@ -330,7 +347,7 @@ make_duplicate_children() ->
       ?DEB1({init,8},"entering dup entry into inode list"),
       tree_srv:enter(Ino,Entry,inodes),
       ?DEB1({init,8},"done"),
-      DupEntry={Name++?DUP_EXT,Ino,#duplicate_file{}},
+      DupEntry={merge_binary(Name,DupExt),Ino,#duplicate_file{}},
       case length(List0) of
         1 -> {[DupEntry|Unis],Dups};
         _ -> {Unis,[DupEntry|Dups]}

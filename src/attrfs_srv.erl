@@ -47,6 +47,7 @@
 %%%=========================================================================
 
 -module(attrfs_srv).
+-compile({parse_transform, cut}).
 
 %%%=========================================================================
 %%%                                 EXPORTS
@@ -108,8 +109,8 @@
 -export([dump_entries/1,
          dump_inodes/0,
          dump_finodes/0,
-         dump_inode_entries/0,
-         which_dirs/0]).
+         dump_inode_entries/0
+       ]).
 
 %%%=========================================================================
 %%% temporary exports for testing functionality.
@@ -144,7 +145,7 @@
 %%--------------------------------------------------------------------------
 handle_info(_Msg,State) ->
   ?REPORT(handle_info),
-  ?DEBL(1,">handle_info(~w)",[_Msg]),
+  ?DEBL({srv,1},">handle_info(~w)",[_Msg]),
   {noreply,State}.
 
 %%--------------------------------------------------------------------------
@@ -154,7 +155,7 @@ handle_info(_Msg,State) ->
 code_change(_,_,_) ->
   ?REPORT(code_change), 
   %XXX: Maybe do something more intelligent with this?
-  ?DEB1(1,">code_change: Doing nothing!"),
+  ?DEB1({srv,1},">code_change: Doing nothing!"),
   ok.
 
 %%---------------------
@@ -162,12 +163,13 @@ code_change(_,_,_) ->
 vget(Attribute) ->
   case options:get(attrfs,Attribute) of
     {ok,Value} -> 
-      ?DEBL(2,"~p: ~p",[Attribute,Value]),
+      ?DEBL({srv,2},"~p: ~p",[Attribute,Value]),
       Value;
     undefined -> 
-      ?DEB2(1,"~p not defined! check your config file!",Attribute),
+      ?DEB2({srv,1},"~p not defined! check your config file!",Attribute),
     exit("not found")
   end.
+
 
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
@@ -176,11 +178,11 @@ vget(Attribute) ->
 start_link() ->
     
   ?REPORT(start_link),
-  ?DEB1(1,">start_link"),
+  ?DEB1({srv,1},">start_link"),
   MyConfig=options:get(attrfs,config_file,"~/.attrfsrc"),
-  ?DEB2(2,"Loading config file ~s...",MyConfig),
-  options:append_config(MyConfig),
-  ?DEB1(2,"getting config options..."),
+  ?DEB2({srv,2},"Loading config file ~p...",MyConfig),
+  options:append_config(MyConfig,unicode),
+  ?DEB1({srv,2},"getting config options..."),
 
   MirrorDirs=case options:mget(attrfs,from_dir) of
     {ok,{string,MD}} -> [MD]; % One from dir defined in config file
@@ -194,35 +196,35 @@ start_link() ->
                 {error,dir_not_specified}
         end
   end,
-  Dir=vget(to_dir),
-  DB=vget(attributes_db),
+  Dir=unicode:characters_to_binary(vget(to_dir)),
+  DB=unicode:characters_to_binary(vget(attributes_db)),
   LinkedIn=vget(linked_in),
   MountOpts=vget(mount_opts),
 
-  ?DEB1(2,"checkning if dirs are ok..."),
-  ?DEB2(2,"~p...",Dir),
+  ?DEB1({srv,2},"checkning if dirs are ok..."),
+  ?DEB2({srv,2},"~p...",Dir),
   case filelib:ensure_dir(Dir) of
     ok -> 
-      ?DEB1(2,"path ok."),
+      ?DEB1({srv,2},"path ok."),
       case filelib:is_dir(Dir) of
         true ->
-          ?DEB2(2,"~p exists, and is a dir. Ok.",Dir);
+          ?DEB2({srv,2},"~p exists, and is a dir. Ok.",Dir);
         false->
           ?DEB2(err,"~p is not a directory, or already mounted! (Check your config, mount and fusermount)",Dir),
           ?DEB1(err,"TERMINATING"),
           throw({error,dir_to_is_not_a_dir,Dir})
       end;
     E ->
-      ?DEB2(1,"received ~p (Check your config)",E),
-      ?DEB1(1,"TERMINATING"),
+      ?DEB2({srv,1},"received ~p (Check your config)",E),
+      ?DEB1({srv,1},"TERMINATING"),
       exit(E)
   end,
-  ?DEB1(2,"checking mirror dirs..."),
+  ?DEB1({srv,2},"checking mirror dirs..."),
   lists:foreach(
     fun(MirrorDir) ->
       case filelib:is_dir(MirrorDir) of
         true ->
-          ?DEB2(2,"~p exists, and is a dir. Ok.",MirrorDir);
+          ?DEB2({srv,2},"~p exists, and is a dir. Ok.",MirrorDir);
         false->
           ?DEB2(err,"~p is not a directory!(Check your config)",MirrorDir),
           ?DEB1(err,"TERMINATING"),
@@ -231,8 +233,8 @@ start_link() ->
   end,
   MirrorDirs),
   Options=[],
-  ?DEB1(2,"starting fuserlsrv"),
-  fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,Dir,{MirrorDirs,DB},Options).
+  ?DEB1({srv,2},"starting fuserlsrv"),
+  fuserlsrv:start_link(?MODULE,LinkedIn,MountOpts,binary_to_list(Dir),{MirrorDirs,DB},Options).
 
 %%--------------------------------------------------------------------------
 %% The analog to Module:init/1 in gen_server.
@@ -252,10 +254,10 @@ init({MirrorDir,DB}) ->
 %%--------------------------------------------------------------------------
 terminate(_Reason,_State) ->
   ?REPORT(terminate),
-  ?DEB1(1,">terminate"),
-  ?DEB1(1,"\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n"),
-  ?DEB2(1,"|  _Reason: ~p",_Reason),
-  ?DEB2(1,"Closing database \"~p\"",?ATTR_DB),
+  ?DEB1({srv,1},">terminate"),
+  ?DEB1({srv,1},"\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n"),
+  ?DEB2({srv,1},"|  _Reason: ~p",_Reason),
+  ?DEB2({srv,1},"Closing database \"~p\"",?ATTR_DB),
   dets:close(?ATTR_DB).
 
 
@@ -271,10 +273,10 @@ terminate(_Reason,_State) ->
 %%--------------------------------------------------------------------------
 access(Ctx,Inode,Mask,Continuation,State) ->
   ?REPORT(access),
-  ?DEB1(1,">access"),
-  ?DEB2(2,"|  Ctx: ~w ",Ctx),
-  ?DEB2(2,"|  Inode: ~w ",Inode),
-  ?DEB2(2,"|  Mask: ~w ",Mask),
+  ?DEB1({srv,1},">access"),
+  ?DEB2({srv,2},"|  Ctx: ~w ",Ctx),
+  ?DEB2({srv,2},"|  Inode: ~w ",Inode),
+  ?DEB2({srv,2},"|  Mask: ~w ",Mask),
   attr_reply:watch(
       fun(Token) -> attr_async:access(Ctx,Inode,Mask,Token) end,
       Continuation,
@@ -293,20 +295,20 @@ access(Ctx,Inode,Mask,Continuation,State) ->
 %%--------------------------------------------------------------------------
 create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Continuation, State) ->
   ?REPORT(create),
-  ?DEB1(1,">create"), 
-  ?DEB2(2,"|  Ctx: ~w",Ctx),
-  ?DEB2(2,"|  ParentIno: ~w",ParentInode),
-  ?DEB2(2,"|  Name: ~s",BName),
-  ?DEBL(2,"|  Mode: ~.8X",[Mode,"O"]),
-  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  ?DEB1({srv,1},">create"), 
+  ?DEB2({srv,2},"|  Ctx: ~w",Ctx),
+  ?DEB2({srv,2},"|  ParentIno: ~w",ParentInode),
+  ?DEB2({srv,2},"|  Name: ~p",BName),
+  ?DEBL({srv,2},"|  Mode: ~.8X",[Mode,"O"]),
+  ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   Name=binary_to_list(BName),
   Reply=case numberer:is_numbered(Name,ino) of
     false -> 
-      ?DEB1(4,"No real file with that name, checking parent."),
+      ?DEB1({srv,4},"No real file with that name, checking parent."),
       {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
       case ParentEntry#inode_entry.type of
         attribute_dir ->
-          ?DEB1(4,"Parent is an attribute dir. Creating internal file."),
+          ?DEB1({srv,4},"Parent is an attribute dir. Creating internal file."),
           {ok,Inode}=numberer:number(Name,ino),
           NewEntry=#inode_entry{
             type=internal_file,
@@ -330,11 +332,11 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
       {value,Entry}=tree_srv:lookup(Inode,inodes),
       case Entry#inode_entry.type of
         #external_file{path=Path} ->
-          ?DEB1(4,"Filename linked to a real file."),
+          ?DEB1({srv,4},"Filename linked to a real file."),
           {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
           case ParentEntry#inode_entry.type of
             attribute_dir ->
-              ?DEB1(4,"Parent is an attribute dir. All is ok."),
+              ?DEB1({srv,4},"Parent is an attribute dir. All is ok."),
               % Adding a new attribute is the same as creating an attribute folder file entry.
               attr_ext:add_new_attribute(Path,Inode,Entry,ParentEntry#inode_entry.name),
               {#fuse_reply_open{fuse_file_info=FileInfo},_}=open(Ctx,Inode,Fuse_File_Info,_Continuation,[create,State]), 
@@ -343,11 +345,11 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
                 fuse_entry_param=?ENTRY2PARAM(Entry,Inode)
               };
             _ ->
-              ?DEB1(4,"Trying to create a file outside the attribute folder! Not permitted!"),
+              ?DEB1({srv,4},"Trying to create a file outside the attribute folder! Not permitted!"),
               #fuse_reply_err{err=enotsup}
             end;
         _ ->
-          ?DEB1(4,"The file with that name has the wrong type!"),
+          ?DEB1({srv,4},"The file with that name has the wrong type!"),
           #fuse_reply_err{err=enotsup}
       end
   end,
@@ -360,10 +362,10 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
 %%--------------------------------------------------------------------------
 flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
   ?REPORT(flush),
-  ?DEB1(1,">flush"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  Inode: ~w ",_Inode),
-  ?DEB2(2,"|  FI: ~w",_Fuse_File_Info),
+  ?DEB1({srv,1},">flush"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  Inode: ~w ",_Inode),
+  ?DEB2({srv,2},"|  FI: ~w",_Fuse_File_Info),
   {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -372,7 +374,7 @@ flush(_Ctx,_Inode,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
   ?REPORT(forget),
-  ?DEBL(1,">forget inode: ~w",[Inode]),
+  ?DEBL({srv,1},">forget inode: ~w",[Inode]),
   attr_open:forget(Inode),
   {#fuse_reply_none{},State}.
 
@@ -382,7 +384,7 @@ forget(_Ctx,Inode,_Nlookup,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
   ?REPORT(fsync),
-  ?DEBL(1,"~s",["fsync!"]),
+  ?DEBL({srv,1},"~p",["fsync!"]),
   {#fuse_reply_err{err=ok},State}.
 
 %%--------------------------------------------------------------------------
@@ -391,7 +393,7 @@ fsync(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
   ?REPORT(fsyncdir),
-  ?DEBL(1,"~s",["fsyncdir!"]),
+  ?DEBL({srv,1},"~p",["fsyncdir!"]),
   {#fuse_reply_err{err=enotsup},State}.
     
 %%--------------------------------------------------------------------------
@@ -400,7 +402,7 @@ fsyncdir(_Ctx,_Inode,_IsDataSync,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
   ?REPORT(getattr),
-  ?DEBL(1,">getattr inode:~w",[Inode]),
+  ?DEBL({srv,1},">getattr inode:~w",[Inode]),
   % I must do this by spawning, lest fuserl hangs erl and fuse!!!
   attr_reply:watch(
       fun(Token) -> attr_async:getattr(Inode,Token) end,
@@ -416,7 +418,7 @@ getattr(#fuse_ctx{uid=_Uid,gid=_Gid,pid=_Pid},Inode,Continuation,State) ->
 %%--------------------------------------------------------------------------
 getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
   ?REPORT(getlk),
-  ?DEBL(1,"~s",["getlk!\n"]),
+  ?DEBL({srv,1},"~p",["getlk!\n"]),
   {#fuse_reply_err{err=enotsup},State}.
 
 
@@ -426,7 +428,7 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
   ?REPORT(getxattr),
   RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
-  ?DEBL(1,">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
+  ?DEBL({srv,1},">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
   attr_reply:watch(fun(Token) -> attr_async:getxattr(Inode,RawName,Size,Token) end,
     Continuation,
     #fuse_reply_err{err=enodata}),
@@ -440,7 +442,7 @@ getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
 %%--------------------------------------------------------------------------
 link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
   ?REPORT(link),
-  ?DEBL(1,"~s",["link!"]),
+  ?DEBL({srv,1},"~p",["link!"]),
   {#fuse_reply_err{err=enotsup},State}.
     
 %%--------------------------------------------------------------------------
@@ -449,22 +451,22 @@ link(_Ctx,_Inode,_NewParent,_NewName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 listxattr(_Ctx,Inode,Size,_Continuation,State) ->
   ?REPORT(listxattr),
-  ?DEB2(1,">listxattr inode:~w",Inode),
+  ?DEB2({srv,1},">listxattr inode:~w",Inode),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
-  ?DEB1(4,"got inode entry."),
+  ?DEB1({srv,4},"got inode entry."),
   {ExtSize,ExtAttribs}=Entry#inode_entry.ext_io,
-  ?DEBL(4,"got attributes and size (~w,~w)",[ExtAttribs,ExtSize]),
+  ?DEBL({srv,4},"got attributes and size (~w,~w)",[ExtAttribs,ExtSize]),
   Reply=
     case Size == 0 of 
       true -> 
-        ?DEB1(4,"they want to know our size."),
+        ?DEB1({srv,4},"they want to know our size."),
         #fuse_reply_xattr{count=ExtSize};
       false -> 
         case Size < ExtSize of
           true -> 
-            ?DEBL(4,"they are using a too small buffer; ~w < ~w ",[Size,ExtSize]),
+            ?DEBL({srv,4},"they are using a too small buffer; ~w < ~w ",[Size,ExtSize]),
             #fuse_reply_err{err=erange};
-          false -> ?DEB1(4,"all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
+          false -> ?DEB1({srv,4},"all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
         end
     end,
   {Reply,State}.
@@ -474,11 +476,10 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
-  ?REPORT(lookup),
-  Child=binary_to_list(BinaryChild),
-  ?DEBL(1,">lookup Parent: ~p Name: ~s",[ParentInode,BinaryChild]),
+  ?REPORT(attr_lookup),
+  ?DEBL({srv,1},">lookup Parent: ~p Name: ~p",[ParentInode,BinaryChild]),
     attr_reply:watch(
-      fun(Token) -> attr_async:lookup(ParentInode,Child,Token) end,
+      fun(Token) -> attr_async:lookup(ParentInode,BinaryChild,Token) end,
       Continuation,
       #fuse_reply_err{err=enoent}),
   {noreply,State}.
@@ -501,11 +502,11 @@ lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
   ?REPORT(mkdir),
   Name=binary_to_list(BName),
-  ?DEB1(1,">mkdir"),
-  ?DEB2(2,"|  Ctx:~w",Ctx),
-  ?DEB2(2,"|  PIno: ~w",ParentInode),
-  ?DEB2(2,"|  Name: ~p",Name),
-  ?DEB2(2,"|  Mode: ~.8B",MMode),
+  ?DEB1({srv,1},">mkdir"),
+  ?DEB2({srv,2},"|  Ctx:~w",Ctx),
+  ?DEB2({srv,2},"|  PIno: ~w",ParentInode),
+  ?DEB2({srv,2},"|  Name: ~p",Name),
+  ?DEB2({srv,2},"|  Mode: ~.8B",MMode),
   Mode=?M_DIR(MMode bor 8#111), % To the mode provided with, I add the dir status and make the dir executable.
   Reply=
     case tree_srv:lookup(ParentInode,inodes) of
@@ -514,7 +515,7 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
         ParentName=Parent#inode_entry.name,
         ParentType=Parent#inode_entry.type,
         Rreply=attr_mkdir:make_dir(Ctx,ParentInode,ParentName,ParentType,Name,Mode),
-        ?DEB2(4,"got reply ~p",Rreply),
+        ?DEB2({srv,4},"got reply ~p",Rreply),
         Rreply
     end,
   {Reply,State}.
@@ -528,12 +529,12 @@ mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
 
 mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
   ?REPORT(mknod),
-  ?DEB1(1,">mknod"),
-  ?DEB2(2,"|  Ctx: ~w",_Ctx),
-  ?DEB2(2,"|  ParentIno: ~w",_ParentInode),
-  ?DEB2(2,"|  Name: ~w",_Name),
-  ?DEB2(2,"|  Mode: ~w",_Mode),
-  ?DEB2(2,"|  Dev: ~w",_Dev),
+  ?DEB1({srv,1},">mknod"),
+  ?DEB2({srv,2},"|  Ctx: ~w",_Ctx),
+  ?DEB2({srv,2},"|  ParentIno: ~w",_ParentInode),
+  ?DEB2({srv,2},"|  Name: ~w",_Name),
+  ?DEB2({srv,2},"|  Mode: ~w",_Mode),
+  ?DEB2({srv,2},"|  Dev: ~w",_Dev),
   {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -542,17 +543,17 @@ mknod(_Ctx,_ParentInode,_Name,_Mode,_Dev,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(open),
-  ?DEB1(1,">open"),
-  ?DEB2(2,"|  _Ctx: ~w",_Ctx),
-  ?DEB2(2,"|  Inode: ~w ",Inode),
-  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  ?DEB1({srv,1},">open"),
+  ?DEB2({srv,2},"|  _Ctx: ~w",_Ctx),
+  ?DEB2({srv,2},"|  Inode: ~w ",Inode),
+  ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   _Name=Entry#inode_entry.name,
-  ?DEBL(2,"Internal file name: ~p",[_Name]),
+  ?DEBL({srv,2},"Internal file name: ~p",[_Name]),
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
-        ?DEBL(4,"External file path: ~p",[Path]),
+        ?DEBL({srv,4},"External file path: ~p",[Path]),
             case file:open(Path,[read,binary]) of
 %            case file:open(Path,[read,raw]) of
                 {ok,IoDevice} ->
@@ -564,12 +565,12 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
             end;
 %        #fuse_reply_open{fuse_file_info=Fuse_File_Info};
       duplicate_file ->
-        ?DEB1(4,"duplicate file"),
+        ?DEB1({srv,4},"duplicate file"),
         MyFino=numberer:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
       internal_file ->
-        ?DEB1(4,"internal file"),
+        ?DEB1({srv,4},"internal file"),
         MyFino=numberer:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
@@ -586,17 +587,17 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
   ?REPORT(opendir),
-  ?DEB1(1,">opendir"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  Inode: ~w ",Inode),
-  ?DEB2(2,"|  FI: ~w", FI),
-  ?DEB2(2,"|  _flags: ~w",_Flags),
+  ?DEB1({srv,1},">opendir"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  Inode: ~w ",Inode),
+  ?DEB2({srv,2},"|  FI: ~w", FI),
+  ?DEB2({srv,2},"|  _flags: ~w",_Flags),
 %    ?DEB2("writepage ~w",_Writepage),
 %    ?DEB2("DirectIO ~w",_DirectIO),
 %    ?DEB2("KeepCache ~w",_KeepCache),
 %    ?DEB2("FileHandle ~w",_Fh),
-  ?DEB2(4,"Getting inode entries for ~w",Inode),
-  ?DEB1(4,"Creating directory entries from inode entries"),
+  ?DEB2({srv,4},"Getting inode entries for ~w",Inode),
+  ?DEB1({srv,4},"Creating directory entries from inode entries"),
   % TODO: What to do if I get several opendir calls (from the same context?) while the dir is updating?
   ?REPORT(opendir),
   MyFIno=numberer:get(fino),
@@ -611,28 +612,28 @@ opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_i
 %%--------------------------------------------------------------------------
 read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(read),
-  ?DEB1(1,">read"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  _Inode: ~w ",_Inode),
-  ?DEB2(2,"|  Size: ~w ",Size),
-  ?DEB2(2,"|  Offset: ~w",Offset),
-  ?DEB2(2,"|  FI: ~w", Fuse_File_Info),
+  ?DEB1({srv,1},">read"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
+  ?DEB2({srv,2},"|  Size: ~w ",Size),
+  ?DEB2({srv,2},"|  Offset: ~w",Offset),
+  ?DEB2({srv,2},"|  FI: ~w", Fuse_File_Info),
     #fuse_file_info{fh=FIno}=Fuse_File_Info,
-    ?DEB2(4,"looking up fino ~w",FIno),
+    ?DEB2({srv,4},"looking up fino ~w",FIno),
     {value,File}=attr_open:lookup(FIno),
-    ?DEB1(4,"extracting io_device"),
+    ?DEB1({srv,4},"extracting io_device"),
     Reply=case File of
       #open_external_file{io_device=IoDevice} -> 
-        ?DEB1(4,"got file and iodevice, reading..."),
+        ?DEB1({srv,4},"got file and iodevice, reading..."),
         case file:pread(IoDevice,Offset,Size) of
           {ok, Data} ->
-            ?DEB1(4,"data read, returning"),
+            ?DEB1({srv,4},"data read, returning"),
             #fuse_reply_buf{buf=Data,size=erlang:size(Data)};
           eof ->
-            ?DEB1(4,"eof reached, returning nodata"),
+            ?DEB1({srv,4},"eof reached, returning nodata"),
             #fuse_reply_err{err=enodata};
           _E ->
-            ?DEB2(4,"other error, returning ~w",_E),
+            ?DEB2({srv,4},"other error, returning ~w",_E),
             #fuse_reply_err{err=eio}
         end;
       #open_duplicate_file{contents=Contents} ->
@@ -676,17 +677,17 @@ take(Contents,Offset,Size) when is_list(Contents) ->
 %%--------------------------------------------------------------------------
 readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(readdir),
-  ?DEB1(1,">readdir"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  _Inode: ~w ",_Inode),
-  ?DEB2(2,"|  Size: ~w ",Size),
-  ?DEB2(2,"|  Offset:~w",Offset),
-  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  ?DEB1({srv,1},">readdir"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
+  ?DEB2({srv,2},"|  Size: ~w ",Size),
+  ?DEB2({srv,2},"|  Offset:~w",Offset),
+  ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   Reply=
     case attr_open:lookup(FIno) of 
       {value, OpenDir} ->
-        ?DEBL(4,"~p =< ~p",[Offset,length(OpenDir)]),
+        ?DEBL({srv,4},"~p =< ~p",[Offset,length(OpenDir)]),
         DirEntryList = 
           case Offset=<length(OpenDir) of
             true ->
@@ -706,7 +707,7 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
             false ->
                 []
           end,
-        ?DEB2(9,"returning ~p",DirEntryList),
+        ?DEB2({srv,9},"returning ~p",DirEntryList),
         #fuse_reply_direntrylist{ direntrylist = DirEntryList };
     none ->
         #fuse_reply_err{err=enoent} % XXX: What should this REALLY return when the file is not open for this user?
@@ -719,7 +720,7 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 readlink(_Ctx,_Inode,_Continuation,State) ->
   ?REPORT(readlink),
-  ?DEBL(1,"~s",["readlink!"]),
+  ?DEBL({srv,1},"~p",["readlink!"]),
   {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -729,10 +730,10 @@ readlink(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 release(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(release),
-  ?DEB1(1,">release"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  _Inode: ~w ",_Inode),
-  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  ?DEB1({srv,1},">release"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
+  ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   attr_open:remove(FIno),
   {#fuse_reply_err{err=ok},State}.
@@ -744,10 +745,10 @@ release(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 releasedir(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(releasedir),
-  ?DEB1(1,">releasedir"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  _Inode: ~w ",_Inode),
-  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  ?DEB1({srv,1},">releasedir"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
+  ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   attr_open:remove(FIno),
   {#fuse_reply_err{err=ok},State}.
@@ -758,24 +759,24 @@ releasedir(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   ?REPORT(removexattr),
-  ?DEB1(1,">removexattr"),
-  ?DEB2(2,"|  BName: ~w",BName),
+  ?DEB1({srv,1},">removexattr"),
+  ?DEB2({srv,2},"|  BName: ~w",BName),
   Name=attr_tools:remove_from_start(binary_to_list(BName),"user."),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  Inode: ~w ",Inode),
-  ?DEB2(2,"|  Name: ~w",Name),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  Inode: ~w ",Inode),
+  ?DEB2({srv,2},"|  Name: ~w",Name),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
   Syek=string:tokens(Name,?KEY_SEP),
-  ?DEB2(4,"tokenized key: ~w",[Syek]),
+  ?DEB2({srv,4},"tokenized key: ~w",[Syek]),
   Keys=lists:reverse(Syek),
-  ?DEBL(4,"key to be deleted: ~w",[Keys]),
+  ?DEBL({srv,4},"key to be deleted: ~w",[Keys]),
       attr_remove:remove_key_values(Path,Inode,Keys),
-      ?DEB1(4,"Removed attribute, if any, from database and inode entry"),
+      ?DEB1({srv,4},"Removed attribute, if any, from database and inode entry"),
       {#fuse_reply_err{err=ok},State};
     _ ->
-      ?DEB1(4,"Non-supported inode type"),
+      ?DEB1({srv,4},"Non-supported inode type"),
       {#fuse_reply_err{err=enosup},State}
   end.
 
@@ -805,7 +806,7 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   ?REPORT(rename),
   Name=binary_to_list(BName),
   NewName=binary_to_list(BNewName),
-  ?DEBL(1,">rename; parent: ~w, name: ~s, new parent: ~w, new name: ~s",[ParentIno,Name,NewParentIno,NewName]),
+  ?DEBL({srv,1},">rename; parent: ~w, name: ~p, new parent: ~w, new name: ~p",[ParentIno,Name,NewParentIno,NewName]),
   Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
 
@@ -817,14 +818,14 @@ rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
   ?REPORT(rmdir),
-  ?DEB1(1,">rmdir"),
-  ?DEB2(2,"|  Ctx:~w",_Ctx),
-  ?DEB2(2,"|  PIno: ~p ",ParentInode),
-  ?DEB2(2,"|  BName: ~p",BName),
+  ?DEB1({srv,1},">rmdir"),
+  ?DEB2({srv,2},"|  Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  PIno: ~p ",ParentInode),
+  ?DEB2({srv,2},"|  BName: ~p",BName),
   {value,PEntry}=tree_srv:lookup(ParentInode,inodes),
   PType=PEntry#inode_entry.type,
   PName=PEntry#inode_entry.name,
-  ?DEBL(2,"parent type ~w",[PType]),
+  ?DEBL({srv,2},"parent type ~w",[PType]),
   % So I don't have to lookup two entries, I match the parent type instead of the child type.
   Reply=
     case PType of
@@ -853,67 +854,67 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
   ?REPORT(setattr),
-  ?DEB1(1,">setattr"),
-  ?DEB2(2,"|  Inode: ~w ",Inode),
-  ?DEB2(2,"|  To set: ~.8b ",ToSet),
-  ?DEB2(2,"|  Attr: ~w ",Attr),
-  ?DEB2(2,"|  _FI: ~w",_Fuse_File_Info),
+  ?DEB1({srv,1},">setattr"),
+  ?DEB2({srv,2},"|  Inode: ~w ",Inode),
+  ?DEB2({srv,2},"|  To set: ~.8b ",ToSet),
+  ?DEB2({srv,2},"|  Attr: ~w ",Attr),
+  ?DEB2({srv,2},"|  _FI: ~w",_Fuse_File_Info),
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   Stat=Entry#inode_entry.stat,
   NewStat=Stat#stat{
     st_uid=
       case (?FUSE_SET_ATTR_UID band ToSet) == 0 of
         false ->
-          ?DEB1(4,"setting UID"),
+          ?DEB1({srv,4},"setting UID"),
           Attr#stat.st_uid;
         true ->
-          ?DEB1(4,"not setting UID"),
+          ?DEB1({srv,4},"not setting UID"),
           Stat#stat.st_uid
       end
     ,st_gid=
       case (?FUSE_SET_ATTR_GID band ToSet) == 0 of
         false ->
-          ?DEB1(4,"setting GID"),
+          ?DEB1({srv,4},"setting GID"),
           Attr#stat.st_gid;
         true ->
-          ?DEB1(4,"not setting GID"),
+          ?DEB1({srv,4},"not setting GID"),
           Stat#stat.st_gid
       end
     ,st_atime=
       case (?FUSE_SET_ATTR_ATIME band ToSet) == 0 of
         false ->
-          ?DEB1(4,"setting atime"),
+          ?DEB1({srv,4},"setting atime"),
           Attr#stat.st_atime;
         true ->
-          ?DEB1(4,"not setting atime"),
+          ?DEB1({srv,4},"not setting atime"),
           Stat#stat.st_atime
       end
     ,st_mtime=
       case (?FUSE_SET_ATTR_MTIME band ToSet) == 0 of
         false ->
-          ?DEB1(4,"setting mtime"),
+          ?DEB1({srv,4},"setting mtime"),
           Attr#stat.st_mtime;
         true ->
-          ?DEB1(4,"not setting mtime"),
+          ?DEB1({srv,4},"not setting mtime"),
           Stat#stat.st_mtime
       end
     ,st_mode=
       case (?FUSE_SET_ATTR_MODE band ToSet) == 0 of
         false ->
-          ?DEB1(4,"setting mode"),
+          ?DEB1({srv,4},"setting mode"),
           Attr#stat.st_mode;
         true ->
-          ?DEB1(4,"not setting mode"),
+          ?DEB1({srv,4},"not setting mode"),
           Stat#stat.st_mode
       end
     ,st_size=
       case (?FUSE_SET_ATTR_SIZE band ToSet) == 0 of
         false ->
-          ?DEB1(4,"ignoring setting size"),
+          ?DEB1({srv,4},"ignoring setting size"),
         %  Attr#stat.st_size;
           Stat#stat.st_size;
         true ->
-          ?DEB1(4,"not setting size"),
+          ?DEB1({srv,4},"not setting size"),
           Stat#stat.st_size
       end
   },
@@ -929,7 +930,7 @@ setattr(_Ctx,Inode,Attr,ToSet,_Fuse_File_Info,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
   ?REPORT(setlk),
-  ?DEBL(1,"~s",["setlk!"]),
+  ?DEBL({srv,1},"~p",["setlk!"]),
   {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -939,17 +940,17 @@ setlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Sleep,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   ?REPORT(setxattr),
-  ?DEB1(1,">setxattr"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  Inode: ~w ",Inode),
+  ?DEB1({srv,1},">setxattr"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  Inode: ~w ",Inode),
   RawKey=binary_to_list(BKey),
   RawValue=binary_to_list(BValue),
-  ?DEB2(2,"|  Key: ~p ",RawKey),
-  ?DEB2(2,"|  Value: ~p ",RawValue),
-  ?DEB2(2,"|  _Flags: ~w ",_Flags),
-  ?DEB1(4,"getting inode entry"),
+  ?DEB2({srv,2},"|  Key: ~p ",RawKey),
+  ?DEB2({srv,2},"|  Value: ~p ",RawValue),
+  ?DEB2({srv,2},"|  _Flags: ~w ",_Flags),
+  ?DEB1({srv,4},"getting inode entry"),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
-  ?DEB1(4,"transforming input data"),
+  ?DEB1({srv,4},"transforming input data"),
   Key=
     case string:str(RawKey,"system")==1 of
       true -> "."++RawKey;
@@ -957,30 +958,30 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
     end,
 
   Values=string:tokens(RawValue,?VAL_SEP),
-  ?DEB2(4,"got values: ~w",Values),
+  ?DEB2({srv,4},"got values: ~w",Values),
 
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
-        ?DEB1(4,"entry is an external file"),
+        ?DEB1({srv,4},"entry is an external file"),
         Syek=string:tokens(Key,?KEY_SEP),
-        ?DEB2(4,"tokenized key: ~w",[Syek]),
+        ?DEB2({srv,4},"tokenized key: ~w",[Syek]),
         Keys=lists:reverse(Syek),
-        ?DEBL(4,"key to be inserted: ~w",[Keys]),
+        ?DEBL({srv,4},"key to be inserted: ~w",[Keys]),
         case Values of
           [] -> attr_ext:add_new_attribute(Path,Inode,Entry,Keys);
           _Values ->
             lists:foreach(
               fun(Value) -> 
                 Attr=[Value|Keys],
-                ?DEBL(4,"adding attribute {~p} for file ~p to database",[Attr,Path]),
+                ?DEBL({srv,4},"adding attribute {~p} for file ~p to database",[Attr,Path]),
                 attr_ext:add_new_attribute(Path,Inode,Entry,Attr)
               end,
               Values)
         end,
         #fuse_reply_err{err=ok};
       _ ->
-        ?DEB1(4,"entry not an external file, skipping..."),
+        ?DEB1({srv,4},"entry not an external file, skipping..."),
         #fuse_reply_err{err=enotsup}
     end,
   {Reply,State}.
@@ -992,9 +993,9 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 statfs(_Ctx,_Inode,_Continuation,State) ->
   ?REPORT(statfs),
-  ?DEB1(1,">statfs"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  _Inode: ~w ",_Inode),
+  ?DEB1({srv,1},">statfs"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
   {#fuse_reply_statfs{
     statvfs=
       #statvfs{
@@ -1022,7 +1023,7 @@ statfs(_Ctx,_Inode,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
   ?REPORT(symlink),
-  ?DEB1(1,">symlink"),
+  ?DEB1({srv,1},">symlink"),
   {#fuse_reply_err{err=enotsup},State}.
 
 %%--------------------------------------------------------------------------
@@ -1034,14 +1035,14 @@ symlink(_Ctx,_Link,_Inode,_Name,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 unlink(_Ctx,ParentInode,BName,_Cont,State) ->
   ?REPORT(unlink),
-  ?DEB1(1,">unlink"),
-  ?DEB2(2,"|  _Ctx:~w",_Ctx),
-  ?DEB2(2,"|  PIno: ~w ",ParentInode),
-  ?DEB2(2,"|  BName: ~p",BName),
+  ?DEB1({srv,1},">unlink"),
+  ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
+  ?DEB2({srv,2},"|  PIno: ~w ",ParentInode),
+  ?DEB2({srv,2},"|  BName: ~p",BName),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
   ParentType=ParentEntry#inode_entry.type,
   ParentName=ParentEntry#inode_entry.name,
-  ?DEBL(4,"parent type ~s",[io_lib:write(ParentType)]),
+  ?DEBL({srv,4},"parent type ~p",[io_lib:write(ParentType)]),
     Reply=
       case ParentType of
         attribute_dir ->
@@ -1049,25 +1050,25 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
           ParentChildren=ParentEntry#inode_entry.contents,
           case lists:keyfind(Name,1,ParentChildren) of
             false -> 
-              ?DEBL(4,"~p not found in ~p",[Name,ParentChildren]),
+              ?DEBL({srv,4},"~p not found in ~p",[Name,ParentChildren]),
               #fuse_reply_err{err=enoent};
             {Name,Inode,Type} ->
-              ?DEB1(4,"found"),
+              ?DEB1({srv,4},"found"),
               %% Removing a file from an attribute folder is 
               %% ONLY ALMOST the same as removing the corresponding 
               %% attribute from the file; Removing a value subfolder
               %% is NOT the same as removing a whole attribute.
               %% Thus, I'm NOT calling removexattr here.
-              ?DEBL(4,"child type ~s",[io_lib:write(Type)]),
+              ?DEBL({srv,4},"child type ~p",[io_lib:write(Type)]),
               PName=ParentEntry#inode_entry.name,
               case Type of 
                 #external_file{path=Path} ->
-                  ?DEBL(4,"Removing ~s from ~s", [ParentEntry#inode_entry.name,Name]),
+                  ?DEBL({srv,4},"Removing ~p from ~p", [ParentEntry#inode_entry.name,Name]),
                   attr_remove:remove_attribute(Path,Inode,ParentName),
                   #fuse_reply_err{err=ok};
 
                 internal_file ->
-                  ?DEBL(4,"Removing external file ~s from ~s",[ParentEntry#inode_entry.name,Name]),
+                  ?DEBL({srv,4},"Removing external file ~p from ~p",[ParentEntry#inode_entry.name,Name]),
                   attr_remove:remove_child_from_parent(Name,PName),
                   tree_srv:delete_any(Inode,inodes),
                   numberer:release(Inode,ino),
@@ -1092,11 +1093,11 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
 %%--------------------------------------------------------------------------
 write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(write),
-  ?DEB1(1,">write"),
-  ?DEB2(2,"|  Inode: ~b",Inode),
-  ?DEB2(2,"|  Offset: ~b",Offset),
-  ?DEB2(2,"|  Data: ~p",Data),
-  ?DEB2(2,"|  FI: ~w",Fuse_File_Info),
+  ?DEB1({srv,1},">write"),
+  ?DEB2({srv,2},"|  Inode: ~b",Inode),
+  ?DEB2({srv,2},"|  Offset: ~b",Offset),
+  ?DEB2({srv,2},"|  Data: ~p",Data),
+  ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   case tree_srv:lookup(Inode,inodes) of
     {value,Entry} ->
       case Entry#inode_entry.type of
@@ -1112,7 +1113,7 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
           DLen=size(Data),
           try
             NewContents=write_contents(Offset,Contents,Data,Len,DLen),
-            ?DEB1(1,"Got new contents"),
+            ?DEB1({srv,1},"Got new contents"),
             NewStat=?ST_SIZE(Stat,size(NewContents)),
             NewEntry=Entry#inode_entry{contents=NewContents,stat=NewStat},
             tree_srv:enter(Inode,NewEntry,inodes),
@@ -1129,29 +1130,29 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
 
 % No offset, data to be written completely overwrites contents of file. 
 write_contents(0,_Contents,Data,CLen,DLen) when DLen >= CLen ->
-  ?DEB1(1,"1"),
+  ?DEB1({srv,1},"1"),
   Data;
 
 % No offset, partial overwrite.
 write_contents(0,Contents,Data,_CLen,DLen) ->
   ?REPORT(write_contents),
-  ?DEB1(1,"2"),
+  ?DEB1({srv,1},"2"),
   <<_:DLen/binary,Rest/binary>>=Contents,
   <<Data/binary,Rest/binary>>;
 
 % Offset after EOF, throw eof
 write_contents(Offset,_Contents,_Data,CLen,_DLen) when Offset > CLen ->
-  ?DEB1(1,"3"),
+  ?DEB1({srv,1},"3"),
   throw(eof);
 
 % Offset at end of file, append data
 write_contents(Offset,Contents,Data,CLen,_DLen) when Offset == CLen ->
-  ?DEB1(1,"4"),
+  ?DEB1({srv,1},"4"),
   <<Contents/binary,Data/binary>>;
 
 % Offset inside the file, insert and overwrite
 write_contents(Offset,Contents,Data,CLen,DLen) when Offset < CLen ->
-  ?DEB1(1,"5"),
+  ?DEB1({srv,1},"5"),
   if
     Offset+DLen >= CLen -> 
       <<Before:Offset/binary,_>>=Contents,
@@ -1191,5 +1192,3 @@ dump_finodes() ->
   ?REPORT(dump_finodes),
   numberer:list_bound(fino).
 
-which_dirs() ->
-  lists:map(fun(A)->attr_tools:get_or_default(A,"")end,[from_dir,from_dirs,to_dir]).

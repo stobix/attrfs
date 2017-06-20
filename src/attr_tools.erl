@@ -146,10 +146,10 @@ bremove_from_start(Bin1,Bin2) ->
 transmogrify(Boolean,NewTrue,NewFalse) ->
   if 
     Boolean -> 
-      ?DEBL(5,"transmogrifying ~p into ~p",[Boolean,NewTrue]),
+      ?DEBL({tools,5},"transmogrifying ~p into ~p",[Boolean,NewTrue]),
       NewTrue;
     true -> 
-      ?DEBL(5,"transmogrifying ~p into ~p",[Boolean,NewFalse]),
+      ?DEBL({tools,5},"transmogrifying ~p into ~p",[Boolean,NewFalse]),
       NewFalse
   end.
 
@@ -161,19 +161,19 @@ transmogrify_test_() ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 test_access(Inode,Mask,Ctx) ->
-  ?DEB1(5,"checking access..."),
+  ?DEB1({tools,5},"checking access..."),
   case tree_srv:lookup(Inode,inodes) of
     {value, Entry} ->
       % Can I use the mask like this?
       case Mask of
         ?F_OK ->
-          ?DEB1(7,"file existing"),
+          ?DEB1({tools,7},"file existing"),
           ok;
         _ -> 
           transmogrify(has_rwx_access(Entry,Mask,Ctx),ok,eacces)
       end;
     none ->
-      ?DEB1(7,"file does not exist!"),
+      ?DEB1({tools,7},"file does not exist!"),
       enoent
   end.
 
@@ -324,7 +324,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
 %%--------------------------------------------------------------------------
 dir(Stat) ->
   NewMode= ?STD_DIR_MODE,
-  ?DEBL(5,"transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
+  ?DEBL({tools,5},"transforming mode ~.8B into mode ~.8B",[Stat#stat.st_mode,NewMode]),
   Stat#stat{st_mode=NewMode}.
 
 
@@ -355,7 +355,7 @@ datetime_to_epoch_test_() ->
 %% statify_file_info transforms a file.#file_info{} into a fuserl.#stat{}
 %%--------------------------------------------------------------------------
 statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=Mtime,access=_Access,mode=Mode,links=Links,major_device=MajorDevice,minor_device=MinorDevice,inode=Inode,uid=UID,gid=GID}) ->
-  ?DEBL(7,"converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
+  ?DEBL({tools,7},"converting file info for ~p (, which is of size ~p) to fuse stat info",[Inode,Size]),
   #stat{
     st_dev= {MajorDevice,MinorDevice},
     st_ino=Inode,
@@ -376,27 +376,27 @@ statify_file_info(#file_info{size=Size,type=_Type,atime=Atime,ctime=Ctime,mtime=
 %%--------------------------------------------------------------------------
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentEntry=#inode_entry{}) ->
   PName=ParentEntry#inode_entry.name,
-  ?DEBL(7,"»append_child: Child: ~p Parent: ~p",[element(1,NewChild),ParentEntry#inode_entry.name]),
+  ?DEBL({tools,7},"»append_child: Child: ~p Parent: ~p",[element(1,NewChild),ParentEntry#inode_entry.name]),
   Children=ParentEntry#inode_entry.contents,
-  ?DEB2(9,"children: ~p",Children),
+  ?DEB2({tools,9},"children: ~p",Children),
   NewChildren=attr_tools:keymergeunique(NewChild,Children),
-  ?DEB2(9,"merged children: ~p",NewChildren),
+  ?DEB2({tools,9},"merged children: ~p",NewChildren),
   NewParentEntry=ParentEntry#inode_entry{contents=NewChildren},
-  ?DEB1(9,"created new parent entry"),
+  ?DEB1({tools,9},"created new parent entry"),
   {ok,ParentIno}=numberer:n2i(PName,ino),
-  ?DEB2(9,"parent inode: ~p",ParentIno),
+  ?DEB2({tools,9},"parent inode: ~p",ParentIno),
   tree_srv:enter(ParentIno,NewParentEntry,inodes),
-  ?DEB1(9,"new parent inserted"),
+  ?DEB1({tools,9},"new parent inserted"),
   ok;
 
 append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
-  ?DEBL(7,"»append_child: ~p (~p)",[NewChild,ParentIno]),
+  ?DEBL({tools,7},"»append_child: ~p (~p)",[NewChild,ParentIno]),
   case tree_srv:lookup(ParentIno,inodes) of
     {value,ParentEntry} -> 
-        ?DEB1(9,"got parent entry"),
+        ?DEB1({tools,9},"got parent entry"),
         append_child(NewChild,ParentEntry);
     none ->
-        ?DEB1(9,"DID NOT get parent entry"),
+        ?DEB1({tools,9},"DID NOT get parent entry"),
         throw({error,{parent_unbound,ParentIno}})
   end.
 
@@ -405,11 +405,4 @@ append_child(NewChild={_ChildName,_ChildIno,_ChildType},ParentIno) ->
 %% Returns the value associated with Attribute, if found, and Default if not.
 %%--------------------------------------------------------------------------
 get_or_default(Attribute,Default) ->
-  case options:get(attrfs,Attribute) of
-    {ok,Value} ->
-      ?DEBL(9,"~p: ~p",[Attribute,Value]),
-      Value;
-    undefined ->
-      ?DEBL(9,"~p not defined. Defaulting to ~p", [Attribute,Default]),
-      Default
-  end.
+  options:get(attrfs,Attribute,Default).
