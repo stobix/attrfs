@@ -208,12 +208,12 @@ type_and_children(Path,FileInfo) ->
 get_unique(Name0) ->
   case numberer:number(Name0,ino) of
     {error,{is_numbered,{Name0,Ino0}}} ->
-      ?DEB2({init,7},"~s is a duplicate!",Name0),
+      ?DEB2({init,7},"~ts is a duplicate!",Name0),
       case tree_srv:lookup(Ino0,inodes) of
           {value,Entry0} ->
               case Entry0#inode_entry.type of
                 #external_file{path=Path0} ->
-                  ?DEB2({init,9},"~s is a file!",Name0),
+                  ?DEB2({init,9},"~ts is a file!",Name0),
                   {Name,PossiblePaths,Ino}=get_unique(?dupname(Name0)),
                   ?DEBL({init,9},"adding ~p to ~p",[{Name0,Path0},PossiblePaths]),
                   {Name,[{Name0,Path0}|PossiblePaths],Ino};
@@ -314,7 +314,7 @@ make_duplicate_children() ->
           1 -> element(2,lists:nth(1,List0)); % skip the local name if we only have one entry to show
           _ -> lists:foldl(
                 fun({DupName,Path},Acc) ->
-                  [io_lib:format("~s :\n~s\n",[DupName,Path])|Acc]
+                  [io_lib:format("~ts :\n~ts\n",[DupName,Path])|Acc]
                 end
                 ,[]
                 ,List0)

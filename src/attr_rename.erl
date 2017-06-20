@@ -29,6 +29,7 @@
 %%% @version 1.0
 
 -module(attr_rename).
+-compile({parse_transform, cut}).
 
 -include("../include/attrfs.hrl").
 -include_lib("newdebug/include/debug.hrl").
@@ -89,6 +90,7 @@ rename_internal(_,_,_,_,_,_,_,_,_) ->
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 
+% Prefixes: File, Parent, NewParent
 move_internal_file(FIno,FEntry,PIno,NewName,PIno,NPEntry) ->
   Name=FEntry#inode_entry.name,
   {value,{Name,FIno,Type},Children}=lists:keytake(Name,1,NPEntry#inode_entry.contents),
@@ -97,9 +99,10 @@ move_internal_file(FIno,FEntry,PIno,NewName,PIno,NPEntry) ->
   tree_srv:enter(FIno,NewFEntry,inodes),
   tree_srv:enter(PIno,NewNPEntry,inodes);
 
+% Prefixes: File, Parent, NewParent
 move_internal_file(FIno,FEntry,PIno,NewName,NPIno,NPEntry) ->
   Name=FEntry#inode_entry.name,
-  PEntry=tree_srv:get(PIno,inodes),
+  {value,PEntry}=tree_srv:lookup(PIno,inodes),
   PName=PEntry#inode_entry.name,
   Children=NPEntry#inode_entry.contents,
   NewNPEntry=NPEntry#inode_entry{contents=[{NewName,FIno,FEntry#inode_entry.type}|Children]},
