@@ -65,11 +65,9 @@ getattr(Inode,Token) ->
 
 
 getxattr(Inode,RawName,Size,Token) ->
-  Name=
-    case string:str(RawName,"system")==1 of
-      true -> "."++RawName;
-      false -> RawName
-    end,
+  ?DEBL(3,">getxattr ~p ~p ~p ~p",[Inode,RawName,Size,Token]),
+  Name=RawName,
+  % FIXME do something about the "system" getxattr calls?
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   ?DEB1(4,"Got inode entry"),
   ExtInfo=Entry#inode_entry.ext_info,
@@ -78,14 +76,14 @@ getxattr(Inode,RawName,Size,Token) ->
     {Name,ExtInfoValue} ->
       ?DEB1(4,"Got attribute value"),
       ExtAttrib=ExtInfoValue, %Seems I shouldn't 0-terminate the strings here.
-      ExtSize=length(ExtAttrib),
+      ExtSize=size(ExtAttrib),
       ?DEBL(4,"Converted attribute and got (~w,~w)",[ExtAttrib,ExtSize]),
       case Size == 0 of 
         true -> ?DEB1(4,"They want to know our size."),#fuse_reply_xattr{count=ExtSize};
         false -> 
           case Size < ExtSize of
             true -> ?DEBL(4,"They are using too small a buffer; ~w < ~w ",[Size,ExtSize]),#fuse_reply_err{err=erange};
-            false -> ?DEB1(4,"All is well, replying with attrib value."),#fuse_reply_buf{buf=list_to_binary(ExtAttrib), size=ExtSize}
+            false -> ?DEB1(4,"All is well, replying with attrib value."),#fuse_reply_buf{buf=ExtAttrib, size=ExtSize}
           end
       end;
     false ->

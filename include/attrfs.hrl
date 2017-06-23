@@ -36,7 +36,7 @@
 
 -define(ROOT_FOLDR, root).
 -define(REAL_FOLDR, (attr_tools:get_or_default(real_name,<<"files">>))).
--define(ATTR_FOLDR, <<>>).
+-define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,<<"attributes">>))).
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,<<"all_files">>))).
 -define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,<<"duplicates">>))).

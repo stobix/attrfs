@@ -196,8 +196,8 @@ start_link() ->
                 {error,dir_not_specified}
         end
   end,
-  Dir=unicode:characters_to_binary(vget(to_dir)),
-  DB=unicode:characters_to_binary(vget(attributes_db)),
+  Dir=vget(to_dir),
+  DB=vget(attributes_db),
   LinkedIn=vget(linked_in),
   MountOpts=vget(mount_opts),
 
@@ -301,7 +301,7 @@ create(Ctx=#fuse_ctx{gid=Gid,uid=Uid},ParentInode,BName,Mode,Fuse_File_Info,_Con
   ?DEB2({srv,2},"|  Name: ~p",BName),
   ?DEBL({srv,2},"|  Mode: ~.8X",[Mode,"O"]),
   ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
-  Name=binary_to_list(BName),
+  Name=BName,
   Reply=case numberer:is_numbered(Name,ino) of
     false -> 
       ?DEB1({srv,4},"No real file with that name, checking parent."),
@@ -427,8 +427,9 @@ getlk(_Ctx,_Inode,_Fuse_File_Info,_Lock,_Continuation,State) ->
 %%--------------------------------------------------------------------------
 getxattr(_Ctx,Inode,BName,Size,Continuation,State) ->
   ?REPORT(getxattr),
-  RawName=attr_tools:remove_from_start(binary_to_list(BName),"user."),
+  RawName=attr_tools:bremove_from_start(BName,<<"user.">>),
   ?DEBL({srv,1},">getxattr, name:~p, size:~w, inode:~w",[RawName,Size,Inode]),
+  % FIXME does this still work when binary?
   attr_reply:watch(fun(Token) -> attr_async:getxattr(Inode,RawName,Size,Token) end,
     Continuation,
     #fuse_reply_err{err=enodata}),
@@ -466,7 +467,7 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
           true -> 
             ?DEBL({srv,4},"they are using a too small buffer; ~w < ~w ",[Size,ExtSize]),
             #fuse_reply_err{err=erange};
-          false -> ?DEB1({srv,4},"all is well, replying with attribs."),#fuse_reply_buf{buf=list_to_binary(ExtAttribs), size=ExtSize}
+          false -> ?DEB1({srv,4},"all is well, replying with attribs."),#fuse_reply_buf{buf=ExtAttribs, size=ExtSize}
         end
     end,
   {Reply,State}.
@@ -475,14 +476,16 @@ listxattr(_Ctx,Inode,Size,_Continuation,State) ->
 %% Lookup a directory entry by name and get its attributes. Returning an entry with inode zero means a negative entry which is cacheable, whereas an error of enoent is a negative entry which is not cacheable. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type lookup_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
-lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
+lookup(_Ctx,ParentInode,BinaryChildRaw,Continuation,State) ->
   ?REPORT(attr_lookup),
+  BinaryChild=BinaryChildRaw,
   ?DEBL({srv,1},">lookup Parent: ~p Name: ~p",[ParentInode,BinaryChild]),
     attr_reply:watch(
       fun(Token) -> attr_async:lookup(ParentInode,BinaryChild,Token) end,
       Continuation,
       #fuse_reply_err{err=enoent}),
   {noreply,State}.
+
 
 %%--------------------------------------------------------------------------
 %% Make a directory. Mode is a mask composed of the ?S_XXXXX macros which are (portably) defined in fuserl.hrl. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type mkdir_async_reply ().
@@ -501,7 +504,7 @@ lookup(_Ctx,ParentInode,BinaryChild,Continuation,State) ->
 
 mkdir(Ctx,ParentInode,BName,MMode,_Continuation,State) ->
   ?REPORT(mkdir),
-  Name=binary_to_list(BName),
+  Name=BName,
   ?DEB1({srv,1},">mkdir"),
   ?DEB2({srv,2},"|  Ctx:~w",Ctx),
   ?DEB2({srv,2},"|  PIno: ~w",ParentInode),
@@ -642,7 +645,7 @@ read(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
 
       #open_internal_file{contents=Contents} ->
         Data=take(Contents,Offset,Size),
-        #fuse_reply_buf{buf=Data,size=size(Data)};
+        #fuse_reply_buf{buf=Data,size=erlang:iolist_size(Data)};
 
       _ ->
         #fuse_reply_err{err=eio}
@@ -664,13 +667,14 @@ take(Contents,Offset,Size) when is_binary(Contents) ->
     true ->
       Data= <<>>
   end,
-  Data;
+  Data.
 
-take(Contents,Offset,Size) when is_list(Contents) ->
-  ?REPORT(take),
-  Binary=take(list_to_binary(Contents),Offset,Size),
-  binary_to_list(Binary).
-
+% This will no longer be allowed to happen. I think.
+%take(Contents,Offset,Size) when is_list(Contents) ->
+%  ?REPORT(take),
+%  Binary=take(list_to_binary(Contents),Offset,Size),
+%  binary_to_list(Binary).
+%
 %%--------------------------------------------------------------------------
 %% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
 %%--------------------------------------------------------------------------
@@ -761,14 +765,14 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
   ?REPORT(removexattr),
   ?DEB1({srv,1},">removexattr"),
   ?DEB2({srv,2},"|  BName: ~w",BName),
-  Name=attr_tools:remove_from_start(binary_to_list(BName),"user."),
+  Name=attr_tools:bremove_from_start(BName,<<"user.">>),
   ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
   ?DEB2({srv,2},"|  Inode: ~w ",Inode),
   ?DEB2({srv,2},"|  Name: ~w",Name),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   case Entry#inode_entry.type of
     #external_file{ path=Path } ->
-  Syek=string:tokens(Name,?KEY_SEP),
+  Syek=binary:split(Name,?KEY_SEP,[global]),
   ?DEB2({srv,4},"tokenized key: ~w",[Syek]),
   Keys=lists:reverse(Syek),
   ?DEBL({srv,4},"key to be deleted: ~w",[Keys]),
@@ -804,8 +808,8 @@ removexattr(_Ctx,Inode,BName,_Continuation,State) ->
 
 rename(_Ctx,ParentIno,BName,NewParentIno,BNewName,_Continuation,State) ->
   ?REPORT(rename),
-  Name=binary_to_list(BName),
-  NewName=binary_to_list(BNewName),
+  Name=BName,
+  NewName=BNewName,
   ?DEBL({srv,1},">rename; parent: ~w, name: ~p, new parent: ~w, new name: ~p",[ParentIno,Name,NewParentIno,NewName]),
   Reply=attr_rename:rename(ParentIno,NewParentIno,Name,NewName),
   {#fuse_reply_err{err=Reply},State}.
@@ -830,7 +834,7 @@ rmdir(_Ctx,ParentInode,BName,_Continuation,State) ->
   Reply=
     case PType of
       attribute_dir ->
-        Name=binary_to_list(BName),
+        Name=BName,
         {ok,Ino}=numberer:n2i([Name|PName],ino),
         {value,Entry}=tree_srv:lookup(Ino,inodes),
         case Entry#inode_entry.contents of
@@ -943,28 +947,24 @@ setxattr(_Ctx,Inode,BKey,BValue,_Flags,_Continuation,State) ->
   ?DEB1({srv,1},">setxattr"),
   ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
   ?DEB2({srv,2},"|  Inode: ~w ",Inode),
-  RawKey=binary_to_list(BKey),
-  RawValue=binary_to_list(BValue),
+  RawKey=BKey,
+  RawValue=BValue,
+  % If the "system" check thing was important, do it with binary:longest_common_prefix
   ?DEB2({srv,2},"|  Key: ~p ",RawKey),
   ?DEB2({srv,2},"|  Value: ~p ",RawValue),
   ?DEB2({srv,2},"|  _Flags: ~w ",_Flags),
   ?DEB1({srv,4},"getting inode entry"),
   {value,Entry} = tree_srv:lookup(Inode,inodes),
   ?DEB1({srv,4},"transforming input data"),
-  Key=
-    case string:str(RawKey,"system")==1 of
-      true -> "."++RawKey;
-      false -> attr_tools:remove_from_start(RawKey,"user.")
-    end,
-
-  Values=string:tokens(RawValue,?VAL_SEP),
+  Key= attr_tools:bremove_from_start(RawKey,<<"user.">>),
+  Values=binary:split(RawValue,?VAL_SEP,[global]),
   ?DEB2({srv,4},"got values: ~w",Values),
 
   Reply=
     case Entry#inode_entry.type of
       #external_file{path=Path} ->
         ?DEB1({srv,4},"entry is an external file"),
-        Syek=string:tokens(Key,?KEY_SEP),
+        Syek=binary:split(Key,?KEY_SEP,[global]),
         ?DEB2({srv,4},"tokenized key: ~w",[Syek]),
         Keys=lists:reverse(Syek),
         ?DEBL({srv,4},"key to be inserted: ~w",[Keys]),
@@ -1046,7 +1046,7 @@ unlink(_Ctx,ParentInode,BName,_Cont,State) ->
     Reply=
       case ParentType of
         attribute_dir ->
-          Name=binary_to_list(BName),
+          Name=BName,
           ParentChildren=ParentEntry#inode_entry.contents,
           case lists:keyfind(Name,1,ParentChildren) of
             false -> 

@@ -71,7 +71,7 @@ add_new_attribute(Path,FIno,FEntry,Attr) ->
     (ok=dets:insert(?ATTR_DB,{Path,Attr})),
   ?DEBL({ext,5},"database entry: ~p",[dets:match(?ATTR_DB,{Path,Attr})]),
   #inode_entry{stat=Stat,name=FName}=FEntry,
-  ?DEBL({ext,5},"appending ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
+  ?DEBL({ext,5},"appending attribute ~p for {~p,~p} to the file system",[Attr,FName,FIno]),
   append_attribute(Attr,FName,?UEXEC(Stat)),
   ?DEB1({ext,5},"creating new ext info"),
   rehash_ext_from_db(FIno,Path).
@@ -207,7 +207,7 @@ generate_ext_info_io(Path) ->
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io(InternalExtInfoTupleList) ->
   ?DEB1({ext,6},"Creating ext_io"),
-  ext_info_to_ext_io(InternalExtInfoTupleList,[]).
+  ext_info_to_ext_io(InternalExtInfoTupleList,<<>>).
 
 %%--------------------------------------------------------------------------
 %% All items processed, return {length of string, string}
@@ -215,8 +215,8 @@ ext_info_to_ext_io(InternalExtInfoTupleList) ->
 %%--------------------------------------------------------------------------
 ext_info_to_ext_io([],B) -> 
   ?REPORT(ext_info_to_ext_io),
-  B0=B++"\0",
-  B0len=length(B0),
+  B0=attr_tools:binary_concat([B,<<0>>]),
+  B0len=size(B0),
   ?DEB1({ext,8},"Done creating ext_io"),
   ?DEBL({ext,8},"Final string: \"~p\", size: ~p",[B0,B0len]),
   {B0len,B0};
@@ -226,18 +226,11 @@ ext_info_to_ext_io([],B) ->
 %%  adding it to the string to be sent to fuse.
 %% TODO: can I change the string to an io_string() ?
 %%--------------------------------------------------------------------------
-ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],String) ->
-  Name0=
-    case string:str(Name,"system")==1 of
-      false ->
-        ?DEB2({ext,8},"Adding zero to end of name ~p, and \"user.\" to the start",Name),
-        "user."++Name++"\0";
-      true -> 
-        ?DEB2({ext,8},"Adding zero to end of name ~p",Name),
-        Name++"\0"
-    end,
+ext_info_to_ext_io([{Name,_}|InternalExtInfoTupleList],Acc) ->
+  ?DEB2({ext,8},"Adding zero to end of name ~p, and \"user.\" to the start",Name),
+  Name0= attr_tools:binary_concat([<<"user.">>,Name,<<0>>]),
   ?DEB1({ext,8},"Appending name to namelist"),
-  NewString=String++Name0,
+  NewString=attr_tools:binary_concat([Acc,Name0]),
   ?DEB1({ext,8},"Recursion"),
   ext_info_to_ext_io(InternalExtInfoTupleList,NewString).
 

@@ -38,7 +38,10 @@
 
 -export([find_conn/1]).
 
--define(CONNS(X),((X==?AND_FOLDR) or (X==?OR_FOLDR) or (X==?BUTNOT_FOLDR))).
+% Debug exports
+-export([generate_logic_dir_children/2]).
+
+-define(IS_CONN_FOLDR(X),((X==?AND_FOLDR) or (X==?OR_FOLDR) or (X==?BUTNOT_FOLDR))).
 
 %%--------------------------------------------------------------------------
 %% Gets the children for the inode from the inode list, and runs direntrify
@@ -80,8 +83,9 @@ direntrify([{Name,Inode,_Type}|Children]) ->
 %%  logical connective.
 %%--------------------------------------------------------------------------
 find_conn([]) -> [];
+find_conn(A) when is_binary(A) -> []; %XXX This is _probably_ a correct fix for the list to binary conversion
 find_conn([A|As]=Conn) ->
-  case ?CONNS(A) of
+  case ?IS_CONN_FOLDR(A) of
     true -> Conn;
     false -> find_conn(As)
   end.
@@ -132,7 +136,7 @@ children(Inode) ->
 
 
 generate_logic_link_children(Ino,Name) ->
-  ?DEB1(3,">generate_logic_link_children"),
+  ?DEBL(3,">generate_logic_link_children for ~p ~tp",[Ino,Name]),
   {value,Entry}=tree_srv:lookup(Ino,inodes),
   EntryType=Entry#inode_entry.type,
   case EntryType of
@@ -203,7 +207,7 @@ filter_children_entry(InoOrEntry,Name) ->
 
 filter_children([Connective|Parents],Children) ->
   ?DEB1(6,">filter_children"),
-  case ?CONNS(Connective) of
+  case ?IS_CONN_FOLDR(Connective) of
     true ->
       case numberer:is_numbered(Parents,ino) of
         false -> false;
@@ -230,7 +234,7 @@ filter_children([],LastChildrenUnfiltered) ->
 %%--------------------------------------------------------------------------
 generate_logic_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
-  ?DEB1(6,">generate_logic_dir_children"),
+  ?DEBL(6,">generate_logic_dir_children ~p ~p",[LogicName,MirrorDir]),
   {ok,MIno}=numberer:n2i(MirrorDir,ino),
   ?DEB2(8,"attributes ino: ~p",MIno),
   ?DEB1(8,"getting attributes entry "),
@@ -243,7 +247,11 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
       case Type of
         attribute_dir ->
           {value,Entry}=tree_srv:lookup(Inode,inodes),
-          LinkName=[Name|LogicName],
+          %LinkName=[Name|LogicName],
+          LinkName=if 
+            is_binary(LogicName) -> [Name|[LogicName|[]]];
+            true -> [Name|LogicName]
+          end,
           LinkType=#dir_link{link=Inode},
           Stat=Entry#inode_entry.stat,
           Mode=Stat#stat.st_mode,
@@ -287,15 +295,19 @@ generate_logic_dirs(Predecessor) ->
     ?LD(?BUTNOT_FOLDR)
   ].
 
-
 generate_logic_dir(Parent,X) ->
-  ?DEB2(6,"generate_lodic_dir \"~p\"",X),
+  ?DEBL(6,"generate_lodic_dir ~p->~p",[Parent,X]),
   ?DEB1(8,"getting entry"),
   {ok,PIno}=numberer:n2i(Parent,ino),
   {value,PEntry}=tree_srv:lookup(PIno,inodes),
   ?DEB1(8,"generating new entry"),
   Name=[X|Parent],
+%  Name=if 
+%    is_binary(Parent) -> [X|[Parent|[]]];
+%    true -> [X|Parent]
+%  end,
   Ino=numberer:get(Name,ino),
+  ?DEBL(6,"new entry ~p has ino ~p",[Name,Ino]),
   PStat=PEntry#inode_entry.stat,
   % Logical dirs will not be writeable. Therefore, I do not directly copy the mode of the parent
   Stat=?ST_MODE(PStat,?M_DIR(8#555)), 
