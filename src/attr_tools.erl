@@ -44,12 +44,28 @@
          flatten1/1,
          append_child/2,
          get_or_default/2,
-         curr_time_stat/0
+         curr_time_stat/0,
+         convert_random_bin_to_utf8/1,
+         binary_concat/1
         ]).
+
+%%--------------------------------------------------------------------------
+%% @doc Converts a binary to a utf8 binary.
+%%--------------------------------------------------------------------------
+convert_random_bin_to_utf8(Bin) ->
+    unicode:characters_to_binary(binary_to_list(Bin)).
+
+%%--------------------------------------------------------------------------
+%% @doc Concats binary strings/lists
+%%--------------------------------------------------------------------------
+
+binary_concat(Bins) ->
+  << <<X/binary>> || X <- Bins >>.
+
 
 
 %%--------------------------------------------------------------------------
-%% flatten1 removes one list layer from a file. [[a],[[B]]] -> [a,[B]].
+%% @doc flatten1 removes one list layer from a file. [[a],[[B]]] -> [a,[B]].
 %%--------------------------------------------------------------------------
 flatten1([[]]) ->
   [];
