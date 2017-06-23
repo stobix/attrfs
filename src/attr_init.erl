@@ -158,14 +158,14 @@ initiate_servers(DB) ->
   % initiating databases, servers and so on.
   ?DEBL({init,6},"opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
   {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
-  tree_srv:new(inodes), % contains inode entries
-  tree_srv:new(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
-  tree_srv:new(specials), % to provide fast access to the root dir and other critical dirs
+  tree_srv:clear(inodes), % contains inode entries
+  tree_srv:clear(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
+  tree_srv:clear(specials), % to provide fast access to the root dir and other critical dirs
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
-  numberer:initiate(ino), % the inode table
-  numberer:initiate(pino), % the spawned processes "inode" table
-  numberer:initiate(fino). % the open files "inode" table
+  numberer:reset(ino), % the inode table
+  numberer:reset(pino), % the spawned processes "inode" table
+  numberer:reset(fino). % the open files "inode" table
 
 
 % XXX: Do NOT call this on children with a parent without an inode entry ready!  
