@@ -179,7 +179,11 @@ start_link() ->
     
   ?REPORT(start_link),
   ?DEB1({srv,1},">start_link"),
-  MyConfig=options:get(attrfs,config_file,"~/.attrfsrc"),
+  MyConfig=case init:get_argument(attrfs_config) of
+    error ->
+      options:get(attrfs,config_file,"~/.attrfsrc");
+    {ok,[[C]]} -> C
+  end,
   ?DEB2({srv,2},"Loading config file ~p...",MyConfig),
   options:append_config(MyConfig,unicode),
   ?DEB1({srv,2},"getting config options..."),
