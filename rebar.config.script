@@ -4,6 +4,7 @@ case os:cmd("hg branch") of
 {sub_dirs,[ ]},
 
 {erl_opts, [debug_info,fail_on_warning,{d,debug},{d,timestamp},{d,newdebug},{parse_transform,lager_transform}]},
+%{erl_opts, [debug_info,fail_on_warning,{parse_transform,lager_transform}]},
 
 {require_otp_vsn, ""},
 
