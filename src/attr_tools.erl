@@ -307,10 +307,10 @@ merge_duplicates(List) ->
 
 -ifdef(EUNIT).
 merge_duplicates_test_() ->
-  Single={"a","b"},
-  Duplicate1={"c","d"},
-  Duplicate2={"c","e"},
-  Merged={"c","d,e"},
+  Single={<<"a">>,<<"b">>},
+  Duplicate1={<<"c",<<"d">>},
+  Duplicate2={<<"c",<<"e">>},
+  Merged={<<"c">>,<<"d,e">>},
   InData=[Duplicate1,Duplicate2,Single],
   OutData=[Single,Merged],
   ?_assertMatch(OutData,merge_duplicates(InData)).
@@ -328,7 +328,7 @@ make_unduplicate_tree([{Key,Value}|Items],Tree) ->
   Values=
     case gb_trees:lookup(Key,Tree) of
       {value,Vals} ->
-        Vals++","++Value;
+        binary_concat([Vals,<<",">>,Value]);
       none ->
         Value
     end,

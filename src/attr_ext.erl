@@ -185,7 +185,7 @@ keyvalue(A) ->
             {X,Z};
            (X,{Y,Z}) ->
             ?DEBL({ext,5},"recurs: ~p,~p,~p",[X,Y,Z]),
-            {X++"/"++Y,Z}
+            {attr_tools:binary_concat([X,<<"/">>,Y]),Z}
         end,
         {[],[]},
         A).
