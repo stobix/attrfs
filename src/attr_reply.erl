@@ -55,7 +55,7 @@ init(State) ->
   {ok,State}.
 
 handle_info({'EXIT', PID, Reason}, State) ->
-  ?DEBL(3,"~p died because of ~p~n",[PID,Reason]),
+  ?DEBL(3,"~p died because of ~p",[PID,Reason]),
   case lists:keytake(PID,1,State) of
     {value,{_,_,Continuation,Reply},NewState} ->
       fuserlsrv:reply(Continuation,Reply),
