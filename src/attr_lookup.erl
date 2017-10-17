@@ -58,11 +58,13 @@ direntries(Inode) ->
 %%--------------------------------------------------------------------------
 %% direntrify takes a [{Name,Inode,Type}] and returns a [fuserl:#direntry{}]
 %%--------------------------------------------------------------------------
-direntrify([]) -> 
+direntrify(Things) -> direntrify(Things,0).
+
+direntrify([],_Offset) -> 
   ?DEB1(8,"Done converting children"),
   [];
 
-direntrify([{Name,Inode,_Type}|Children]) ->
+direntrify([{Name,Inode,_Type}|Children],Offset) ->
   ?DEB2(6,"Getting entry for child ~p",{Name,Inode,_Type}),
   {value,Child}=tree_srv:lookup(Inode,inodes),
   ?DEB2(8,"Getting permissions for child ~p",{Name,Inode,_Type}),
@@ -70,9 +72,10 @@ direntrify([{Name,Inode,_Type}|Children]) ->
   ?DEB2(8,"Creating direntry for child ~p",{Name,Inode,_Type}),
   Direntry= #direntry{name=Name ,stat=ChildStats },
   ?DEB2(8,"Calculatig size for direntry for child ~p",{Name,Inode,_Type}),
-  Direntry1=Direntry#direntry{offset=fuserlsrv:dirent_size(Direntry)},
+  NewOffset=Offset+fuserlsrv:dirent_size(Direntry),
+  Direntry1=Direntry#direntry{offset=NewOffset},
   ?DEB2(8,"Appending child ~p to list",{Name,Inode,_Type}),
-  [Direntry1|direntrify(Children)].
+  [Direntry1|direntrify(Children,NewOffset)].
 
 
 
@@ -135,6 +138,7 @@ children(Inode) ->
  end.
 
 
+% TODO: Filter away &lt;&lt;system.*>> from the attribute children.
 generate_logic_link_children(Ino,Name) ->
   ?DEBL(3,">generate_logic_link_children for ~p ~tp",[Ino,Name]),
   {value,Entry}=tree_srv:lookup(Ino,inodes),

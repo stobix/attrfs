@@ -308,8 +308,8 @@ merge_duplicates(List) ->
 -ifdef(EUNIT).
 merge_duplicates_test_() ->
   Single={<<"a">>,<<"b">>},
-  Duplicate1={<<"c",<<"d">>},
-  Duplicate2={<<"c",<<"e">>},
+  Duplicate1={<<"c">>,<<"d">>},
+  Duplicate2={<<"c">>,<<"e">>},
   Merged={<<"c">>,<<"d,e">>},
   InData=[Duplicate1,Duplicate2,Single],
   OutData=[Single,Merged],

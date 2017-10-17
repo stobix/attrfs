@@ -96,7 +96,10 @@
 %The dupliacte_file record contains the file data for files containing duplicate info for the file whose name they bear.
 
 -record(duplicate_file,
-        {d_contents::[{string(),string()}]
+        {d_contents::[{
+                    string(), % Internal name
+                    string()  % External path
+                }]
         }).
 
 %%% For now, I separate external files from external dirs. If there's no reason for this, I can always merge external_file/dir into external_entry.

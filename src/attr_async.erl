@@ -68,6 +68,7 @@ getxattr(Inode,RawName,Size,Token) ->
   ?DEBL(3,">getxattr ~p ~p ~p ~p",[Inode,RawName,Size,Token]),
   Name=RawName,
   % FIXME do something about the "system" getxattr calls?
+  % Mainly seems to be system.posix_acl_access and system.posix_acl_default
   {value,Entry}=tree_srv:lookup(Inode,inodes),
   ?DEB1(4,"Got inode entry"),
   ExtInfo=Entry#inode_entry.ext_info,

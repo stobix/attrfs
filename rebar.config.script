@@ -1,3 +1,4 @@
+{edoc_opts, [{sort_functions, false}]},
 case os:cmd("hg branch") of 
     "default\n" -> 
 [

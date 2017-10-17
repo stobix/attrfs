@@ -157,7 +157,7 @@ init({MirrorDirs,DB}) ->
 initiate_servers(DB) ->
   % initiating databases, servers and so on.
   ?DEBL({init,6},"opening attribute database file ~p as ~p", [DB, ?ATTR_DB]),
-  {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,DB}]),
+  {ok,_}=dets:open_file(?ATTR_DB,[{type,bag},{file,binary_to_list(DB)}]),
   tree_srv:clear(inodes), % contains inode entries
   tree_srv:clear(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
   tree_srv:clear(specials), % to provide fast access to the root dir and other critical dirs

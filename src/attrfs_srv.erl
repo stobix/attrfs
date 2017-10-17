@@ -589,7 +589,9 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
   {Reply,State}.
 
 %%--------------------------------------------------------------------------
-%% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type opendir_async_reply ().
+%% Open an directory inode. If noreply is used, eventually fuserlsrv:reply/2  
+%% should be called with Cont as first argument and the second argument of 
+%% type opendir_async_reply().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 opendir(_Ctx,Inode,FI=#fuse_file_info{flags=_Flags,writepage=_Writepage,direct_io=_DirectIO,keep_cache=_KeepCache,flush=_Flush,fh=_Fh,lock_owner=_LockOwner},_Continuation,State) ->
@@ -680,11 +682,19 @@ take(Contents,Offset,Size) when is_binary(Contents) ->
 %  binary_to_list(Binary).
 %
 %%--------------------------------------------------------------------------
-%% Read at most Size bytes at offset Offset from the directory identified Inode. Size is real and must be honored: the function fuserlsrv:dirent_size/1 can be used to compute the aligned byte size of a direntry, and the size of the list is the sum of the individual sizes. Offsets, however, are fake, and are for the convenience of the implementation to find a specific point in the directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readdir_async_reply ().
+%% Read at most Size bytes at offset Offset from the directory identified Inode. 
+%% Size is real and must be honored: the function fuserlsrv:dirent_size/1 
+%% can be used to compute the aligned byte size of a direntry, and the size of 
+%% the list is the sum of the individual sizes. Offsets, however, are fake, and 
+%% are for the convenience of the implementation to find a specific point in the 
+%% directory stream. If noreply is used, eventually fuserlsrv:reply/2  should be 
+%% called with Cont as first argument and the second argument of type 
+%% readdir_async_reply ().
 %%--------------------------------------------------------------------------
 %%--------------------------------------------------------------------------
 readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   ?REPORT(readdir),
+  ?REPORT({readdir,_Inode,Size,Offset}),
   ?DEB1({srv,1},">readdir"),
   ?DEB2({srv,2},"|  _Ctx:~w",_Ctx),
   ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
