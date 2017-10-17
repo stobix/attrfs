@@ -753,6 +753,13 @@ release(_Ctx,_Inode,Fuse_File_Info,_Continuation,State) ->
   ?DEB2({srv,2},"|  _Inode: ~w ",_Inode),
   ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
+  {value,File}=attr_open:lookup(FIno),
+  case File of
+    #open_external_file{io_device=IoDevice} -> 
+      file:close(IoDevice);
+    _Others ->
+      ok
+  end,
   attr_open:remove(FIno),
   {#fuse_reply_err{err=ok},State}.
 
@@ -1110,7 +1117,7 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
   ?DEB1({srv,1},">write"),
   ?DEB2({srv,2},"|  Inode: ~b",Inode),
   ?DEB2({srv,2},"|  Offset: ~b",Offset),
-  ?DEB2({srv,2},"|  Data: ~p",Data),
+  ?DEB2({srv,2},"|  Data size: ~p",size(Data)),
   ?DEB2({srv,2},"|  FI: ~w",Fuse_File_Info),
   case tree_srv:lookup(Inode,inodes) of
     {value,Entry} ->
@@ -1119,8 +1126,10 @@ write(_Ctx,Inode,Data,Offset,Fuse_File_Info,_Continuation,State) ->
 			% For now, let's just pretend that we write something. 
 			% Otherwise we'll have to know the parent of the node.
 			% (Could be sent via the file info, if needed.)
+          ?DEB2({srv,2},"|  Pretending to write to external file ~p",Inode),
           {#fuse_reply_write{count=size(Data)},State};
         internal_file ->
+          ?DEB2({srv,2},"|  Writing to internal file ~p (presumably a thumbnail cache or something similar)",Inode),
           Contents=Entry#inode_entry.contents,
           Stat=Entry#inode_entry.stat,
           Len=size(Contents),
