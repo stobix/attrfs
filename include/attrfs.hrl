@@ -39,6 +39,7 @@
 -define(ATTR_FOLDR, []).
 -define(ATTR_FOLDR_FS_NAME, (attr_tools:get_or_default(attr_name,<<"attributes">>))).
 -define(ALL_FOLDR,(attr_tools:get_or_default(all_name,<<"all_files">>))).
+-define(ERR_FOLDR,(attr_tools:get_or_default(err_name,<<"erroneous">>))).
 -define(DUP_FOLDR,(attr_tools:get_or_default(dup_name,<<"duplicates">>))).
 -define(UNI_FOLDR,(attr_tools:get_or_default(uni_name,<<"unique">>))).
 -define(LOGIC_FOLDR,(attr_tools:get_or_default(logic_name,<<"logic">>))).
@@ -50,6 +51,7 @@
 -define(DUP_PREFIX,(attr_tools:get_or_default(dup_prefix,<<"duplicate-">>))).
 -define(DUP_SUFFIX,(attr_tools:get_or_default(dup_suffix,<<"">>))).
 -define(DUP_EXT,(attr_tools:get_or_default(dup_ext,<<".txt">>))).
+-define(ERR_EXT,(attr_tools:get_or_default(err_ext,<<".txt">>))).
 
 % TODO: Convert to number
 -define(MAX_LOGIC_RECURS,(attr_tools:get_or_default(max_logic_recurs,20))).
@@ -84,6 +86,18 @@
 -define(ST_MODE(Stat,Mode),(Stat#stat{st_mode=Mode})).
 -define(ST_NLINK(Stat,NLink),(Stat#stat{st_nlink=NLink})).
 
+-define(ERR_STAT(Ino), #stat{ 
+                        st_ino=Ino
+                        , st_nlink=1
+                        , st_mode=0
+                        , st_mtime=0
+                        , st_atime=0
+                        , st_ctime=0
+                        , st_uid=0
+                        , st_gid=0
+                        ,st_dev={0,0}).
+
+
 % "Standard directory mode". Thought to be used as a user settable
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 
@@ -92,6 +106,19 @@
 
 -type inode_number()::pos_integer().
 -type attrib_list()::[{string(), string()}].
+
+-type error()::{atom(),atom()}.
+
+% The err_file record contains file data for files that could not be read for some reason.
+
+-record(err_file,
+        % the path is what path leads to the file in some external file system.
+        {path::string()
+        % the error file:read returned when trying to read the file
+        ,error::error()
+        }).
+
+
 
 %The dupliacte_file record contains the file data for files containing duplicate info for the file whose name they bear.
 

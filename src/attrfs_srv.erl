@@ -581,6 +581,11 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
         MyFino=numberer:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
+      erroneous_file ->
+        ?DEB1(4,"erroneous file"),
+        MyFino=numberer:get(fino),
+        attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
+        #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
 
       _ ->
         #fuse_reply_err{err=enotsup}

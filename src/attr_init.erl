@@ -48,6 +48,7 @@ init({MirrorDirs,DB}) ->
   {ok,DupIno}=numberer:number(?DUP_FOLDR,ino),
   {ok,UniIno}=numberer:number(?UNI_FOLDR,ino),
   {ok,LogicIno}=numberer:number(?LOGIC_FOLDR,ino),
+  {ok,ErrIno}=numberer:number(?ERR_FOLDR,ino),
 
   ?DEBL({init,5},"inodes;\troot:~w, real:~w, attribs:~w",[RootIno,RealIno,AttribIno]),
   ?DEB1({init,1},"creating root entry"),
@@ -111,6 +112,18 @@ init({MirrorDirs,DB}) ->
       ext_io=attr_ext:ext_info_to_ext_io([])
     },
   tree_srv:enter(DupIno,DupEntry,inodes),
+  ErrorChildren=make_error_children(),
+  ErrorEntry=
+    #inode_entry{
+      name=?ERR_FOLDR,
+      contents=ErrorChildren,
+      type=internal_dir,
+      stat=?DIR_STAT(8#555,ErrIno),
+      ext_info=[],
+      ext_io=attr_ext:ext_info_to_ext_io([])
+    },
+  tree_srv:enter(ErrIno,ErrorEntry,inodes),
+  tree_srv:enter(ErrIno,ErrorEntry,specials),
   ?DEB1({init,1},"duplicate folder done"),
   UniEntry=
     #inode_entry{
@@ -127,6 +140,7 @@ init({MirrorDirs,DB}) ->
     #inode_entry{
       name=?REAL_FOLDR,
       contents=[
+        {?ERR_FOLDR,ErrIno,internal_dir},
         {?ALL_FOLDR,AllIno,internal_dir},
         {?DUP_FOLDR,DupIno,internal_dir},
         {?UNI_FOLDR,UniIno,internal_dir}|
@@ -161,6 +175,7 @@ initiate_servers(DB) ->
   tree_srv:clear(inodes), % contains inode entries
   tree_srv:clear(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
   tree_srv:clear(specials), % to provide fast access to the root dir and other critical dirs
+  tree_srv:clear(erroneous), % for files that could not be read
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
   numberer:reset(ino), % the inode table
@@ -305,10 +320,28 @@ make_inode_list(Path,Name0) when is_binary(Path), is_binary(Name0)->
         ExtFolders),
       {Name,Ino,Type,AllChildren};
     E ->
+      % Each erroneous file is unique, and each error text file will only contain the entry for one file.
+      % I thus list them by their internal names rather than their external names, since not all files with the same name need to be erroneous.
+      {Name,_OlderEntries,Ino} =get_unique(Name0),
+      tree_srv:enter(Name,Path,erroneous),
       ?DEBL(err,"got ~w when trying to read ~p.",[E,lists:flatten(Path)]),
       ?DEB1(err,"are you sure your app file is correctly configured?"),
-      ?DEB1(err,">>>exiting<<<"),
-      exit(E)
+            Type=#err_file{path=Path,error=E},
+
+      %Type=blah,
+      %InodeEntry=
+      %  #inode_entry{ 
+      %    name=Name,
+      %    contents=[],
+      %    type=Type,
+      %    stat=MyStat,
+      %    ext_info=ExtInfo,
+      %    ext_io=ExtIo
+      %  },
+      %tree_srv:enter(Ino,InodeEntry,inodes),
+      {Name,Ino,Type,[]}
+      %?DEB1(err,">>>exiting<<<"),
+      %exit(E)
   end.
 
 
@@ -357,3 +390,29 @@ make_duplicate_children() ->
     tree_srv:to_list(duplicates)
       ).
 
+make_error_children() ->
+  ?DEB1({init,3},"Generating errors dir"),
+  lists:foldl(
+    fun({Name,Path},Errors) ->
+      ?DEBL({init,8},"Making inode number for {error, ~p}",[Name]),
+      {ok,Ino}=inode:number({error,Name},ino),
+      Type=erroneous_file,
+      IOList = [io_lib:format("~s\n",[Path])],
+      Data = iolist_to_binary(IOList),
+      Entry=#inode_entry{
+        type=Type,
+        contents=Data,
+        ext_info=[],
+        ext_io=attr_ext:ext_info_to_ext_io([]),
+        stat=?FILE_STAT(8#755,Ino,size(Data))
+        },
+      ?DEB1({init,8},"entering error entry into inode list"),
+      tree_srv:enter(Ino,Entry,inodes),
+      ?DEB1({init,8},"done"),
+      [{Name++?ERR_EXT,Ino,erroneous_file}|Errors]
+    end,
+    [],
+    tree_srv:to_list(erroneous)
+  ).
+
+        
