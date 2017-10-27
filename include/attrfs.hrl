@@ -97,7 +97,6 @@
                         , st_gid=0
                         ,st_dev={0,0}).
 
-
 % "Standard directory mode". Thought to be used as a user settable
 -define(STD_DIR_MODE, ?M_DIR(8#755)).
 
@@ -117,7 +116,6 @@
         % the error file:read returned when trying to read the file
         ,error::error()
         }).
-
 
 
 %The dupliacte_file record contains the file data for files containing duplicate info for the file whose name they bear.
@@ -169,7 +167,7 @@
 %% An external file or dir exists in an external file system somewhere.
 %% An ext info dir is an internal directory representation of some attribute of some dir or file.
 %% A logic dir is specified by its inode entry name, and is used to filter searches by dir browsing.
--type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|duplicate_file.
+-type file_type()::#external_file{}|internal_file|#external_dir{}|attribute_dir|internal_dir|logic_dir|#dir_link{}|duplicate_file|erroneous_file.
 -type ext_io_tuple()::{non_neg_integer(),file:io_string()}.
 
 -type name_tuple()::{string(),inode_number(),file_type()}.

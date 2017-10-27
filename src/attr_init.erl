@@ -265,6 +265,12 @@ make_inode_list(Path,Name) when is_list(Name)->
 
 make_inode_list(Path,Name0) when is_binary(Path), is_binary(Name0)->
   ?DEBL({init,6},"reading file info for ~ts into ~ts",[Path,Name0]),
+  % No error file:read_file_info/1 gives me would (presumably) be a reason to exit the program.
+      % Skall helst inte rekursera!
+      {Name,OlderEntries,Ino} =get_unique(Name0),
+      ?DEB2({init,8},"got unique name ~p",Name),
+      ?DEB1({init,8},"updating duplicate list"),
+      tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates),
   case catch file:read_file_info(Path) of
     {ok,FileInfo} ->
        
@@ -272,11 +278,6 @@ make_inode_list(Path,Name0) when is_binary(Path), is_binary(Name0)->
       % TODO Kolla filtyp här, så jag kan generera entry för kataloger innan jag rekurserar ner i filträdet.
 
       ?DEB1({init,8},"got file info"),
-      % Skall helst inte rekursera!
-      {Name,OlderEntries,Ino} =get_unique(Name0),
-      ?DEB2({init,8},"got unique name ~p",Name),
-      ?DEB1({init,8},"updating duplicate list"),
-      tree_srv:enter(Name0,[{Name,Path}|OlderEntries],duplicates),
       {ok,Children,Type,AllChildren}= type_and_children(Path,FileInfo),
       ?DEB2({init,6},"Generating ext info for ~p",Path),
       {ExtInfo,ExtIo,ExtAmount}=attr_ext:generate_ext_info_io(Path), 
@@ -322,7 +323,6 @@ make_inode_list(Path,Name0) when is_binary(Path), is_binary(Name0)->
     E ->
       % Each erroneous file is unique, and each error text file will only contain the entry for one file.
       % I thus list them by their internal names rather than their external names, since not all files with the same name need to be erroneous.
-      {Name,_OlderEntries,Ino} =get_unique(Name0),
       tree_srv:enter(Name,Path,erroneous),
       ?DEBL(err,"got ~w when trying to read ~p.",[E,lists:flatten(Path)]),
       ?DEB1(err,"are you sure your app file is correctly configured?"),
