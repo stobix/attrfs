@@ -32,7 +32,7 @@
 
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 -behaviour(gen_server).
 
@@ -55,7 +55,7 @@ init(State) ->
   {ok,State}.
 
 handle_info({'EXIT', PID, Reason}, State) ->
-  ?DEBL(3,"~p died because of ~p",[PID,Reason]),
+  ?DEBL({reply,3},"~p died because of ~p",[PID,Reason]),
   case lists:keytake(PID,1,State) of
     {value,{_,_,Continuation,Reply},NewState} ->
       fuserlsrv:reply(Continuation,Reply),
@@ -71,13 +71,13 @@ reply(Token,Reply) ->
   gen_server:cast(?MODULE,{reply,Reply,Token}).
 
 terminate(A,B) -> 
-  ?DEBL(1,"Reply server killed! (~p,~p)",[A,B]),
+  ?DEBL({reply,1},"Reply server killed! (~p,~p)",[A,B]),
   ok.
 
 handle_cast({add,Fun,Continuation,DefaultAnswer},State) ->
   Token=numberer:get(pino),
   PID=spawn_link(fun() -> Fun(Token) end),
-  ?DEBL(3,"Started a fun with pid ~p and token ~p",[PID,Token]),
+  ?DEBL({reply,3},"Started a fun with pid ~p and token ~p",[PID,Token]),
   {noreply,[{PID,Token,Continuation,DefaultAnswer}|State]};
 
 handle_cast({reply,Reply,Token},State) ->

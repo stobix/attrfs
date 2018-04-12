@@ -31,7 +31,7 @@
 -module(attr_open).
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 -export([init/0,
        lookup/1,

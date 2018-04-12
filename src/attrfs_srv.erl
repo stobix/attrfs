@@ -127,7 +127,7 @@
 -include_lib("kernel/include/file.hrl").
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 
 
@@ -585,12 +585,6 @@ open(_Ctx,Inode,Fuse_File_Info,_Continuation,State) ->
         ?DEB1(4,"erroneous file"),
         MyFino=numberer:get(fino),
         attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
-        #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
-      erroneous_file ->
-        ?DEB1(4,"erroneous file"),
-        MyFino=inode:get(fino),
-        attr_open:set(MyFino,Inode,#open_duplicate_file{contents=Entry#inode_entry.contents}),
-        
         #fuse_reply_open{fuse_file_info=Fuse_File_Info#fuse_file_info{fh=MyFino}};
 
       _ ->

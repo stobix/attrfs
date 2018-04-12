@@ -23,7 +23,7 @@
 -behaviour(application).
 
 -export([start/2,stop/1]).
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 -include("../include/attrfs.hrl").
 
 start(_dont,_care) ->

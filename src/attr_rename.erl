@@ -32,21 +32,21 @@
 -compile({parse_transform, cut}).
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 -export([rename/4]).
 
 rename(ParentIno,NewParentIno,OldName,NewName) ->
-    ?DEB1(3,">rename"),
+    ?DEB1({rename,3},">rename"),
     {value,ParentEntry}=tree_srv:lookup(ParentIno,inodes),
     case tree_srv:lookup(NewParentIno,inodes) of
       none ->
-        ?DEB1(5,"new parent nonexistent!"),
+        ?DEB1({rename,5},"new parent nonexistent!"),
         enoent; 
       {value,NewParentEntry} ->
         case lists:keyfind(OldName,1,ParentEntry#inode_entry.contents) of
           false -> 
-            ?DEB1(5,"file nonexistent!"),
+            ?DEB1({rename,5},"file nonexistent!"),
             enoent;
           {_,FileIno,_} ->
             {value,FileEntry}=tree_srv:lookup(FileIno,inodes),
@@ -60,7 +60,7 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
                 % Since the attribute folder already exists, things needn't get overly coplicated here...
                 Path=(FileEntry#inode_entry.type)#external_file.path,
                 {ok,Attribute}=numberer:i2n(NewParentIno,ino),
-                ?DEBL(6,"copying file ~p into ~p",[FileEntry#inode_entry.name,Attribute]),
+                ?DEBL({rename,6},"copying file ~p into ~p",[FileEntry#inode_entry.name,Attribute]),
                 attr_ext:add_new_attribute(Path,FileIno,FileEntry,Attribute);
 
               % Move an attribute dir between attribute dirs, updating all files that had the attribute
@@ -82,7 +82,7 @@ rename(ParentIno,NewParentIno,OldName,NewName) ->
 
 % Prefixes: File, Parent, NewParent
 move_internal_file(FIno,FEntry,PIno,NewName,PIno,NPEntry) ->
-  ?DEB1(3,">move internal 1"),
+  ?DEB1({rename,3},">move internal 1"),
   Name=FEntry#inode_entry.name,
   {value,{Name,FIno,Type},Children}=lists:keytake(Name,1,NPEntry#inode_entry.contents),
   NewNPEntry=NPEntry#inode_entry{contents=[{NewName,FIno,Type}|Children]},
@@ -94,7 +94,7 @@ move_internal_file(FIno,FEntry,PIno,NewName,PIno,NPEntry) ->
 
 % Prefixes: File, Parent, NewParent
 move_internal_file(FIno,FEntry,PIno,NewName,NPIno,NPEntry) ->
-  ?DEB1(3,">move internal 2"),
+  ?DEB1({rename,3},">move internal 2"),
   Name=FEntry#inode_entry.name,
   {value,PEntry}=tree_srv:lookup(PIno,inodes),
   PName=PEntry#inode_entry.name,
@@ -115,12 +115,12 @@ move_internal_file(FIno,FEntry,PIno,NewName,NPIno,NPEntry) ->
 %%--------------------------------------------------------------------------
 %%
 move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
-  ?DEB1(6,"moving value dir"),
+  ?DEB1({rename,6},"moving value dir"),
   OldAttribName=[OldValueName|OldKeyName]=OldValueEntry#inode_entry.name,
   NewParentName=NewParentEntry#inode_entry.name,
   NewAttribName=[NewValueName|NewParentName], 
   NewValueEntry=OldValueEntry#inode_entry{name=NewAttribName},
-  ?DEBL(6,"moving ~p to ~p",[OldAttribName,NewAttribName]),
+  ?DEBL({rename,6},"moving ~p to ~p",[OldAttribName,NewAttribName]),
   % I need to move the children before removing the entries of the parents from the current dir.
   lists:foreach(
     fun
@@ -142,17 +142,17 @@ move_attribute_dir(NewParentEntry,OldValueEntry,NewValueName) ->
   ),
   %XXX: Yes, this is a little bit ugly. Maybe do a global change about 
   %     whether to use inodes or entries as arguments sometime?
-  ?DEBL(6,"removing ~p from the ~p directory", [OldValueName,OldKeyName]),
-  ?DEBL(6,"getting inodes...",[]),
+  ?DEBL({rename,6},"removing ~p from the ~p directory", [OldValueName,OldKeyName]),
+  ?DEBL({rename,6},"getting inodes...",[]),
   {ok,KeyIno}=numberer:n2i(OldKeyName,ino),
   {ok,ValueIno}=numberer:n2i(OldAttribName,ino),
-  ?DEBL(6,"removing...",[]),
+  ?DEBL({rename,6},"removing...",[]),
   attr_remove:remove_empty_dir(KeyIno,OldValueName),
-  ?DEBL(6,"adding ~p to ~p directory", [NewValueName,NewParentName]),
+  ?DEBL({rename,6},"adding ~p to ~p directory", [NewValueName,NewParentName]),
   tree_srv:enter(ValueIno,NewValueEntry,inodes),
-  ?DEB2(6,"adding ~p to inode list",NewAttribName),
+  ?DEB2({rename,6},"adding ~p to inode list",NewAttribName),
   attr_tools:append_child({NewValueName,ValueIno,attribute_dir},KeyIno),
-  ?DEB1(6,"moving inode number"),
+  ?DEB1({rename,6},"moving inode number"),
   numberer:rename(OldAttribName,NewAttribName,ino),
   ok.
 

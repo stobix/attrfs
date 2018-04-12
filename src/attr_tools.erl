@@ -30,7 +30,7 @@
 -module(attr_tools).
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 -export([keymergeunique/2,
          remove_from_start/2,

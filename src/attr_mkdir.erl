@@ -31,7 +31,7 @@
 -module(attr_mkdir).
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 -export([make_dir/6]).
 -export([insert_entry/2]).
@@ -40,7 +40,7 @@ make_dir(Ctx,ParentInode,ParentName,attribute_dir,Name,Mode) ->
   make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode);
 
 make_dir(_Ctx,_ParentInode,_ParentName,_DirType,_Name,_Mode) ->
-  ?DEB2(3,"~p , not supported",_DirType),
+  ?DEB2({mkdir,3},"~p , not supported",_DirType),
   #fuse_reply_err{err=enotsup}.
 
 
@@ -48,7 +48,7 @@ make_dir(_Ctx,_ParentInode,_ParentName,_DirType,_Name,_Mode) ->
 %%--------------------------------------------------------------------------
 
 make_attr_child_dir(Ctx,ParentInode,ParentName,Name,Mode) ->
-  ?DEB1(6,"Creating an attribute dir"),
+  ?DEB1({mkdir,6},"Creating an attribute dir"),
   MyName=[Name|ParentName],
   case make_general_dir(Ctx,ParentInode,MyName,Mode,attribute_dir) of
     {ok,Stat} ->
@@ -73,14 +73,15 @@ make_param(Stat) ->
 %% Creates a dir inode entry of type DirType and inserts it into the inode table as a child of ParentInode; Creates and returns dirstats with actual time info, and the UID and GID provided in CTX and the mode provided in Mode.
 %%--------------------------------------------------------------------------
 make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
-  ?DEB1(6,"make_general_dir"),
+  ?DEB1({mkdir,6},"make_general_dir"),
   case numberer:is_numbered(Name,ino) of
     false ->
       {ok,MyInode}=numberer:number(Name,ino),
-      ?DEBL(8,"creating new directory entry called ~p",[Name]),
+      ?DEBL({mkdir,8},"creating new directory entry called ~p",[Name]),
+      % TODO now() is deprecated!
       {MegaNow,NormalNow,_}=now(),
       Now=MegaNow*1000000+NormalNow,
-      ?DEBL(8,"atime etc: ~p",[Now]),
+      ?DEBL({mkdir,8},"atime etc: ~p",[Now]),
       #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
       DirStat=
         #stat{
@@ -104,7 +105,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
       insert_entry(ParentInode,DirEntry),
       {ok,DirStat};
     _ ->
-      ?DEB2(6,"~p already has an inode! Not creating duplicate folder...",Name),
+      ?DEB2({mkdir,6},"~p already has an inode! Not creating duplicate folder...",Name),
       error
   end.
 
@@ -112,7 +113,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
 %insert entry Entry with into the file system tree under ParentInode. Returns new inode.
 %%--------------------------------------------------------------------------
 insert_entry(ParentInode,ChildEntry) ->
-  ?DEBL(2,"inserting new entry as child for ~p",[ParentInode]),
+  ?DEBL({mkdir,2},"inserting new entry as child for ~p",[ParentInode]),
   {value,ParentEntry}=tree_srv:lookup(ParentInode,inodes),
 
   InoName=ChildEntry#inode_entry.name,

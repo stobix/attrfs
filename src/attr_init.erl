@@ -34,7 +34,7 @@
 -export([init/1]).
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 init({MirrorDirs,DB}) ->
   ?DEB1({init,1},">init"),

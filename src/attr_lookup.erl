@@ -31,7 +31,7 @@
 -module(attr_lookup).
 
 -include("../include/attrfs.hrl").
--include_lib("newdebug/include/debug.hrl").
+-include_lib("newdebug/include/newdebug19.hrl").
 
 -export([direntries/1,
         children/1]).
@@ -48,10 +48,10 @@
 %% on it.
 %%--------------------------------------------------------------------------
 direntries(Inode) ->
-  ?DEB1(5,">direntries"),
-  ?DEB1(7,"Getting child entries"),
+  ?DEB1({lookup,5},">direntries"),
+  ?DEB1({lookup,7},"Getting child entries"),
   {value,Children}=children(Inode),
-  ?DEBL(7,"Converting children ~p for ~p",[Children,Inode]),
+  ?DEBL({lookup,7},"Converting children ~p for ~p",[Children,Inode]),
   direntrify(Children).
 
 
@@ -61,20 +61,20 @@ direntries(Inode) ->
 direntrify(Things) -> direntrify(Things,0).
 
 direntrify([],_Offset) -> 
-  ?DEB1(8,"Done converting children"),
+  ?DEB1({lookup,8},"Done converting children"),
   [];
 
 direntrify([{Name,Inode,_Type}|Children],Offset) ->
-  ?DEB2(6,"Getting entry for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,6},"Getting entry for child ~p",{Name,Inode,_Type}),
   {value,Child}=tree_srv:lookup(Inode,inodes),
-  ?DEB2(8,"Getting permissions for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Getting permissions for child ~p",{Name,Inode,_Type}),
   ChildStats=Child#inode_entry.stat,
-  ?DEB2(8,"Creating direntry for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Creating direntry for child ~p",{Name,Inode,_Type}),
   Direntry= #direntry{name=Name ,stat=ChildStats },
-  ?DEB2(8,"Calculatig size for direntry for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Calculatig size for direntry for child ~p",{Name,Inode,_Type}),
   NewOffset=Offset+fuserlsrv:dirent_size(Direntry),
   Direntry1=Direntry#direntry{offset=NewOffset},
-  ?DEB2(8,"Appending child ~p to list",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Appending child ~p to list",{Name,Inode,_Type}),
   [Direntry1|direntrify(Children,NewOffset)].
 
 
@@ -103,9 +103,9 @@ find_conn([A|As]=Conn) ->
 
 %% For sake of efficiency, I let this function be called with either an inode or directly with an #inode_entry
 children(#inode_entry{}=Entry) ->
-  ?DEB1(3,">children"),
+  ?DEB1({lookup,3},">children"),
   Name=Entry#inode_entry.name,
-  ?DEBL(5,"got an entry: ~p",[Name]),
+  ?DEBL({lookup,5},"got an entry: ~p",[Name]),
   Children=
     case Entry#inode_entry.type of
       logic_dir ->
@@ -117,20 +117,20 @@ children(#inode_entry{}=Entry) ->
 
       #dir_link{link=Ino} ->
       % For now, I assume that all dir links are children of logical dirs, 
-        ?DEB1(5,"logical dir link"),
+        ?DEB1({lookup,5},"logical dir link"),
         MyChildren=generate_logic_link_children(Ino,Name),
-        ?DEB2(5,"generated children: ~p",MyChildren),
+        ?DEB2({lookup,5},"generated children: ~p",MyChildren),
         MyChildren;
 
       _DirType ->
-        ?DEB2(5,"other dir: ~p",_DirType),
+        ?DEB2({lookup,5},"other dir: ~p",_DirType),
         Entry#inode_entry.contents
 
     end,
   {value,Children};
 
 children(Inode) ->
-  ?DEB2(3,">children ~p",Inode),
+  ?DEB2({lookup,3},">children ~p",Inode),
   case tree_srv:lookup(Inode,inodes) of
    {value, Entry} ->
        children(Entry);
@@ -140,15 +140,15 @@ children(Inode) ->
 
 % TODO: Filter away &lt;&lt;system.*>> from the attribute children.
 generate_logic_link_children(Ino,Name) ->
-  ?DEBL(3,">generate_logic_link_children for ~p ~tp",[Ino,Name]),
+  ?DEBL({lookup,3},">generate_logic_link_children for ~p ~tp",[Ino,Name]),
   {value,Entry}=tree_srv:lookup(Ino,inodes),
   EntryType=Entry#inode_entry.type,
   case EntryType of
     attribute_dir ->
       LinkChildren=filter_children_entry(Entry,Name),
-      ?DEB1(5,"Filtering out bogus logical connectives"),
+      ?DEB1({lookup,5},"Filtering out bogus logical connectives"),
 %     TODO: Replace the filter call with a built in feature of filter to always filter away logical dirs.
-      ?DEB2(5,"converting children: ~p",LinkChildren),
+      ?DEB2({lookup,5},"converting children: ~p",LinkChildren),
       ConvertedChildren=lists:map(
         fun({_MyName,_Inode,logic_dir}=E) ->
           E;
@@ -189,7 +189,7 @@ generate_logic_link_children(Ino,Name) ->
           LogicDirs=generate_logic_dirs(Name),
           ConvertedChildren++LogicDirs;
         false ->
-          ?DEB1(5,"not generating logic dirs, due to depth"),
+          ?DEB1({lookup,5},"not generating logic dirs, due to depth"),
           ConvertedChildren
       end;
           
@@ -210,7 +210,7 @@ filter_children_entry(InoOrEntry,Name) ->
 %% XXX: This thing tails in the wrong way! This will consume much memory if we have very complicated connections.
 
 filter_children([Connective|Parents],Children) ->
-  ?DEB1(6,">filter_children"),
+  ?DEB1({lookup,6},">filter_children"),
   case ?IS_CONN_FOLDR(Connective) of
     true ->
       case numberer:is_numbered(Parents,ino) of
@@ -218,7 +218,7 @@ filter_children([Connective|Parents],Children) ->
         Ino ->
           % Since directories are filtered when created, I need not filter the children of the parent anew.
           {value,PrevChildren}=children(Ino),
-          ?DEBL(8,"Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
+          ?DEBL({lookup,8},"Filtering ~p and ~p using connective ~p",[PrevChildren,Children,Connective]),
           attr_filter:filter(PrevChildren,Connective,Children)
       end;
     false ->
@@ -238,12 +238,12 @@ filter_children([],LastChildrenUnfiltered) ->
 %%--------------------------------------------------------------------------
 generate_logic_dir_children(LogicName,MirrorDir) ->
   % get entry, change inodes and names, return.
-  ?DEBL(6,">generate_logic_dir_children ~p ~p",[LogicName,MirrorDir]),
+  ?DEBL({lookup,6},">generate_logic_dir_children ~p ~p",[LogicName,MirrorDir]),
   {ok,MIno}=numberer:n2i(MirrorDir,ino),
-  ?DEB2(8,"attributes ino: ~p",MIno),
-  ?DEB1(8,"getting attributes entry "),
+  ?DEB2({lookup,8},"attributes ino: ~p",MIno),
+  ?DEB1({lookup,8},"getting attributes entry "),
   {value,MEntry} = tree_srv:lookup(MIno,inodes),
-  ?DEB1(8,"transforming children"),
+  ?DEB1({lookup,8},"transforming children"),
   % generate links to the children of ?ATTR_FOLDR to be sent to the logic dir children list.
   % Since I want to get rid of elements not belonging in a logic dir, I filter out everything that is not an attridute_bir or an #external_file{}.
   lists:foldl(
@@ -266,7 +266,7 @@ generate_logic_dir_children(LogicName,MirrorDir) ->
             stat=LinkStat,
             generated=false,
             type=LinkType},
-          ?DEB2(8,"getting or setting inode number of ~p",[Name|LogicName]),
+          ?DEB2({lookup,8},"getting or setting inode number of ~p",[Name|LogicName]),
           LinkIno=numberer:get(LinkName,ino),
           tree_srv:enter(LinkIno,LinkEntry,inodes),
           [{Name,LinkIno,LinkType}|Acc];
@@ -300,23 +300,23 @@ generate_logic_dirs(Predecessor) ->
   ].
 
 generate_logic_dir(Parent,X) ->
-  ?DEBL(6,"generate_lodic_dir ~p->~p",[Parent,X]),
-  ?DEB1(8,"getting entry"),
+  ?DEBL({lookup,6},"generate_lodic_dir ~p->~p",[Parent,X]),
+  ?DEB1({lookup,8},"getting entry"),
   {ok,PIno}=numberer:n2i(Parent,ino),
   {value,PEntry}=tree_srv:lookup(PIno,inodes),
-  ?DEB1(8,"generating new entry"),
+  ?DEB1({lookup,8},"generating new entry"),
   Name=[X|Parent],
 %  Name=if 
 %    is_binary(Parent) -> [X|[Parent|[]]];
 %    true -> [X|Parent]
 %  end,
   Ino=numberer:get(Name,ino),
-  ?DEBL(6,"new entry ~p has ino ~p",[Name,Ino]),
+  ?DEBL({lookup,6},"new entry ~p has ino ~p",[Name,Ino]),
   PStat=PEntry#inode_entry.stat,
   % Logical dirs will not be writeable. Therefore, I do not directly copy the mode of the parent
   Stat=?ST_MODE(PStat,?M_DIR(8#555)), 
   Entry=PEntry#inode_entry{name=Name,type=logic_dir,contents=[],stat=Stat},
-  ?DEB1(8,"saving new entry"),
+  ?DEB1({lookup,8},"saving new entry"),
   tree_srv:enter(Ino,Entry,inodes),
   {X,Ino,logic_dir}.
 
