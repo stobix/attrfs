@@ -78,9 +78,7 @@ make_general_dir(Ctx,ParentInode,Name,Mode,DirType) ->
     false ->
       {ok,MyInode}=numberer:number(Name,ino),
       ?DEBL({mkdir,8},"creating new directory entry called ~p",[Name]),
-      % TODO now() is deprecated!
-      {MegaNow,NormalNow,_}=now(),
-      Now=MegaNow*1000000+NormalNow,
+      Now=erlang:system_time(second),
       ?DEBL({mkdir,8},"atime etc: ~p",[Now]),
       #fuse_ctx{uid=Uid,gid=Gid}=Ctx,
       DirStat=

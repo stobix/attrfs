@@ -348,13 +348,12 @@ dir(Stat) ->
 %% returns a stat with the current time in it.
 %%--------------------------------------------------------------------------
 curr_time_stat() ->
-  {MegaNow,NormalNow,_}=now(),
-  Now=MegaNow*1000000+NormalNow,
-    #stat{
-      st_atime=Now,
-      st_ctime=Now,
-      st_mtime=Now
-    }.
+  Now=erlang:system_time(seconds),
+  #stat{
+    st_atime=Now,
+    st_ctime=Now,
+    st_mtime=Now
+  }.
 
 %%--------------------------------------------------------------------------
 %% datetime_to_epoch takes a {{Y,M,D},{H,M,S}} and transforms it into seconds elapsed from 1970/1/1 00:00:00, GMT
