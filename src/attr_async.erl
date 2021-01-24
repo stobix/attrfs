@@ -105,7 +105,7 @@ lookup(ParentInode,Child,Token) ->
             ?DEB1({async,4},"Got child inode entry, returning..."),
             #fuse_reply_entry{fuse_entry_param=?ENTRY2PARAM(Entry,Inode)};
           false ->
-            ?DEBL({async,4},"Child ~p not present in ~p!",[Child,Children]),
+            ?DEBL({async,4},"Child ~p not present in ~p!",[Child,ParentInode]),
             #fuse_reply_err{err=enoent} % child nonexistent.
         end;
       none -> 

@@ -176,6 +176,7 @@ initiate_servers(DB) ->
   tree_srv:clear(duplicates), % to store {Name,[{Given_name,Path}]} of all duplicate entries.
   tree_srv:clear(specials), % to provide fast access to the root dir and other critical dirs
   tree_srv:clear(erroneous), % for files that could not be read
+  tree_srv:clear(folder_cache),
   attr_open:init(),
   ?DEB1({init,8},"created inode and key trees"),
   numberer:reset(ino), % the inode table
@@ -371,6 +372,7 @@ make_duplicate_children() ->
         end,
       Data=unicode:characters_to_binary(IOList),
       Entry=#inode_entry{
+        name=undefined, % Leaving this undefined is probably horribly wrong. Do I really never use this?
         type=Type,
         contents=Data,
         ext_info=[],

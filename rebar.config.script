@@ -1,6 +1,7 @@
 {edoc_opts, [{sort_functions, false}]},
-case os:cmd("hg branch") of 
-    "default\n" -> 
+case os:cmd("git branch") of 
+    % "* master\n" -> 
+    _ -> 
 [
 {sub_dirs,[ ]},
 
@@ -11,19 +12,16 @@ case os:cmd("hg branch") of
 
         {deps,
             [
-            {lager,".*",{git,"https://github.com/basho/lager.git","master"}},
-            {newdebug,".*",{hg,"https://volatile@bitbucket.org/volatile/newdebug","tip"}},
-            {numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/numberer","tip"}},
-            {tree_app,".*",{hg,"https://volatile@bitbucket.org/volatile/tree_app","tip"}},
-            {reporter,".*",{hg,"https://volatile@bitbucket.org/volatile/reporter","tip"}},
-            {options,".*",{hg,"https://volatile@bitbucket.org/volatile/options","tip"}},
-            {vol_tools,".*",{hg,"https://volatile@bitbucket.org/volatile/vol_tools","tip"}},
+            {lager,".*",{git,"https://github.com/erlang-lager/lager.git","master"}},
+            {newdebug,".*",{git,"https://github.com/stobix/newdebug","master"}},
+            {numberer,".*",{git,"https://github.com/stobix/numberer","master"}},
+            {tree_app,".*",{git,"https://github.com/stobix/tree_app","master"}},
+            {reporter,".*",{git,"https://github.com/stobix/reporter","master"}},
+            {options,".*",{git,"https://github.com/stobix/options","master"}},
+            {vol_tools,".*",{git,"https://github.com/stobix/vol_tools","master"}},
             {erlando,".*",{git,"https://github.com/stobix/erlando","master"}},
-            %{erlando,".*",{hg,"https://volatile@bitbucket.org/volatile/erlando_sans_transforms","tip"}},
-            {pid_numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/pid_numberer","tip"}},
-            %{emysql,".*",{hg,"https://volatile@bitbucket.org/volatile/emysql","tip"}},
-            %{emysql_wrapper,".*",{hg,"https://volatile@bitbucket.org/volatile/emysql_wrapper","tip"}},
-            {fuserl,".*",{git,"https://github.com/tonyrog/fuserl","master"}}
+            {pid_numberer,".*",{git,"https://github.com/stobix/pid_numberer","master"}},
+            {fuserl,".*",{git,"https://github.com/stobix/fuserl","master"}}
         ] }
 
 ];
@@ -39,12 +37,12 @@ case os:cmd("hg branch") of
 
         {deps,
             [
-            {newdebug,".*",{hg,"https://volatile@bitbucket.org/volatile/newdebug","tip"}},
-            {reporter,".*",{hg,"https://volatile@bitbucket.org/volatile/reporter","tip"}},
-            {options,".*",{hg,"https://volatile@bitbucket.org/volatile/options","tip"}},
-            {numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/numberer","tip"}},
+            {newdebug,".*",{hg,"https://github.com/stobix/newdebug","tip"}},
+            {reporter,".*",{hg,"https://github.com/stobix/reporter","tip"}},
+            {options,".*",{hg,"https://github.com/stobix/options","tip"}},
+            {numberer,".*",{hg,"https://github.com/stobix/numberer","tip"}},
             {lager,".*",{git,"https://github.com/basho/lager.git","master"}},
-            {vol_tools,".*",{hg,"https://volatile@bitbucket.org/volatile/vol_tools","tip"}},
+            {vol_tools,".*",{hg,"github.com/stobixvolatile/vol_tools","tip"}},
             {erlando,".*",{hg,"https://volatile@bitbucket.org/volatile/erlando_sans_transforms","tip"}},
             {pid_numberer,".*",{hg,"https://volatile@bitbucket.org/volatile/pid_numberer","tip"}},
             {fuserl,".*",{git,"https://github.com/tonyrog/fuserl","master"}}

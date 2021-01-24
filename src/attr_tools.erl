@@ -36,6 +36,9 @@
          remove_from_start/2,
          bremove_from_start/2,
          take_while/3,
+         do_while/3,
+         drop_while/3,
+         drop_n_or_nothing/2,
          test_access/3,
          merge_duplicates/1,
          dir/1,
@@ -126,6 +129,35 @@ take_while (F, Acc, [ H | T ]) ->
     stop ->
       []
   end.
+
+
+do_while (F, Init, List) ->
+  do_while (F, Init, [], List).
+
+do_while (_, Acc, Bcc, []) ->
+  {Acc,Bcc};
+do_while (F, Acc, Bcc, [ H | T ]) ->
+  case F (H, Acc) of
+    { continue, NewAcc } ->
+      do_while (F, NewAcc, [H|Bcc], T);
+    stop ->
+      { Acc, Bcc }
+  end.
+
+drop_while (_,_, []) -> [];
+drop_while (F, Acc, [ H | T ]) ->
+  case F (H, Acc) of
+    { continue, NewAcc } ->
+      drop_while (F, NewAcc, T);
+    stop ->
+      T
+  end.
+
+drop_n_or_nothing (_, []) -> [];
+drop_n_or_nothing (0, L) -> L;
+drop_n_or_nothing (N, L) ->
+  drop_n_or_nothing(N-1,L).
+
 
 %%--------------------------------------------------------------------------
 %% removes string2 from the beginning of string1, if applicable. Returns what was left of string1

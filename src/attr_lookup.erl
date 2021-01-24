@@ -27,6 +27,9 @@
 %%% @copyright Copylefted using some GNU license or other.
 %%%
 %%% @version 1.0
+%%%
+%%% @end
+%%%=========================================================================
 
 -module(attr_lookup).
 
@@ -50,32 +53,44 @@
 direntries(Inode) ->
   ?DEB1({lookup,5},">direntries"),
   ?DEB1({lookup,7},"Getting child entries"),
-  {value,Children}=children(Inode),
-  ?DEBL({lookup,7},"Converting children ~p for ~p",[Children,Inode]),
-  direntrify(Children).
+  case tree_srv:lookup(Inode,folder_cache) of
+    none ->
+      {value,Children}=children(Inode),
+      ?DEBL({lookup,7},"Converting children ~p for ~p",[Children,Inode]),
+      Direntries=direntrify(Children),
+      tree_srv:insert(Inode,Direntries,folder_cache),
+      Direntries;
+    error ->
+      {value,Children}=children(Inode),
+      ?DEBL({lookup,err},"Converting children ~p for ~p, but there is no folder cache!",[Children,Inode]),
+      Direntries=direntrify(Children),
+      Direntries;
+    {value,Direntries} -> 
+      Direntries
+  end.
 
 
 %%--------------------------------------------------------------------------
 %% direntrify takes a [{Name,Inode,Type}] and returns a [fuserl:#direntry{}]
 %%--------------------------------------------------------------------------
-direntrify(Things) -> direntrify(Things,0).
+direntrify(Things) -> direntrify(Things,0,[]).
 
-direntrify([],_Offset) -> 
-  ?DEB1({lookup,8},"Done converting children"),
-  [];
+direntrify([],Offset,Converted) -> 
+  ?DEBL({lookup,8},"Done converting children, final offset: ~p",[Offset]),
+  {Offset,Converted};
 
-direntrify([{Name,Inode,_Type}|Children],Offset) ->
-  ?DEB2({lookup,6},"Getting entry for child ~p",{Name,Inode,_Type}),
+direntrify([{Name,Inode,_Type}|Children],Offset,Converted) ->
+  ?DEB2({lookup,6},"Getting entry for child ~p",{Name,Inode}),
   {value,Child}=tree_srv:lookup(Inode,inodes),
-  ?DEB2({lookup,8},"Getting permissions for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Getting permissions for child ~p",{Name,Inode}),
   ChildStats=Child#inode_entry.stat,
-  ?DEB2({lookup,8},"Creating direntry for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Creating direntry for child ~p",{Name,Inode}),
   Direntry= #direntry{name=Name ,stat=ChildStats },
-  ?DEB2({lookup,8},"Calculatig size for direntry for child ~p",{Name,Inode,_Type}),
+  ?DEB2({lookup,8},"Calculatig size for direntry for child ~p",{Name,Inode}),
   NewOffset=Offset+fuserlsrv:dirent_size(Direntry),
   Direntry1=Direntry#direntry{offset=NewOffset},
-  ?DEB2({lookup,8},"Appending child ~p to list",{Name,Inode,_Type}),
-  [Direntry1|direntrify(Children,NewOffset)].
+  ?DEB2({lookup,8},"Appending child ~p to list",{Name,Inode}),
+  direntrify(Children,NewOffset,[Direntry1|Converted]).
 
 
 

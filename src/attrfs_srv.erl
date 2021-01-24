@@ -709,33 +709,36 @@ readdir(_Ctx,_Inode,Size,Offset,Fuse_File_Info,_Continuation,State) ->
   #fuse_file_info{fh=FIno}=Fuse_File_Info,
   Reply=
     case attr_open:lookup(FIno) of 
-      {value, OpenDir} ->
-        ?DEBL({srv,4},"~p =< ~p",[Offset,length(OpenDir)]),
+      {value, {_TotSize,OpenDir}} ->
+        DirLen = length(OpenDir),
+        ?DEBL({srv,4},"~p =< ~p (~p)",[Offset,DirLen,_TotSize]),
         DirEntryList = 
-          case Offset=<length(OpenDir) of
+          case Offset=<DirLen of
             true ->
-              attr_tools:take_while( 
-                 fun (Element, { Total, Max }) -> 
-                   Cur = fuserlsrv:dirent_size (Element),
-                   if 
-                     Total + Cur =< Max ->
-                       { continue, { Total + Cur, Max } };
-                     true ->
-                       stop
-                   end
-                 end,
-                   { 2, Size },
-                   lists:nthtail(Offset,OpenDir) 
-                  );
+              DroppedToOffset=attr_tools:drop_n_or_nothing(Offset,OpenDir),
+              {SizeOfElems,MaxSizeElement}=attr_tools:do_while( 
+                fun (Element, Total) -> 
+                    Cur = fuserlsrv:dirent_size (Element),
+                    if 
+                      Total + Cur =< Size ->
+                        { continue, Total + Cur };
+                      true ->
+                        stop
+                    end
+                end,
+                0,
+                DroppedToOffset),
+              ?DEBL({srv,5},"Size of elements: ~p", [SizeOfElems]),
+              MaxSizeElement;
             false ->
-                []
+              []
           end,
-        ?DEB2({srv,9},"returning ~p",DirEntryList),
-        #fuse_reply_direntrylist{ direntrylist = DirEntryList };
-    none ->
-        #fuse_reply_err{err=enoent} % XXX: What should this REALLY return when the file is not open for this user?
-  end,
-  {Reply,State}.
+          ?DEB2({srv,9},"returning ~p",DirEntryList),
+          #fuse_reply_direntrylist{ direntrylist = DirEntryList };
+        none ->
+          #fuse_reply_err{err=enoent} % XXX: What should this REALLY return when the file is not open for this user?
+      end,
+      {Reply,State}.
 
 %%--------------------------------------------------------------------------
 %% Read the contents of a symbolic link. If noreply is used, eventually fuserlsrv:reply/2  should be called with Cont as first argument and the second argument of type readlink_async_reply ().

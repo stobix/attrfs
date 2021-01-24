@@ -15,8 +15,10 @@
     folders (in mirrored dir)
     files (in created dirs in root dir)
     files (in created dirs in mirrored dir)
-    
 
+☐ XXX does dirent_size return the wrong size‽‽ Something with unicode or a newer FUSE thing?
+
+☐ Include support for ignoring (hidden) directories! If there is a .thumbnails folder in several folders, probably none of them should be imported as duplicate-.thumbnails, and they and their content should thus not be movable to the attributes folder.
     
 ☐ Include support for writing to files
  ☐  mirrored
